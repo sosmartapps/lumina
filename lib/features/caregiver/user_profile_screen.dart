@@ -1,0 +1,1562 @@
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../../core/models/user_profile.dart';
+import '../../core/services/user_profile_service.dart';
+
+class UserProfileScreen extends StatefulWidget {
+  final String userId;
+
+  const UserProfileScreen({super.key, required this.userId});
+
+  @override
+  State<UserProfileScreen> createState() => _UserProfileScreenState();
+}
+
+class _UserProfileScreenState extends State<UserProfileScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  final ImagePicker _imagePicker = ImagePicker();
+
+  UserProfile? _profile;
+  bool _isLoading = true;
+  bool _isSaving = false;
+  bool _isGeneratingReport = false;
+
+  // Form controllers for Identity tab
+  final _legalFirstNameController = TextEditingController();
+  final _legalMiddleNameController = TextEditingController();
+  final _legalLastNameController = TextEditingController();
+  final _preferredNameController = TextEditingController();
+  final _nicknameController = TextEditingController();
+  DateTime? _dateOfBirth;
+  String? _gender;
+
+  // Form controllers for Physical Description tab
+  final _heightController = TextEditingController();
+  final _weightController = TextEditingController();
+  String? _hairColor;
+  String? _eyeColor;
+  String? _race;
+  String? _skinTone;
+  String? _buildType;
+  final _distinguishingMarksController = TextEditingController();
+  final _usualClothingController = TextEditingController();
+  String? _glasses;
+  final _mobilityAidsController = TextEditingController();
+
+  // Form controllers for Address tab
+  final _streetAddressController = TextEditingController();
+  final _cityController = TextEditingController();
+  final _stateController = TextEditingController();
+  final _zipCodeController = TextEditingController();
+  final _countryController = TextEditingController();
+
+  // Form controllers for Documents tab
+  final _driversLicenseNumberController = TextEditingController();
+  final _driversLicenseStateController = TextEditingController();
+  DateTime? _driversLicenseExpiration;
+  final _ssnLast4Controller = TextEditingController();
+  final _passportNumberController = TextEditingController();
+  final _medicareNumberController = TextEditingController();
+  final _medicaidNumberController = TextEditingController();
+
+  // Form controllers for Medical Alert tab
+  final _primaryDiagnosisController = TextEditingController();
+  final _cognitiveStatusController = TextEditingController();
+  final _wanderingHistoryController = TextEditingController();
+  final _communicationAbilityController = TextEditingController();
+  final _behaviorWhenLostController = TextEditingController();
+  final _medicalAlertInfoController = TextEditingController();
+  final _responseToNameController = TextEditingController();
+  final _responseToStrangersController = TextEditingController();
+  final _calmingTechniquesController = TextEditingController();
+  final _triggersToAvoidController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 6, vsync: this);
+    _loadProfile();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _disposeControllers();
+    super.dispose();
+  }
+
+  void _disposeControllers() {
+    _legalFirstNameController.dispose();
+    _legalMiddleNameController.dispose();
+    _legalLastNameController.dispose();
+    _preferredNameController.dispose();
+    _nicknameController.dispose();
+    _heightController.dispose();
+    _weightController.dispose();
+    _distinguishingMarksController.dispose();
+    _usualClothingController.dispose();
+    _mobilityAidsController.dispose();
+    _streetAddressController.dispose();
+    _cityController.dispose();
+    _stateController.dispose();
+    _zipCodeController.dispose();
+    _countryController.dispose();
+    _driversLicenseNumberController.dispose();
+    _driversLicenseStateController.dispose();
+    _ssnLast4Controller.dispose();
+    _passportNumberController.dispose();
+    _medicareNumberController.dispose();
+    _medicaidNumberController.dispose();
+    _primaryDiagnosisController.dispose();
+    _cognitiveStatusController.dispose();
+    _wanderingHistoryController.dispose();
+    _communicationAbilityController.dispose();
+    _behaviorWhenLostController.dispose();
+    _medicalAlertInfoController.dispose();
+    _responseToNameController.dispose();
+    _responseToStrangersController.dispose();
+    _calmingTechniquesController.dispose();
+    _triggersToAvoidController.dispose();
+  }
+
+  Future<void> _loadProfile() async {
+    setState(() => _isLoading = true);
+    try {
+      final profile = await UserProfileService.getUserProfile(widget.userId);
+      if (profile != null) {
+        _populateControllers(profile);
+      }
+      setState(() {
+        _profile = profile;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading profile: $e')),
+        );
+      }
+    }
+  }
+
+  void _populateControllers(UserProfile profile) {
+    // Identity
+    _legalFirstNameController.text = profile.legalFirstName ?? '';
+    _legalMiddleNameController.text = profile.legalMiddleName ?? '';
+    _legalLastNameController.text = profile.legalLastName ?? '';
+    _preferredNameController.text = profile.preferredName ?? '';
+    _nicknameController.text = profile.nickname ?? '';
+    _dateOfBirth = profile.dateOfBirth;
+    _gender = profile.gender;
+
+    // Physical Description
+    _heightController.text = profile.heightCm?.toString() ?? '';
+    _weightController.text = profile.weightKg?.toString() ?? '';
+    _hairColor = profile.hairColor;
+    _eyeColor = profile.eyeColor;
+    _race = profile.race;
+    _skinTone = profile.skinTone;
+    _buildType = profile.buildType;
+    _distinguishingMarksController.text = profile.distinguishingMarks ?? '';
+    _usualClothingController.text = profile.usualClothing ?? '';
+    _glasses = profile.glasses;
+    _mobilityAidsController.text = profile.mobilityAids ?? '';
+
+    // Address
+    _streetAddressController.text = profile.streetAddress ?? '';
+    _cityController.text = profile.city ?? '';
+    _stateController.text = profile.state ?? '';
+    _zipCodeController.text = profile.zipCode ?? '';
+    _countryController.text = profile.country ?? '';
+
+    // Documents
+    _driversLicenseNumberController.text = profile.driversLicenseNumber ?? '';
+    _driversLicenseStateController.text = profile.driversLicenseState ?? '';
+    _driversLicenseExpiration = profile.driversLicenseExpiration;
+    _ssnLast4Controller.text = profile.ssnLast4 ?? '';
+    _passportNumberController.text = profile.passportNumber ?? '';
+    _medicareNumberController.text = profile.medicareNumber ?? '';
+    _medicaidNumberController.text = profile.medicaidNumber ?? '';
+
+    // Medical Alert
+    _primaryDiagnosisController.text = profile.primaryDiagnosis ?? '';
+    _cognitiveStatusController.text = profile.cognitiveStatus ?? '';
+    _wanderingHistoryController.text = profile.wanderingHistory ?? '';
+    _communicationAbilityController.text = profile.communicationAbility ?? '';
+    _behaviorWhenLostController.text = profile.behaviorWhenLost ?? '';
+    _medicalAlertInfoController.text = profile.medicalAlertInfo ?? '';
+    _responseToNameController.text = profile.responseToName ?? '';
+    _responseToStrangersController.text = profile.responseToStrangers ?? '';
+    _calmingTechniquesController.text = profile.calmingTechniques ?? '';
+    _triggersToAvoidController.text = profile.triggersToAvoid ?? '';
+  }
+
+  Future<void> _saveProfile() async {
+    setState(() => _isSaving = true);
+    try {
+      final now = DateTime.now();
+      final updatedProfile = UserProfile(
+        id: _profile?.id ?? '',
+        userId: widget.userId,
+        legalFirstName: _legalFirstNameController.text.isEmpty
+            ? null
+            : _legalFirstNameController.text,
+        legalMiddleName: _legalMiddleNameController.text.isEmpty
+            ? null
+            : _legalMiddleNameController.text,
+        legalLastName: _legalLastNameController.text.isEmpty
+            ? null
+            : _legalLastNameController.text,
+        preferredName: _preferredNameController.text.isEmpty
+            ? null
+            : _preferredNameController.text,
+        nickname:
+            _nicknameController.text.isEmpty ? null : _nicknameController.text,
+        dateOfBirth: _dateOfBirth,
+        gender: _gender,
+        heightCm: double.tryParse(_heightController.text),
+        weightKg: double.tryParse(_weightController.text),
+        hairColor: _hairColor,
+        eyeColor: _eyeColor,
+        race: _race,
+        skinTone: _skinTone,
+        buildType: _buildType,
+        distinguishingMarks: _distinguishingMarksController.text.isEmpty
+            ? null
+            : _distinguishingMarksController.text,
+        usualClothing: _usualClothingController.text.isEmpty
+            ? null
+            : _usualClothingController.text,
+        glasses: _glasses,
+        mobilityAids: _mobilityAidsController.text.isEmpty
+            ? null
+            : _mobilityAidsController.text,
+        streetAddress: _streetAddressController.text.isEmpty
+            ? null
+            : _streetAddressController.text,
+        city: _cityController.text.isEmpty ? null : _cityController.text,
+        state: _stateController.text.isEmpty ? null : _stateController.text,
+        zipCode:
+            _zipCodeController.text.isEmpty ? null : _zipCodeController.text,
+        country:
+            _countryController.text.isEmpty ? null : _countryController.text,
+        driversLicenseNumber: _driversLicenseNumberController.text.isEmpty
+            ? null
+            : _driversLicenseNumberController.text,
+        driversLicenseState: _driversLicenseStateController.text.isEmpty
+            ? null
+            : _driversLicenseStateController.text,
+        driversLicenseExpiration: _driversLicenseExpiration,
+        ssnLast4:
+            _ssnLast4Controller.text.isEmpty ? null : _ssnLast4Controller.text,
+        passportNumber: _passportNumberController.text.isEmpty
+            ? null
+            : _passportNumberController.text,
+        medicareNumber: _medicareNumberController.text.isEmpty
+            ? null
+            : _medicareNumberController.text,
+        medicaidNumber: _medicaidNumberController.text.isEmpty
+            ? null
+            : _medicaidNumberController.text,
+        primaryDiagnosis: _primaryDiagnosisController.text.isEmpty
+            ? null
+            : _primaryDiagnosisController.text,
+        cognitiveStatus: _cognitiveStatusController.text.isEmpty
+            ? null
+            : _cognitiveStatusController.text,
+        wanderingHistory: _wanderingHistoryController.text.isEmpty
+            ? null
+            : _wanderingHistoryController.text,
+        communicationAbility: _communicationAbilityController.text.isEmpty
+            ? null
+            : _communicationAbilityController.text,
+        behaviorWhenLost: _behaviorWhenLostController.text.isEmpty
+            ? null
+            : _behaviorWhenLostController.text,
+        medicalAlertInfo: _medicalAlertInfoController.text.isEmpty
+            ? null
+            : _medicalAlertInfoController.text,
+        photos: _profile?.photos ?? [],
+        frequentPlaces: _profile?.frequentPlaces ?? [],
+        responseToName: _responseToNameController.text.isEmpty
+            ? null
+            : _responseToNameController.text,
+        responseToStrangers: _responseToStrangersController.text.isEmpty
+            ? null
+            : _responseToStrangersController.text,
+        calmingTechniques: _calmingTechniquesController.text.isEmpty
+            ? null
+            : _calmingTechniquesController.text,
+        triggersToAvoid: _triggersToAvoidController.text.isEmpty
+            ? null
+            : _triggersToAvoidController.text,
+        createdAt: _profile?.createdAt ?? now,
+        updatedAt: now,
+      );
+
+      await UserProfileService.saveUserProfile(widget.userId, updatedProfile);
+      setState(() {
+        _profile = updatedProfile;
+        _isSaving = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile saved successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isSaving = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving profile: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _addPhoto() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Take Photo'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Choose from Gallery'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (source == null) return;
+
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 85,
+      );
+
+      if (image == null) return;
+
+      if (!mounted) return;
+
+      // Show photo type selection
+      final photoType = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Photo Type'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('Face (Front)'),
+                onTap: () => Navigator.pop(context, 'face'),
+              ),
+              ListTile(
+                title: const Text('Full Body'),
+                onTap: () => Navigator.pop(context, 'full_body'),
+              ),
+              ListTile(
+                title: const Text('Profile (Side)'),
+                onTap: () => Navigator.pop(context, 'profile'),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (photoType == null) return;
+
+      if (!mounted) return;
+
+      // Show description dialog
+      final descriptionController = TextEditingController();
+      final description = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Photo Description'),
+          content: TextField(
+            controller: descriptionController,
+            decoration: const InputDecoration(
+              hintText: 'e.g., "With glasses, gray hair"',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Skip'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, descriptionController.text),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      );
+
+      // Upload photo
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Uploading photo...')),
+        );
+      }
+
+      final imageBytes = await File(image.path).readAsBytes();
+      final photo = await UserProfileService.uploadPhoto(
+        widget.userId,
+        imageBytes,
+        photoType: photoType,
+        description: description,
+        isPrimary: _profile?.photos.isEmpty ?? true,
+      );
+
+      if (photo == null) {
+        throw Exception('Failed to upload photo');
+      }
+
+      // Update profile with new photo
+      final updatedPhotos = [...(_profile?.photos ?? []), photo];
+      final updatedProfile = _profile?.copyWith(photos: updatedPhotos) ??
+          UserProfile(
+            id: '',
+            userId: widget.userId,
+            photos: updatedPhotos,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          );
+
+      await UserProfileService.saveUserProfile(widget.userId, updatedProfile);
+
+      setState(() {
+        _profile = updatedProfile;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Photo added successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error adding photo: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _deletePhoto(UserPhoto photo) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Photo'),
+        content: const Text('Are you sure you want to delete this photo?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      await UserProfileService.deletePhoto(widget.userId, photo.id);
+
+      final updatedPhotos =
+          _profile?.photos.where((p) => p.id != photo.id).toList() ?? [];
+      final updatedProfile = _profile?.copyWith(photos: updatedPhotos);
+
+      if (updatedProfile != null) {
+        await UserProfileService.saveUserProfile(widget.userId, updatedProfile);
+        setState(() {
+          _profile = updatedProfile;
+        });
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Photo deleted'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error deleting photo: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _setAsPrimary(UserPhoto photo) async {
+    try {
+      final updatedPhotos = _profile?.photos.map((p) {
+            return UserPhoto(
+              id: p.id,
+              url: p.url,
+              thumbnailUrl: p.thumbnailUrl,
+              dateTaken: p.dateTaken,
+              description: p.description,
+              photoType: p.photoType,
+              isPrimary: p.id == photo.id,
+            );
+          }).toList() ??
+          [];
+
+      final updatedProfile = _profile?.copyWith(photos: updatedPhotos);
+
+      if (updatedProfile != null) {
+        await UserProfileService.saveUserProfile(widget.userId, updatedProfile);
+        setState(() {
+          _profile = updatedProfile;
+        });
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Primary photo updated'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating primary photo: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _generateLostPersonReport() async {
+    setState(() => _isGeneratingReport = true);
+
+    try {
+      final report =
+          await UserProfileService.generateLostPersonReport(widget.userId);
+      final reportText = UserProfileService.formatLostPersonReportAsText(report);
+
+      setState(() => _isGeneratingReport = false);
+
+      if (!mounted) return;
+
+      // Show preview and share options
+      await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('Lost Person Report'),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: SingleChildScrollView(
+              child: Text(
+                reportText,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                Share.share(
+                  reportText,
+                  subject:
+                      'MISSING PERSON: ${report.userName} - ${DateFormat('MMM d, yyyy h:mm a').format(report.generatedAt)}',
+                );
+              },
+              icon: const Icon(Icons.share),
+              label: const Text('Share Report'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      setState(() => _isGeneratingReport = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error generating report: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('User Profile'),
+        actions: [
+          if (_isSaving)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.save),
+              onPressed: _saveProfile,
+              tooltip: 'Save Profile',
+            ),
+        ],
+        bottom: TabBar(
+          controller: _tabController,
+          isScrollable: true,
+          tabs: const [
+            Tab(icon: Icon(Icons.person), text: 'Identity'),
+            Tab(icon: Icon(Icons.accessibility), text: 'Physical'),
+            Tab(icon: Icon(Icons.home), text: 'Address'),
+            Tab(icon: Icon(Icons.badge), text: 'Documents'),
+            Tab(icon: Icon(Icons.medical_information), text: 'Medical Alert'),
+            Tab(icon: Icon(Icons.photo_library), text: 'Photos'),
+          ],
+        ),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                // Lost Person Report Banner
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  color: Colors.red.shade50,
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning_amber, color: Colors.red.shade700),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'In an emergency, generate a Lost Person Report to share with authorities.',
+                          style: TextStyle(color: Colors.red.shade700),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed:
+                            _isGeneratingReport ? null : _generateLostPersonReport,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: _isGeneratingReport
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text('Generate Report'),
+                      ),
+                    ],
+                  ),
+                ),
+                // Tab content
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildIdentityTab(),
+                      _buildPhysicalTab(),
+                      _buildAddressTab(),
+                      _buildDocumentsTab(),
+                      _buildMedicalAlertTab(),
+                      _buildPhotosTab(),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildIdentityTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionTitle('Legal Name'),
+          TextFormField(
+            controller: _legalFirstNameController,
+            decoration: const InputDecoration(
+              labelText: 'Legal First Name *',
+              hintText: 'As shown on ID',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _legalMiddleNameController,
+            decoration: const InputDecoration(
+              labelText: 'Legal Middle Name',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _legalLastNameController,
+            decoration: const InputDecoration(
+              labelText: 'Legal Last Name *',
+              hintText: 'As shown on ID',
+            ),
+          ),
+          const SizedBox(height: 24),
+          _buildSectionTitle('Preferred Names'),
+          TextFormField(
+            controller: _preferredNameController,
+            decoration: const InputDecoration(
+              labelText: 'Preferred Name',
+              hintText: 'What they respond to',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _nicknameController,
+            decoration: const InputDecoration(
+              labelText: 'Nickname',
+              hintText: 'Family nickname, etc.',
+            ),
+          ),
+          const SizedBox(height: 24),
+          _buildSectionTitle('Personal Information'),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Date of Birth'),
+            subtitle: Text(_dateOfBirth != null
+                ? DateFormat('MMMM d, yyyy').format(_dateOfBirth!)
+                : 'Not set'),
+            trailing: const Icon(Icons.calendar_today),
+            onTap: () async {
+              final date = await showDatePicker(
+                context: context,
+                initialDate: _dateOfBirth ?? DateTime(1950),
+                firstDate: DateTime(1900),
+                lastDate: DateTime.now(),
+              );
+              if (date != null) {
+                setState(() => _dateOfBirth = date);
+              }
+            },
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _gender,
+            decoration: const InputDecoration(labelText: 'Gender'),
+            items: ['Male', 'Female', 'Non-binary', 'Other', 'Prefer not to say']
+                .map((g) => DropdownMenuItem(value: g, child: Text(g)))
+                .toList(),
+            onChanged: (value) => setState(() => _gender = value),
+          ),
+          if (_dateOfBirth != null) ...[
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(Icons.cake, color: Colors.purple),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Age: ${_profile?.age ?? _calculateAge(_dateOfBirth!)} years old',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  int _calculateAge(DateTime birthDate) {
+    final now = DateTime.now();
+    int age = now.year - birthDate.year;
+    if (now.month < birthDate.month ||
+        (now.month == birthDate.month && now.day < birthDate.day)) {
+      age--;
+    }
+    return age;
+  }
+
+  Widget _buildPhysicalTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionTitle('Measurements'),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _heightController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Height (cm)',
+                    hintText: 'e.g., 170',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: TextFormField(
+                  controller: _weightController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Weight (kg)',
+                    hintText: 'e.g., 75',
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_heightController.text.isNotEmpty ||
+              _weightController.text.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              _buildMeasurementSummary(),
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+            ),
+          ],
+          const SizedBox(height: 24),
+          _buildSectionTitle('Appearance'),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _hairColor,
+                  decoration: const InputDecoration(labelText: 'Hair Color'),
+                  items: [
+                    'Black',
+                    'Brown',
+                    'Blonde',
+                    'Red',
+                    'Gray',
+                    'White',
+                    'Bald',
+                    'Other'
+                  ].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                  onChanged: (value) => setState(() => _hairColor = value),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _eyeColor,
+                  decoration: const InputDecoration(labelText: 'Eye Color'),
+                  items: ['Brown', 'Blue', 'Green', 'Hazel', 'Gray', 'Other']
+                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                      .toList(),
+                  onChanged: (value) => setState(() => _eyeColor = value),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _race,
+                  decoration: const InputDecoration(labelText: 'Race/Ethnicity'),
+                  items: [
+                    'White',
+                    'Black/African American',
+                    'Hispanic/Latino',
+                    'Asian',
+                    'Native American',
+                    'Pacific Islander',
+                    'Middle Eastern',
+                    'Mixed',
+                    'Other'
+                  ].map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                  onChanged: (value) => setState(() => _race = value),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _skinTone,
+                  decoration: const InputDecoration(labelText: 'Skin Tone'),
+                  items: ['Very Light', 'Light', 'Medium', 'Olive', 'Brown', 'Dark']
+                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                      .toList(),
+                  onChanged: (value) => setState(() => _skinTone = value),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: _buildType,
+            decoration: const InputDecoration(labelText: 'Build Type'),
+            items: ['Slim', 'Average', 'Athletic', 'Heavy', 'Stocky']
+                .map((b) => DropdownMenuItem(value: b, child: Text(b)))
+                .toList(),
+            onChanged: (value) => setState(() => _buildType = value),
+          ),
+          const SizedBox(height: 24),
+          _buildSectionTitle('Distinguishing Features'),
+          TextFormField(
+            controller: _distinguishingMarksController,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Distinguishing Marks',
+              hintText: 'Scars, tattoos, birthmarks, etc.',
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _usualClothingController,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Usual Clothing',
+              hintText: 'What they typically wear',
+            ),
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: _glasses,
+            decoration: const InputDecoration(labelText: 'Glasses'),
+            items: [
+              'None',
+              'Always wears',
+              'Reading glasses only',
+              'Sunglasses',
+              'Contact lenses'
+            ].map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+            onChanged: (value) => setState(() => _glasses = value),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _mobilityAidsController,
+            decoration: const InputDecoration(
+              labelText: 'Mobility Aids',
+              hintText: 'Walker, cane, wheelchair, etc.',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _buildMeasurementSummary() {
+    final parts = <String>[];
+    final height = double.tryParse(_heightController.text);
+    final weight = double.tryParse(_weightController.text);
+
+    if (height != null) {
+      final totalInches = height / 2.54;
+      final feet = (totalInches / 12).floor();
+      final inches = (totalInches % 12).round();
+      parts.add("$feet'$inches\" ($height cm)");
+    }
+
+    if (weight != null) {
+      final lbs = (weight * 2.205).round();
+      parts.add('$lbs lbs ($weight kg)');
+    }
+
+    return parts.join(' • ');
+  }
+
+  Widget _buildAddressTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionTitle('Home Address'),
+          const SizedBox(height: 8),
+          Card(
+            color: Colors.blue.shade50,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blue.shade700),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'This address will be used in the Lost Person Report and for "Navigate Home" feature.',
+                      style: TextStyle(color: Colors.blue.shade700, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _streetAddressController,
+            decoration: const InputDecoration(
+              labelText: 'Street Address',
+              hintText: '123 Main Street, Apt 4B',
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: TextFormField(
+                  controller: _cityController,
+                  decoration: const InputDecoration(labelText: 'City'),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: TextFormField(
+                  controller: _stateController,
+                  decoration: const InputDecoration(labelText: 'State'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _zipCodeController,
+                  decoration: const InputDecoration(labelText: 'ZIP Code'),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: TextFormField(
+                  controller: _countryController,
+                  decoration: const InputDecoration(labelText: 'Country'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          if (_streetAddressController.text.isNotEmpty) ...[
+            _buildSectionTitle('Address Preview'),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(Icons.home, size: 32, color: Colors.blue),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Text(
+                        [
+                          _streetAddressController.text,
+                          _cityController.text,
+                          _stateController.text,
+                          _zipCodeController.text,
+                          _countryController.text,
+                        ].where((s) => s.isNotEmpty).join(', '),
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDocumentsTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Card(
+            color: Colors.orange.shade50,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Icon(Icons.security, color: Colors.orange.shade700),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'This information is stored securely and only used for identification purposes.',
+                      style:
+                          TextStyle(color: Colors.orange.shade700, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          _buildSectionTitle("Driver's License"),
+          TextFormField(
+            controller: _driversLicenseNumberController,
+            decoration: const InputDecoration(
+              labelText: 'License Number',
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _driversLicenseStateController,
+                  decoration: const InputDecoration(labelText: 'Issuing State'),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Expiration'),
+                  subtitle: Text(_driversLicenseExpiration != null
+                      ? DateFormat('MM/dd/yyyy').format(_driversLicenseExpiration!)
+                      : 'Not set'),
+                  trailing: const Icon(Icons.calendar_today, size: 20),
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: _driversLicenseExpiration ?? DateTime.now(),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2050),
+                    );
+                    if (date != null) {
+                      setState(() => _driversLicenseExpiration = date);
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          _buildSectionTitle('Other Identification'),
+          TextFormField(
+            controller: _ssnLast4Controller,
+            maxLength: 4,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'SSN (Last 4 digits only)',
+              hintText: 'XXXX',
+              counterText: '',
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _passportNumberController,
+            decoration: const InputDecoration(
+              labelText: 'Passport Number',
+            ),
+          ),
+          const SizedBox(height: 24),
+          _buildSectionTitle('Insurance Numbers'),
+          TextFormField(
+            controller: _medicareNumberController,
+            decoration: const InputDecoration(
+              labelText: 'Medicare Number',
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _medicaidNumberController,
+            decoration: const InputDecoration(
+              labelText: 'Medicaid Number',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMedicalAlertTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Card(
+            color: Colors.red.shade50,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Icon(Icons.medical_services, color: Colors.red.shade700),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'This information is critical for first responders if the person is found.',
+                      style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          _buildSectionTitle('Medical Information'),
+          TextFormField(
+            controller: _primaryDiagnosisController,
+            decoration: const InputDecoration(
+              labelText: 'Primary Diagnosis',
+              hintText: "e.g., Alzheimer's Disease, Dementia",
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _cognitiveStatusController,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Cognitive Status',
+              hintText: 'e.g., May not know name, non-verbal, confused',
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _wanderingHistoryController,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Wandering History',
+              hintText: 'e.g., Has wandered 3 times in past year',
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _medicalAlertInfoController,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Medical Alert Info',
+              hintText: 'Critical info for first responders (allergies, conditions)',
+            ),
+          ),
+          const SizedBox(height: 24),
+          _buildSectionTitle('Communication & Behavior'),
+          TextFormField(
+            controller: _communicationAbilityController,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Communication Ability',
+              hintText: 'e.g., Can state first name only, speaks Spanish',
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _responseToNameController,
+            decoration: const InputDecoration(
+              labelText: 'Response to Name',
+              hintText: 'e.g., Responds to "Bobby", not "Robert"',
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _responseToStrangersController,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Response to Strangers',
+              hintText: 'e.g., Fearful, friendly, may follow anyone',
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _behaviorWhenLostController,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Behavior When Lost',
+              hintText: 'e.g., May appear confused, will sit and wait',
+            ),
+          ),
+          const SizedBox(height: 24),
+          _buildSectionTitle('Calming Strategies'),
+          TextFormField(
+            controller: _calmingTechniquesController,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Calming Techniques',
+              hintText: 'What helps calm them (music, photos, etc.)',
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _triggersToAvoidController,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Triggers to Avoid',
+              hintText: 'What upsets them (loud noises, crowds, etc.)',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhotosTab() {
+    final photos = _profile?.photos ?? [];
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              const Icon(Icons.photo_camera, color: Colors.blue),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${photos.length} photo${photos.length == 1 ? '' : 's'} • Recent photos help with identification',
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _addPhoto,
+                icon: const Icon(Icons.add_a_photo),
+                label: const Text('Add Photo'),
+              ),
+            ],
+          ),
+        ),
+        if (photos.isEmpty)
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.photo_library_outlined,
+                      size: 64, color: Colors.grey.shade400),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No photos yet',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Add photos for identification purposes',
+                    style: TextStyle(color: Colors.grey.shade500),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: _addPhoto,
+                    icon: const Icon(Icons.add_a_photo),
+                    label: const Text('Add First Photo'),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          Expanded(
+            child: GridView.builder(
+              padding: const EdgeInsets.all(16),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 0.8,
+              ),
+              itemCount: photos.length,
+              itemBuilder: (context, index) {
+                final photo = photos[index];
+                return _buildPhotoCard(photo);
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPhotoCard(UserPhoto photo) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          CachedNetworkImage(
+            imageUrl: photo.url,
+            fit: BoxFit.cover,
+            placeholder: (context, url) => Container(
+              color: Colors.grey.shade200,
+              child: const Center(child: CircularProgressIndicator()),
+            ),
+            errorWidget: (context, url, error) => Container(
+              color: Colors.grey.shade200,
+              child: const Icon(Icons.error),
+            ),
+          ),
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: 0.7),
+                  ],
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (photo.isPrimary)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.green,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'PRIMARY',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  if (photo.photoType != null)
+                    Text(
+                      photo.photoType!.replaceAll('_', ' ').toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                      ),
+                    ),
+                  Text(
+                    DateFormat('MMM d, yyyy').format(photo.dateTaken),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            top: 4,
+            right: 4,
+            child: PopupMenuButton<String>(
+              icon: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.more_vert, color: Colors.white, size: 18),
+              ),
+              onSelected: (value) {
+                if (value == 'primary') {
+                  _setAsPrimary(photo);
+                } else if (value == 'delete') {
+                  _deletePhoto(photo);
+                }
+              },
+              itemBuilder: (context) => [
+                if (!photo.isPrimary)
+                  const PopupMenuItem(
+                    value: 'primary',
+                    child: Row(
+                      children: [
+                        Icon(Icons.star),
+                        SizedBox(width: 8),
+                        Text('Set as Primary'),
+                      ],
+                    ),
+                  ),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Delete', style: TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+          color: Colors.blue,
+        ),
+      ),
+    );
+  }
+}

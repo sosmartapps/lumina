@@ -1,0 +1,41 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Medication verification photos
+    match /medication_photos/{userId}/{allPaths=**} {
+      // Users can upload their own medication photos
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+
+      // Caregivers can read medication photos
+      allow read: if isAuthenticated();
+
+      // Only admin can delete
+      allow delete: if isAuthenticated() &&
+        request.auth.token.admin == true;
+    }
+
+    // User profile photos
+    match /profile_photos/{userId}/{allPaths=**} {
+      // Users and caregivers can upload/read profile photos
+      allow read, create: if isAuthenticated();
+
+      // Only owner can delete
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Screenshot feedback attachments
+    match /feedback_attachments/{userId}/{allPaths=**} {
+      // Anyone authenticated can upload feedback screenshots
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+
+      // Only admins can read/delete feedback attachments
+      allow read, delete: if isAuthenticated() &&
+        request.auth.token.admin == true;
+    }
+  }
+}

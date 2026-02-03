@@ -1,0 +1,78 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# VSCode
+.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# iOS secrets - NEVER commit these
+ios/Flutter/Secrets.xcconfig
+
+# Firebase configuration (may contain API keys)
+# Uncomment if you want to keep firebase_options.dart private
+# lib/firebase_options.dart
+
+# Environment files
+.env
+.env.*
+
+# Local configuration
+local.properties
+*.local
+
+# Sensitive data
+**/secrets/
+**/credentials/
+
+# macOS specific
+*.xcuserdata
+*.xcworkspace
+!default.xcworkspace
+xcuserdata/
+DerivedData/
+*.hmap
+*.ipa
+*.xcarchive
+
+# Android specific
+*.apk
+*.aab
+*.jks
+*.keystore
+local.properties

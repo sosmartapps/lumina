@@ -1,0 +1,12 @@
+// Configuration for ShareFeedbackExtension
+// This file configures the iOS Share Extension for feedback submissions
+
+#include "Generated.xcconfig"
+#include? "Secrets.xcconfig"
+
+// Firebase Function endpoint for iOS Share Extension submissions
+// TODO: Update with your actual Firebase project ID after running flutterfire configure
+REPAIR_TASK_CREATE_URL=https://us-central1-YOUR_PROJECT_ID.cloudfunctions.net/createRepairTaskFromShare
+
+// IMPORTANT: The REPAIR_TASK_API_KEY should be set in Secrets.xcconfig (do not commit)
+// REPAIR_TASK_API_KEY=YOUR_VSCODE_REPAIR_API_KEY
