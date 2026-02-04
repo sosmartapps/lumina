@@ -1,0 +1,62 @@
+name: Daily Doctor (Analyze + Test + Best-Effort Fix)
+
+on:
+  schedule:
+    # Daily at 06:30 UTC (11:30 PM Arizona)
+    - cron: '30 6 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  doctor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Analyze
+        id: analyze
+        run: flutter analyze
+
+      - name: Test
+        id: test
+        run: flutter test
+
+      # If analyze/test fails, try a safe automated fix pass.
+      - name: Best-effort fix (dart fix + format)
+        if: failure()
+        run: |
+          dart fix --apply || true
+          dart format .
+
+      - name: Re-run Analyze
+        if: failure()
+        run: flutter analyze
+
+      - name: Re-run Test
+        if: failure()
+        run: flutter test
+
+      - name: Create patch artifact
+        if: always()
+        run: |
+          git diff --patch --minimal > patch.diff || true
+          wc -l patch.diff || true
+
+      - name: Upload patch artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-doctor-patch
+          path: patch.diff
