@@ -447,6 +447,189 @@ export const sendErrorAlert = functions.firestore
   });
 
 // ============================================================================
+// iOS SHARE EXTENSION - CREATE REPAIR TASK
+// ============================================================================
+
+/**
+ * HTTP endpoint for iOS Share Extension to submit feedback
+ * Requires API key authentication via X-API-Key header
+ */
+export const createRepairTaskFromShare = functions
+  .runWith({
+    secrets: ['VSCODE_REPAIR_API_KEY', 'ALERT_EMAIL_TO', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM'],
+  })
+  .https.onRequest(async (req, res) => {
+    // CORS handling
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, X-API-Key');
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
+    // Validate API key
+    const apiKey = req.headers['x-api-key'];
+    const expectedKey = process.env.VSCODE_REPAIR_API_KEY;
+
+    if (!apiKey || apiKey !== expectedKey) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    try {
+      // Parse multipart form data or JSON
+      const contentType = req.headers['content-type'] || '';
+      let message = '';
+      let type = 'bug';
+      let platform = 'ios';
+      let source = 'share';
+      let appName = 'Lumina';
+      let ccEmail = '';
+      let imageData: Buffer | null = null;
+
+      if (contentType.includes('multipart/form-data')) {
+        // Parse multipart form data
+        const busboy = require('busboy');
+        const bb = busboy({ headers: req.headers });
+
+        const fields: Record<string, string> = {};
+        let imageBuffer: Buffer[] = [];
+
+        await new Promise<void>((resolve, reject) => {
+          bb.on('field', (name: string, val: string) => {
+            fields[name] = val;
+          });
+
+          bb.on('file', (name: string, file: any, info: any) => {
+            file.on('data', (data: Buffer) => {
+              imageBuffer.push(data);
+            });
+          });
+
+          bb.on('finish', () => {
+            message = fields.message || '';
+            type = fields.type || 'bug';
+            platform = fields.platform || 'ios';
+            source = fields.source || 'share';
+            appName = fields.appName || 'Lumina';
+            ccEmail = fields.ccEmail || '';
+
+            if (imageBuffer.length > 0) {
+              imageData = Buffer.concat(imageBuffer);
+            }
+            resolve();
+          });
+
+          bb.on('error', reject);
+          bb.end(req.rawBody);
+        });
+      } else {
+        // Parse JSON body
+        const body = req.body;
+        message = body.message || '';
+        type = body.type || 'bug';
+        platform = body.platform || 'ios';
+        source = body.source || 'share';
+        appName = body.appName || 'Lumina';
+        ccEmail = body.ccEmail || '';
+      }
+
+      // Create repair task document
+      const taskRef = admin.firestore().collection('repair_tasks').doc();
+      const taskData: Record<string, any> = {
+        message,
+        type,
+        platform,
+        source,
+        appName,
+        status: 'pending',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+
+      if (ccEmail) {
+        taskData.ccEmail = ccEmail;
+      }
+
+      // Upload image to Storage if present
+      if (imageData) {
+        const bucket = admin.storage().bucket();
+        const filename = `repair_tasks/${taskRef.id}/screenshot.jpg`;
+        const file = bucket.file(filename);
+
+        await file.save(imageData, {
+          metadata: {
+            contentType: 'image/jpeg',
+          },
+        });
+
+        const [url] = await file.getSignedUrl({
+          action: 'read',
+          expires: '03-01-2500',
+        });
+
+        taskData.imageUrl = url;
+        taskData.imagePath = filename;
+      }
+
+      await taskRef.set(taskData);
+
+      // Send email notification if SMTP is configured
+      const smtpHost = process.env.SMTP_HOST;
+      const smtpPort = process.env.SMTP_PORT;
+      const smtpUser = process.env.SMTP_USER;
+      const smtpPass = process.env.SMTP_PASS;
+      const smtpFrom = process.env.SMTP_FROM;
+      const alertEmailTo = process.env.ALERT_EMAIL_TO;
+
+      if (smtpHost && smtpUser && smtpPass && alertEmailTo) {
+        const transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: parseInt(smtpPort || '587'),
+          secure: false,
+          auth: {
+            user: smtpUser,
+            pass: smtpPass,
+          },
+        });
+
+        const recipients = ccEmail ? `${alertEmailTo}, ${ccEmail}` : alertEmailTo;
+
+        await transporter.sendMail({
+          from: smtpFrom || smtpUser,
+          to: recipients,
+          subject: `[${appName}] New Feedback from iOS Share`,
+          html: `
+            <h2>New Feedback Received</h2>
+            <p><strong>Type:</strong> ${type}</p>
+            <p><strong>Platform:</strong> ${platform}</p>
+            <p><strong>Source:</strong> ${source}</p>
+            <p><strong>Message:</strong></p>
+            <p>${message || 'No message provided'}</p>
+            ${taskData.imageUrl ? `<p><strong>Screenshot:</strong> <a href="${taskData.imageUrl}">View Image</a></p>` : ''}
+            <hr>
+            <p><small>Task ID: ${taskRef.id}</small></p>
+          `,
+        });
+      }
+
+      res.status(201).json({
+        success: true,
+        taskId: taskRef.id,
+      });
+    } catch (error) {
+      console.error('Error creating repair task:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+// ============================================================================
 // CLEANUP OLD FEEDBACK & ERRORS
 // ============================================================================
 

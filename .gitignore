@@ -43,6 +43,10 @@ app.*.map.json
 
 # iOS secrets - NEVER commit these
 ios/Flutter/Secrets.xcconfig
+ios/Runner/GoogleService-Info.plist
+
+# Android secrets
+android/app/google-services.json
 
 # Firebase configuration (may contain API keys)
 # Uncomment if you want to keep firebase_options.dart private

@@ -36,44 +36,48 @@ class DefaultFirebaseOptions {
     }
   }
 
-  // TODO: Replace with your actual Firebase Web configuration
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'YOUR_WEB_API_KEY',
-    appId: 'YOUR_WEB_APP_ID',
-    messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
-    projectId: 'YOUR_PROJECT_ID',
-    authDomain: 'YOUR_PROJECT_ID.firebaseapp.com',
-    storageBucket: 'YOUR_PROJECT_ID.appspot.com',
+    apiKey: 'AIzaSyDlcoU-6fVNwl2D3pI38eZVYA13pG-5iBg',
+    appId: '1:213849135698:web:04acd823f2c798955fdd8b',
+    messagingSenderId: '213849135698',
+    projectId: 'lumina-sosmartapps',
+    authDomain: 'lumina-sosmartapps.firebaseapp.com',
+    storageBucket: 'lumina-sosmartapps.firebasestorage.app',
+  );
+
+  // TODO: Replace with your actual Firebase Web configuration
+
+  static const FirebaseOptions android = FirebaseOptions(
+    apiKey: 'AIzaSyD5OLkj0r4jyZ_xWks34ugN5p053_VonT4',
+    appId: '1:213849135698:android:8eb40c0e7e60d0d05fdd8b',
+    messagingSenderId: '213849135698',
+    projectId: 'lumina-sosmartapps',
+    storageBucket: 'lumina-sosmartapps.firebasestorage.app',
   );
 
   // TODO: Replace with your actual Firebase Android configuration
-  static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'YOUR_ANDROID_API_KEY',
-    appId: 'YOUR_ANDROID_APP_ID',
-    messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
-    projectId: 'YOUR_PROJECT_ID',
-    storageBucket: 'YOUR_PROJECT_ID.appspot.com',
+
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyA2P-5eACtYw7QokMxWkm3y2ymHHPMv16w',
+    appId: '1:213849135698:ios:3d61a8f880aa42a35fdd8b',
+    messagingSenderId: '213849135698',
+    projectId: 'lumina-sosmartapps',
+    storageBucket: 'lumina-sosmartapps.firebasestorage.app',
+    iosBundleId: 'com.carecompanion.app',
   );
 
   // TODO: Replace with your actual Firebase iOS configuration
-  static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'YOUR_IOS_API_KEY',
-    appId: 'YOUR_IOS_APP_ID',
-    messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
-    projectId: 'YOUR_PROJECT_ID',
-    storageBucket: 'YOUR_PROJECT_ID.appspot.com',
-    iosBundleId: 'com.example.caregiverApp',
+
+  static const FirebaseOptions macos = FirebaseOptions(
+    apiKey: 'AIzaSyA2P-5eACtYw7QokMxWkm3y2ymHHPMv16w',
+    appId: '1:213849135698:ios:3d61a8f880aa42a35fdd8b',
+    messagingSenderId: '213849135698',
+    projectId: 'lumina-sosmartapps',
+    storageBucket: 'lumina-sosmartapps.firebasestorage.app',
+    iosBundleId: 'com.carecompanion.app',
   );
 
   // TODO: Replace with your actual Firebase macOS configuration
-  static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'YOUR_MACOS_API_KEY',
-    appId: 'YOUR_MACOS_APP_ID',
-    messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
-    projectId: 'YOUR_PROJECT_ID',
-    storageBucket: 'YOUR_PROJECT_ID.appspot.com',
-    iosBundleId: 'com.example.caregiverApp.RunnerTests',
-  );
 }
 
 /*
