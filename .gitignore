@@ -48,9 +48,10 @@ ios/Runner/GoogleService-Info.plist
 # Android secrets
 android/app/google-services.json
 
-# Firebase configuration (may contain API keys)
-# Uncomment if you want to keep firebase_options.dart private
-# lib/firebase_options.dart
+# Firebase configuration (contains API keys - NEVER commit)
+lib/firebase_options.dart
+macos/Runner/GoogleService-Info.plist
+web/firebase-config.js
 
 # Environment files
 .env
