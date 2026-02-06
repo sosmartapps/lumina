@@ -30,7 +30,7 @@ service cloud.firestore {
       // Location updates subcollection
       match /location_updates/{updateId} {
         allow read: if isAuthenticated() && isCaregiverFor(userId);
-        allow create: if true; // Allow device to post location
+        allow create: if isAuthenticated();
       }
     }
 
@@ -61,7 +61,7 @@ service cloud.firestore {
     // Medication logs collection
     match /medication_logs/{logId} {
       allow read: if isAuthenticated();
-      allow create: if true; // Allow device to log medication
+      allow create: if isAuthenticated();
       allow update: if isAuthenticated();
     }
 
@@ -77,7 +77,7 @@ service cloud.firestore {
     // Geo zone events collection
     match /geo_zone_events/{eventId} {
       allow read: if isAuthenticated();
-      allow create: if true; // Allow device to log events
+      allow create: if isAuthenticated();
     }
 
     // Notifications collection (for Cloud Functions to process)

@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:crypto/crypto.dart';
 
 /// Service for protecting the app from accidental deletion or exit
 /// Implements Device Admin (Android), Kiosk Mode, and PIN protection
@@ -148,6 +151,10 @@ class AppProtectionService {
     }
   }
 
+  // Rate limiting constants
+  static const int _maxPinAttempts = 5;
+  static const Duration _lockoutDuration = Duration(minutes: 15);
+
   /// Save protection settings for a user
   static Future<void> saveProtectionSettings({
     required String userId,
@@ -156,12 +163,14 @@ class AppProtectionService {
     required bool screenPinningEnabled,
     String? caregiverPin,
   }) async {
+    final pinData = caregiverPin != null ? _hashPin(caregiverPin) : null;
     await _firestore.collection('users').doc(userId).update({
       'protectionSettings': {
         'deviceAdminEnabled': deviceAdminEnabled,
         'kioskModeEnabled': kioskModeEnabled,
         'screenPinningEnabled': screenPinningEnabled,
-        'caregiverPinHash': caregiverPin != null ? _hashPin(caregiverPin) : null,
+        'caregiverPinHash': pinData?['hash'],
+        'caregiverPinSalt': pinData?['salt'],
         'updatedAt': FieldValue.serverTimestamp(),
       },
     });
@@ -173,27 +182,93 @@ class AppProtectionService {
     return doc.data()?['protectionSettings'] as Map<String, dynamic>?;
   }
 
-  /// Verify caregiver PIN
+  /// Verify caregiver PIN with rate limiting
   static Future<bool> verifyCaregiverPin(String userId, String pin) async {
     final settings = await getProtectionSettings(userId);
     if (settings == null || settings['caregiverPinHash'] == null) {
       return true; // No PIN set, allow access
     }
 
-    return settings['caregiverPinHash'] == _hashPin(pin);
+    // Check rate limiting
+    final failedAttempts = settings['failedPinAttempts'] ?? 0;
+    final lastFailedAt = settings['lastFailedPinAt'] as Timestamp?;
+    if (failedAttempts >= _maxPinAttempts && lastFailedAt != null) {
+      final lockoutEnd = lastFailedAt.toDate().add(_lockoutDuration);
+      if (DateTime.now().isBefore(lockoutEnd)) {
+        debugPrint('PIN locked out until $lockoutEnd');
+        return false;
+      }
+      // Lockout expired, reset attempts
+      await _firestore.collection('users').doc(userId).update({
+        'protectionSettings.failedPinAttempts': 0,
+      });
+    }
+
+    final salt = settings['caregiverPinSalt'] as String?;
+    final storedHash = settings['caregiverPinHash'] as String;
+    final bool isValid;
+
+    if (salt != null) {
+      // New salted SHA-256 verification
+      final hash = _hashPinWithSalt(pin, salt);
+      isValid = storedHash == hash;
+    } else {
+      // Legacy: migrate on next setCaregiverPin call
+      isValid = storedHash == _legacyHashPin(pin);
+    }
+
+    if (!isValid) {
+      await _firestore.collection('users').doc(userId).update({
+        'protectionSettings.failedPinAttempts': FieldValue.increment(1),
+        'protectionSettings.lastFailedPinAt': FieldValue.serverTimestamp(),
+      });
+    } else {
+      // Reset failed attempts on success
+      if (failedAttempts > 0) {
+        await _firestore.collection('users').doc(userId).update({
+          'protectionSettings.failedPinAttempts': 0,
+        });
+      }
+    }
+
+    return isValid;
   }
 
   /// Set caregiver PIN for protection features
   static Future<void> setCaregiverPin(String userId, String pin) async {
+    final pinData = _hashPin(pin);
     await _firestore.collection('users').doc(userId).update({
-      'protectionSettings.caregiverPinHash': _hashPin(pin),
+      'protectionSettings.caregiverPinHash': pinData['hash'],
+      'protectionSettings.caregiverPinSalt': pinData['salt'],
+      'protectionSettings.failedPinAttempts': 0,
       'protectionSettings.updatedAt': FieldValue.serverTimestamp(),
     });
   }
 
-  /// Simple hash function for PIN (in production, use proper hashing)
-  static String _hashPin(String pin) {
-    // Simple hash - in production use bcrypt or similar
+  /// Generate a random 32-byte salt
+  static String _generateSalt() {
+    final random = Random.secure();
+    final saltBytes = List<int>.generate(32, (_) => random.nextInt(256));
+    return base64Encode(saltBytes);
+  }
+
+  /// Hash PIN with SHA-256 and a random salt
+  static Map<String, String> _hashPin(String pin) {
+    final salt = _generateSalt();
+    return {
+      'hash': _hashPinWithSalt(pin, salt),
+      'salt': salt,
+    };
+  }
+
+  /// Hash PIN with SHA-256 using a provided salt
+  static String _hashPinWithSalt(String pin, String salt) {
+    final bytes = utf8.encode('$salt:$pin');
+    return sha256.convert(bytes).toString();
+  }
+
+  /// Legacy hash for backwards compatibility during migration
+  static String _legacyHashPin(String pin) {
     int hash = 0;
     for (int i = 0; i < pin.length; i++) {
       hash = ((hash << 5) - hash) + pin.codeUnitAt(i);

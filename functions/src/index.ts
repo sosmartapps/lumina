@@ -245,6 +245,68 @@ export const sendGeofenceAlert = functions.firestore
   });
 
 // ============================================================================
+// PUSH NOTIFICATION DELIVERY
+// ============================================================================
+
+/**
+ * Process the notifications collection and deliver push notifications via FCM.
+ * The Flutter app's NotificationService.notifyCaregivers() writes docs here
+ * containing { token, title, body, data }. This function sends them.
+ */
+export const deliverPushNotification = functions.firestore
+  .document('notifications/{notificationId}')
+  .onCreate(async (snap, context) => {
+    const data = snap.data();
+    const notificationId = context.params.notificationId;
+
+    const token = data.token;
+    const title = data.title;
+    const body = data.body;
+
+    if (!token || !title) {
+      console.warn(`Notification ${notificationId} missing token or title, skipping`);
+      return null;
+    }
+
+    try {
+      await admin.messaging().send({
+        token,
+        notification: { title, body: body || '' },
+        data: data.data || {},
+      });
+
+      // Mark as delivered
+      await snap.ref.update({
+        deliveredAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: 'delivered',
+      });
+
+      console.log(`Push notification ${notificationId} delivered to token ${token.substring(0, 10)}...`);
+      return null;
+    } catch (error: any) {
+      console.error(`Error delivering notification ${notificationId}:`, error);
+
+      // If token is invalid, mark it so and clean up
+      if (
+        error.code === 'messaging/invalid-registration-token' ||
+        error.code === 'messaging/registration-token-not-registered'
+      ) {
+        await snap.ref.update({
+          status: 'failed',
+          error: 'invalid_token',
+        });
+      } else {
+        await snap.ref.update({
+          status: 'failed',
+          error: error.message || 'unknown',
+        });
+      }
+
+      return null;
+    }
+  });
+
+// ============================================================================
 // MEDICATION REMINDER NOTIFICATIONS
 // ============================================================================
 

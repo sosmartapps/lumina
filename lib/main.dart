@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -40,6 +41,13 @@ void main() async {
 
   // Initialize notifications
   await NotificationService.initialize();
+
+  // Ensure the device always has a Firebase Auth context.
+  // Patients don't log in, so we use anonymous auth to satisfy
+  // Firestore security rules that require isAuthenticated().
+  if (FirebaseAuth.instance.currentUser == null) {
+    await FirebaseAuth.instance.signInAnonymously();
+  }
 
   runApp(const CaregiverApp());
 }
