@@ -22,6 +22,11 @@
 - User: Large action tiles, one-tap navigation, quick call, voice prompts, full-screen reminders, no login required
 - Caregiver: Secure hidden login, real-time location, geofencing, medical profile, prescription tracking, remote management, app protection (kiosk mode)
 
+## 2026-02-05 - CI Fix: firebase_options.dart stub
+
+- `firebase_options.dart` is gitignored (contains API keys) but CI needs it for `flutter analyze`
+- Added a step in `daily-doctor.yml` that generates a stub with dummy values before analysis
+
 ## 2026-02-05 - Security Hardening & Geofence Fix
 
 **Firestore rules — closed unauthenticated write holes:**
