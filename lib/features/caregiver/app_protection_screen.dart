@@ -1,21 +1,21 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/providers/caregiver_provider.dart';
+import '../../core/providers/providers.dart';
 import '../../core/services/app_protection_service.dart';
 import '../../core/theme/app_theme.dart';
 
 /// Screen for caregivers to manage app protection settings
 /// Prevents accidental app deletion by users
-class AppProtectionScreen extends StatefulWidget {
+class AppProtectionScreen extends ConsumerStatefulWidget {
   const AppProtectionScreen({super.key});
 
   @override
-  State<AppProtectionScreen> createState() => _AppProtectionScreenState();
+  ConsumerState<AppProtectionScreen> createState() => _AppProtectionScreenState();
 }
 
-class _AppProtectionScreenState extends State<AppProtectionScreen> {
+class _AppProtectionScreenState extends ConsumerState<AppProtectionScreen> {
   bool _isLoading = true;
   bool _deviceAdminEnabled = false;
   bool _kioskModeEnabled = false;
@@ -35,7 +35,7 @@ class _AppProtectionScreenState extends State<AppProtectionScreen> {
 
     if (!mounted) return;
 
-    final provider = Provider.of<CaregiverProvider>(context, listen: false);
+    final provider = ref.read(caregiverNotifierProvider);
     final user = provider.selectedUser;
 
     if (user != null) {
@@ -566,7 +566,7 @@ class _AppProtectionScreenState extends State<AppProtectionScreen> {
           ElevatedButton(
             onPressed: () async {
               final provider =
-                  Provider.of<CaregiverProvider>(context, listen: false);
+                  ref.read(caregiverNotifierProvider);
               final user = provider.selectedUser;
               if (user != null) {
                 verified = await AppProtectionService.verifyCaregiverPin(
@@ -647,7 +647,7 @@ class _AppProtectionScreenState extends State<AppProtectionScreen> {
               }
 
               final provider =
-                  Provider.of<CaregiverProvider>(context, listen: false);
+                  ref.read(caregiverNotifierProvider);
               final user = provider.selectedUser;
               if (user != null) {
                 await AppProtectionService.setCaregiverPin(
@@ -684,7 +684,7 @@ class _AppProtectionScreenState extends State<AppProtectionScreen> {
           ElevatedButton(
             onPressed: () async {
               final provider =
-                  Provider.of<CaregiverProvider>(context, listen: false);
+                  ref.read(caregiverNotifierProvider);
               final user = provider.selectedUser;
               if (user != null) {
                 await AppProtectionService.saveProtectionSettings(
@@ -709,7 +709,7 @@ class _AppProtectionScreenState extends State<AppProtectionScreen> {
   }
 
   Future<void> _saveSettings() async {
-    final provider = Provider.of<CaregiverProvider>(context, listen: false);
+    final provider = ref.read(caregiverNotifierProvider);
     final user = provider.selectedUser;
     if (user != null) {
       await AppProtectionService.saveProtectionSettings(

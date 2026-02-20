@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../core/providers/user_provider.dart';
-import '../../core/services/tts_service.dart';
+import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/models/reminder.dart';
 import '../../core/models/medication.dart';
 
 /// Screen showing today's reminders and medications
-class RemindersScreen extends StatelessWidget {
+class RemindersScreen extends ConsumerWidget {
   const RemindersScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(
@@ -31,8 +30,10 @@ class RemindersScreen extends StatelessWidget {
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
-      body: Consumer<UserProvider>(
-        builder: (context, userProvider, child) {
+      body: ListenableBuilder(
+        listenable: ref.read(userNotifierProvider),
+        builder: (context, child) {
+          final userProvider = ref.read(userNotifierProvider);
           final user = userProvider.user;
           if (user == null) {
             return const Center(child: CircularProgressIndicator());
@@ -60,7 +61,7 @@ class RemindersScreen extends StatelessWidget {
                   ...medications.map((med) => Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: _buildMedicationCard(
-                          context,
+                          ref,
                           med['medication'] as Medication,
                           med['schedule'] as MedicationSchedule,
                           med['scheduledTime'] as DateTime,
@@ -78,7 +79,7 @@ class RemindersScreen extends StatelessWidget {
                   const SizedBox(height: 12),
                   ...reminders.map((reminder) => Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: _buildReminderCard(context, reminder),
+                        child: _buildReminderCard(ref, reminder),
                       )),
                 ],
 
@@ -115,7 +116,7 @@ class RemindersScreen extends StatelessWidget {
   }
 
   Widget _buildMedicationCard(
-    BuildContext context,
+    WidgetRef ref,
     Medication medication,
     MedicationSchedule schedule,
     DateTime scheduledTime,
@@ -124,7 +125,7 @@ class RemindersScreen extends StatelessWidget {
     final timeStr = DateFormat('h:mm a').format(scheduledTime);
 
     return GestureDetector(
-      onTap: () => _speakMedication(context, medication, schedule),
+      onTap: () => _speakMedication(ref, medication, schedule),
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
@@ -229,14 +230,14 @@ class RemindersScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildReminderCard(BuildContext context, Reminder reminder) {
+  Widget _buildReminderCard(WidgetRef ref, Reminder reminder) {
     final timeStr = DateFormat('h:mm a').format(reminder.scheduledTime);
     final isPast = reminder.completedAt != null;
     final color = _getReminderColor(reminder.type);
     final icon = _getReminderIcon(reminder.type);
 
     return GestureDetector(
-      onTap: () => _speakReminder(context, reminder),
+      onTap: () => _speakReminder(ref, reminder),
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
@@ -403,12 +404,12 @@ class RemindersScreen extends StatelessWidget {
   }
 
   void _speakMedication(
-    BuildContext context,
+    WidgetRef ref,
     Medication medication,
     MedicationSchedule schedule,
   ) {
     HapticFeedback.lightImpact();
-    final tts = Provider.of<TTSService>(context, listen: false);
+    final tts = ref.read(ttsServiceProvider);
 
     String message = '${medication.name} at ${schedule.timeString}';
     if (medication.dosage != null) {
@@ -421,9 +422,9 @@ class RemindersScreen extends StatelessWidget {
     tts.speak(message);
   }
 
-  void _speakReminder(BuildContext context, Reminder reminder) {
+  void _speakReminder(WidgetRef ref, Reminder reminder) {
     HapticFeedback.lightImpact();
-    final tts = Provider.of<TTSService>(context, listen: false);
+    final tts = ref.read(ttsServiceProvider);
 
     String message = reminder.title;
     if (reminder.description != null) {

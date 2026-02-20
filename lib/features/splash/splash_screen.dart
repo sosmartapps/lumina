@@ -1,25 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/providers/app_state_provider.dart';
-import '../../core/providers/user_provider.dart';
-import '../../core/providers/caregiver_provider.dart';
-import '../../core/services/location_service.dart';
-import '../../core/services/geofence_service.dart';
+import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../setup/setup_screen.dart';
 import '../user_home/user_home_screen.dart';
 import '../caregiver/caregiver_login_screen.dart';
 
 /// Splash screen that handles app initialization
-class SplashScreen extends StatefulWidget {
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen>
+class _SplashScreenState extends ConsumerState<SplashScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
@@ -65,13 +61,13 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted) return;
 
     // Initialize app state
-    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final appState = ref.read(appStateNotifierProvider);
     await appState.initialize();
 
     if (!mounted) return;
 
     // Request permissions
-    final locationService = Provider.of<LocationService>(context, listen: false);
+    final locationService = ref.read(locationServiceProvider);
     await locationService.checkAndRequestPermission();
 
     if (!mounted) return;
@@ -79,9 +75,9 @@ class _SplashScreenState extends State<SplashScreen>
     // Navigate based on setup state
     if (appState.isSetupComplete && appState.currentUserId != null) {
       // Load user data
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-      await userProvider.loadUser(appState.currentUserId!);
-      userProvider.listenToUser(appState.currentUserId!);
+      final userProv = ref.read(userNotifierProvider);
+      await userProv.loadUser(appState.currentUserId!);
+      userProv.listenToUser(appState.currentUserId!);
 
       // Start location tracking
       await locationService.startTracking(userId: appState.currentUserId!);
@@ -89,17 +85,15 @@ class _SplashScreenState extends State<SplashScreen>
       if (!mounted) return;
 
       // Initialize geofencing
-      final geofenceService =
-          Provider.of<GeofenceServiceWrapper>(context, listen: false);
+      final geofenceService = ref.read(geofenceServiceProvider);
       await geofenceService.initialize(appState.currentUserId!);
 
       if (!mounted) return;
 
       if (appState.isCaregiverMode && appState.currentCaregiverId != null) {
         // Caregiver mode
-        final caregiverProvider =
-            Provider.of<CaregiverProvider>(context, listen: false);
-        await caregiverProvider.loadCaregiver(appState.currentCaregiverId!);
+        final caregiverProv = ref.read(caregiverNotifierProvider);
+        await caregiverProv.loadCaregiver(appState.currentCaregiverId!);
 
         _navigateTo(const CaregiverLoginScreen());
       } else {

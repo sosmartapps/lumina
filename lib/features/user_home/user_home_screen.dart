@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers/providers.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/providers/user_provider.dart';
-import '../../core/services/location_service.dart';
-import '../../core/services/tts_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/large_action_tile.dart';
 import '../../core/models/app_user.dart';
@@ -15,14 +13,14 @@ import '../reminders/reminders_screen.dart';
 import '../caregiver/caregiver_login_screen.dart';
 
 /// Main home screen for users - large, accessible tiles
-class UserHomeScreen extends StatefulWidget {
+class UserHomeScreen extends ConsumerStatefulWidget {
   const UserHomeScreen({super.key});
 
   @override
-  State<UserHomeScreen> createState() => _UserHomeScreenState();
+  ConsumerState<UserHomeScreen> createState() => _UserHomeScreenState();
 }
 
-class _UserHomeScreenState extends State<UserHomeScreen> {
+class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
   int _caregiverTapCount = 0;
 
   @override
@@ -35,8 +33,8 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
 
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    final tts = Provider.of<TTSService>(context, listen: false);
+    final userProvider = ref.read(userNotifierProvider);
+    final tts = ref.read(ttsServiceProvider);
 
     if (userProvider.user != null &&
         userProvider.user!.settings.voicePromptsEnabled) {
@@ -51,8 +49,10 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       body: SafeArea(
-        child: Consumer<UserProvider>(
-          builder: (context, userProvider, child) {
+        child: ListenableBuilder(
+          listenable: ref.read(userNotifierProvider),
+          builder: (context, child) {
+            final userProvider = ref.read(userNotifierProvider);
             final user = userProvider.user;
 
             if (user == null) {
@@ -353,7 +353,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       return;
     }
 
-    final locationService = Provider.of<LocationService>(context, listen: false);
+    final locationService = ref.read(locationServiceProvider);
     final url = await locationService.getGoogleMapsDirectionsUrl(
       destination: user.homeLocation!,
       destinationName: user.homeAddress ?? 'Home',
@@ -388,7 +388,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
   Future<void> _callContact(EmergencyContact contact) async {
     HapticFeedback.heavyImpact();
 
-    final tts = Provider.of<TTSService>(context, listen: false);
+    final tts = ref.read(ttsServiceProvider);
     await tts.speak('Calling ${contact.name}');
 
     final uri = Uri.parse('tel:${contact.phoneNumber}');

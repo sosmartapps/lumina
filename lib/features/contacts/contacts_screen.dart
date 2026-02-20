@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/providers/providers.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/providers/user_provider.dart';
-import '../../core/services/tts_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/models/app_user.dart';
 
 /// Screen for quick calling contacts
-class ContactsScreen extends StatelessWidget {
+class ContactsScreen extends ConsumerWidget {
   const ContactsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(
@@ -30,8 +30,10 @@ class ContactsScreen extends StatelessWidget {
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
-      body: Consumer<UserProvider>(
-        builder: (context, userProvider, child) {
+      body: ListenableBuilder(
+        listenable: ref.read(userNotifierProvider),
+        builder: (context, child) {
+          final userProvider = ref.read(userNotifierProvider);
           final user = userProvider.user;
           if (user == null) {
             return const Center(child: CircularProgressIndicator());
@@ -50,7 +52,7 @@ class ContactsScreen extends StatelessWidget {
               final contact = contacts[index];
               return Padding(
                 padding: const EdgeInsets.only(bottom: 16),
-                child: _buildContactCard(context, contact, index),
+                child: _buildContactCard(context, ref, contact, index),
               );
             },
           );
@@ -61,13 +63,14 @@ class ContactsScreen extends StatelessWidget {
 
   Widget _buildContactCard(
     BuildContext context,
+    WidgetRef ref,
     EmergencyContact contact,
     int index,
   ) {
     final color = AppTheme.tileColors[index % AppTheme.tileColors.length];
 
     return GestureDetector(
-      onTap: () => _callContact(context, contact),
+      onTap: () => _callContact(context, ref, contact),
       child: Container(
         height: 120,
         decoration: BoxDecoration(
@@ -200,12 +203,13 @@ class ContactsScreen extends StatelessWidget {
 
   Future<void> _callContact(
     BuildContext context,
+    WidgetRef ref,
     EmergencyContact contact,
   ) async {
     HapticFeedback.heavyImpact();
 
     // Speak confirmation
-    final tts = Provider.of<TTSService>(context, listen: false);
+    final tts = ref.read(ttsServiceProvider);
     await tts.speak('Calling ${contact.name}');
 
     // Make the call

@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/providers/caregiver_provider.dart';
-import '../../core/services/reminder_service.dart';
+import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/models/medication.dart';
 
 /// Screen for caregivers to manage medications
-class ManageMedicationsScreen extends StatefulWidget {
+class ManageMedicationsScreen extends ConsumerStatefulWidget {
   const ManageMedicationsScreen({super.key});
 
   @override
-  State<ManageMedicationsScreen> createState() => _ManageMedicationsScreenState();
+  ConsumerState<ManageMedicationsScreen> createState() => _ManageMedicationsScreenState();
 }
 
-class _ManageMedicationsScreenState extends State<ManageMedicationsScreen> {
+class _ManageMedicationsScreenState extends ConsumerState<ManageMedicationsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -29,15 +29,16 @@ class _ManageMedicationsScreenState extends State<ManageMedicationsScreen> {
         icon: const Icon(Icons.add),
         label: const Text('Add Medication'),
       ),
-      body: Consumer<CaregiverProvider>(
-        builder: (context, provider, child) {
+      body: ListenableBuilder(
+        listenable: ref.read(caregiverNotifierProvider),
+        builder: (context, child) {
+          final provider = ref.read(caregiverNotifierProvider);
           final user = provider.selectedUser;
           if (user == null) {
             return const Center(child: Text('No user selected'));
           }
 
-          final reminderService =
-              Provider.of<ReminderService>(context, listen: false);
+          final reminderService = ref.read(reminderServiceProvider);
 
           return StreamBuilder<List<Medication>>(
             stream: reminderService.getMedications(user.id),
@@ -262,10 +263,8 @@ class _ManageMedicationsScreenState extends State<ManageMedicationsScreen> {
               onPressed: () async {
                 if (nameController.text.isEmpty) return;
 
-                final provider =
-                    Provider.of<CaregiverProvider>(context, listen: false);
-                final reminderService =
-                    Provider.of<ReminderService>(context, listen: false);
+                final provider = ref.read(caregiverNotifierProvider);
+                final reminderService = ref.read(reminderServiceProvider);
                 final user = provider.selectedUser!;
 
                 final medication = Medication(
@@ -391,8 +390,7 @@ class _ManageMedicationsScreenState extends State<ManageMedicationsScreen> {
               onPressed: () async {
                 if (nameController.text.isEmpty) return;
 
-                final reminderService =
-                    Provider.of<ReminderService>(context, listen: false);
+                final reminderService = ref.read(reminderServiceProvider);
 
                 final updatedMedication = medication.copyWith(
                   name: nameController.text.trim(),
@@ -433,8 +431,7 @@ class _ManageMedicationsScreenState extends State<ManageMedicationsScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              final reminderService =
-                  Provider.of<ReminderService>(context, listen: false);
+              final reminderService = ref.read(reminderServiceProvider);
               await reminderService.deleteMedication(medication.id);
               if (!context.mounted) return;
               Navigator.pop(context);

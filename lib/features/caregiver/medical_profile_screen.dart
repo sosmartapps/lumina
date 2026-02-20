@@ -1,21 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/providers/providers.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/models/health_profile.dart';
 import '../../core/models/prescription.dart';
-import '../../core/providers/caregiver_provider.dart';
 import '../../core/services/medical_info_service.dart';
 
 /// Comprehensive medical profile management screen for caregivers
-class MedicalProfileScreen extends StatefulWidget {
+class MedicalProfileScreen extends ConsumerStatefulWidget {
   const MedicalProfileScreen({super.key});
 
   @override
-  State<MedicalProfileScreen> createState() => _MedicalProfileScreenState();
+  ConsumerState<MedicalProfileScreen> createState() => _MedicalProfileScreenState();
 }
 
-class _MedicalProfileScreenState extends State<MedicalProfileScreen>
+class _MedicalProfileScreenState extends ConsumerState<MedicalProfileScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
@@ -33,7 +34,7 @@ class _MedicalProfileScreenState extends State<MedicalProfileScreen>
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<CaregiverProvider>(context);
+    final provider = ref.read(caregiverNotifierProvider);
     final user = provider.selectedUser;
 
     if (user == null) {
@@ -100,9 +101,11 @@ class _MedicalProfileScreenState extends State<MedicalProfileScreen>
       // Format summary as readable text
       final text = _formatSummaryAsText(summary);
 
-      await Share.share(
-        text,
-        subject: 'Medical Summary - ${summary['patient']?['name'] ?? 'Patient'}',
+      await SharePlus.instance.share(
+        ShareParams(
+          text: text,
+          subject: 'Medical Summary - ${summary['patient']?['name'] ?? 'Patient'}',
+        ),
       );
     } catch (e) {
       if (!mounted) return;

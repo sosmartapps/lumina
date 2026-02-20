@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 
-import '../../core/providers/app_state_provider.dart';
+import '../../core/providers/providers.dart';
 import '../../core/providers/caregiver_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/models/app_user.dart';
@@ -21,14 +21,14 @@ import 'medical_profile_screen.dart';
 import 'user_profile_screen.dart';
 
 /// Main dashboard for caregivers
-class CaregiverDashboardScreen extends StatefulWidget {
+class CaregiverDashboardScreen extends ConsumerStatefulWidget {
   const CaregiverDashboardScreen({super.key});
 
   @override
-  State<CaregiverDashboardScreen> createState() => _CaregiverDashboardScreenState();
+  ConsumerState<CaregiverDashboardScreen> createState() => _CaregiverDashboardScreenState();
 }
 
-class _CaregiverDashboardScreenState extends State<CaregiverDashboardScreen> {
+class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScreen> {
   int _selectedIndex = 0;
 
   @override
@@ -46,8 +46,10 @@ class _CaregiverDashboardScreenState extends State<CaregiverDashboardScreen> {
           ),
         ],
       ),
-      body: Consumer<CaregiverProvider>(
-        builder: (context, caregiverProvider, child) {
+      body: ListenableBuilder(
+        listenable: ref.read(caregiverNotifierProvider),
+        builder: (context, child) {
+          final caregiverProvider = ref.read(caregiverNotifierProvider);
           if (caregiverProvider.isLoading) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -736,7 +738,7 @@ class _CaregiverDashboardScreenState extends State<CaregiverDashboardScreen> {
   }
 
   void _exitCaregiverMode() async {
-    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final appState = ref.read(appStateNotifierProvider);
     await appState.setCaregiverMode(false);
 
     if (!mounted) return;

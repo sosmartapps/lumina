@@ -1,32 +1,34 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../core/providers/caregiver_provider.dart';
-import '../../core/services/location_service.dart';
+import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/models/app_user.dart';
 
 /// Screen for caregivers to manage saved locations
-class ManageLocationsScreen extends StatelessWidget {
+class ManageLocationsScreen extends ConsumerWidget {
   const ManageLocationsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: AppTheme.primaryBlue,
         title: const Text('Saved Locations'),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddLocationDialog(context),
+        onPressed: () => _showAddLocationDialog(context, ref),
         backgroundColor: AppTheme.primaryBlue,
         icon: const Icon(Icons.add),
         label: const Text('Add Location'),
       ),
-      body: Consumer<CaregiverProvider>(
-        builder: (context, provider, child) {
+      body: ListenableBuilder(
+        listenable: ref.read(caregiverNotifierProvider),
+        builder: (context, child) {
+          final provider = ref.read(caregiverNotifierProvider);
           final user = provider.selectedUser;
           if (user == null) {
             return const Center(child: Text('No user selected'));
@@ -47,7 +49,7 @@ class ManageLocationsScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                _buildHomeLocationCard(context, user, provider),
+                _buildHomeLocationCard(context, user, provider, ref),
 
                 const SizedBox(height: 24),
 
@@ -69,6 +71,7 @@ class ManageLocationsScreen extends StatelessWidget {
                       entry.key,
                       provider,
                       user,
+                      ref,
                     );
                   }),
                 ],
@@ -89,6 +92,7 @@ class ManageLocationsScreen extends StatelessWidget {
     BuildContext context,
     AppUser user,
     CaregiverProvider provider,
+    WidgetRef ref,
   ) {
     if (user.homeLocation == null) {
       return Card(
@@ -104,7 +108,7 @@ class ManageLocationsScreen extends StatelessWidget {
           ),
           title: const Text('Add Home Address'),
           subtitle: const Text('Set the user\'s home location'),
-          onTap: () => _showEditHomeDialog(context, user, provider),
+          onTap: () => _showEditHomeDialog(context, user, provider, ref),
         ),
       );
     }
@@ -131,7 +135,7 @@ class ManageLocationsScreen extends StatelessWidget {
         ),
         trailing: IconButton(
           icon: const Icon(Icons.edit),
-          onPressed: () => _showEditHomeDialog(context, user, provider),
+          onPressed: () => _showEditHomeDialog(context, user, provider, ref),
         ),
       ),
     );
@@ -143,6 +147,7 @@ class ManageLocationsScreen extends StatelessWidget {
     int index,
     CaregiverProvider provider,
     AppUser user,
+    WidgetRef ref,
   ) {
     final color = AppTheme.tileColors[index % AppTheme.tileColors.length];
     final icon = _getLocationIcon(location.iconName);
@@ -174,7 +179,7 @@ class ManageLocationsScreen extends StatelessWidget {
             IconButton(
               icon: const Icon(Icons.edit),
               onPressed: () =>
-                  _showEditLocationDialog(context, location, provider, user),
+                  _showEditLocationDialog(context, location, provider, user, ref),
             ),
             IconButton(
               icon: const Icon(Icons.delete, color: Colors.red),
@@ -237,6 +242,7 @@ class ManageLocationsScreen extends StatelessWidget {
     BuildContext context,
     AppUser user,
     CaregiverProvider provider,
+    WidgetRef ref,
   ) {
     final addressController = TextEditingController(text: user.homeAddress ?? '');
     bool isLoading = false;
@@ -278,8 +284,7 @@ class ManageLocationsScreen extends StatelessWidget {
 
                       setState(() => isLoading = true);
 
-                      final locationService =
-                          Provider.of<LocationService>(context, listen: false);
+                      final locationService = ref.read(locationServiceProvider);
                       final location = await locationService
                           .getLocationFromAddress(addressController.text.trim());
 
@@ -316,7 +321,7 @@ class ManageLocationsScreen extends StatelessWidget {
     );
   }
 
-  void _showAddLocationDialog(BuildContext context) {
+  void _showAddLocationDialog(BuildContext context, WidgetRef ref) {
     final nameController = TextEditingController();
     final addressController = TextEditingController();
     String selectedIcon = 'place';
@@ -412,8 +417,7 @@ class ManageLocationsScreen extends StatelessWidget {
 
                       setState(() => isLoading = true);
 
-                      final locationService =
-                          Provider.of<LocationService>(context, listen: false);
+                      final locationService = ref.read(locationServiceProvider);
                       final geoPoint = await locationService
                           .getLocationFromAddress(addressController.text.trim());
 
@@ -427,8 +431,7 @@ class ManageLocationsScreen extends StatelessWidget {
                         return;
                       }
 
-                      final provider =
-                          Provider.of<CaregiverProvider>(context, listen: false);
+                      final provider = ref.read(caregiverNotifierProvider);
                       final user = provider.selectedUser!;
 
                       final location = SavedLocation(
@@ -462,6 +465,7 @@ class ManageLocationsScreen extends StatelessWidget {
     SavedLocation location,
     CaregiverProvider provider,
     AppUser user,
+    WidgetRef ref,
   ) {
     final nameController = TextEditingController(text: location.name);
     final addressController = TextEditingController(text: location.address);
@@ -558,9 +562,7 @@ class ManageLocationsScreen extends StatelessWidget {
 
                       GeoPoint geoPoint = location.location;
                       if (addressController.text.trim() != location.address) {
-                        final locationService = Provider.of<LocationService>(
-                            context,
-                            listen: false);
+                        final locationService = ref.read(locationServiceProvider);
                         final newGeoPoint = await locationService
                             .getLocationFromAddress(addressController.text.trim());
                         if (!context.mounted) return;

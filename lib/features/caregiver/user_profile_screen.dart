@@ -434,7 +434,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       }
 
       // Update profile with new photo
-      final updatedPhotos = [...(_profile?.photos ?? []), photo];
+      final updatedPhotos = <UserPhoto>[...(_profile?.photos ?? []), photo];
       final updatedProfile = _profile?.copyWith(photos: updatedPhotos) ??
           UserProfile(
             id: '',
@@ -602,10 +602,12 @@ class _UserProfileScreenState extends State<UserProfileScreen>
             ElevatedButton.icon(
               onPressed: () {
                 Navigator.pop(context);
-                Share.share(
-                  reportText,
-                  subject:
-                      'MISSING PERSON: ${report.userName} - ${DateFormat('MMM d, yyyy h:mm a').format(report.generatedAt)}',
+                SharePlus.instance.share(
+                  ShareParams(
+                    text: reportText,
+                    subject:
+                        'MISSING PERSON: ${report.userName} - ${DateFormat('MMM d, yyyy h:mm a').format(report.generatedAt)}',
+                  ),
                 );
               },
               icon: const Icon(Icons.share),

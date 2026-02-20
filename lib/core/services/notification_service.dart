@@ -9,6 +9,12 @@ import 'package:timezone/data/latest.dart' as tz;
 import '../models/reminder.dart';
 import '../models/medication.dart';
 
+/// Top-level handler required by flutter_local_notifications for background responses
+@pragma('vm:entry-point')
+void _backgroundNotificationHandler(NotificationResponse response) {
+  // Background notification tapped — handled when app resumes
+}
+
 /// Service for handling local and push notifications
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _localNotifications =
@@ -46,10 +52,11 @@ class NotificationService {
     );
 
     await _localNotifications.initialize(
-      initSettings,
+      settings: initSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
         onNotificationTapped?.call(response.payload);
       },
+      onDidReceiveBackgroundNotificationResponse: _backgroundNotificationHandler,
     );
 
     // Create notification channels for Android
@@ -196,10 +203,10 @@ class NotificationService {
     );
 
     await _localNotifications.show(
-      id,
-      title,
-      body,
-      details,
+      id: id,
+      title: title,
+      body: body,
+      notificationDetails: details,
       payload: payload,
     );
   }
@@ -236,17 +243,15 @@ class NotificationService {
     );
 
     await _localNotifications.zonedSchedule(
-      id,
-      title,
-      body,
-      tz.TZDateTime.from(scheduledTime, tz.local),
-      details,
+      id: id,
+      title: title,
+      body: body,
+      scheduledDate: tz.TZDateTime.from(scheduledTime, tz.local),
+      notificationDetails: details,
       payload: payload,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents:
-          repeat ? DateTimeComponents.time : null, // Repeat daily at same time
+          repeat ? DateTimeComponents.time : null,
     );
   }
 
@@ -274,7 +279,7 @@ class NotificationService {
 
     await scheduleNotification(
       id: notificationId,
-      title: '💊 Time for ${medication.name}',
+      title: '\u{1F48A} Time for ${medication.name}',
       body: '$userName, it\'s time to take your ${medication.dosage ?? "medication"}',
       scheduledTime: scheduledTime,
       payload: 'medication:${medication.id}:${schedule.id}',
@@ -303,7 +308,7 @@ class NotificationService {
 
   /// Cancel a scheduled notification
   static Future<void> cancelNotification(int id) async {
-    await _localNotifications.cancel(id);
+    await _localNotifications.cancel(id: id);
   }
 
   /// Cancel all notifications
@@ -383,21 +388,21 @@ class NotificationService {
   static String _getReminderIcon(ReminderType type) {
     switch (type) {
       case ReminderType.medication:
-        return '💊';
+        return '\u{1F48A}';
       case ReminderType.task:
-        return '✅';
+        return '\u{2705}';
       case ReminderType.appointment:
-        return '📅';
+        return '\u{1F4C5}';
       case ReminderType.mealTime:
-        return '🍽️';
+        return '\u{1F37D}\u{FE0F}';
       case ReminderType.hydration:
-        return '💧';
+        return '\u{1F4A7}';
       case ReminderType.exercise:
-        return '🏃';
+        return '\u{1F3C3}';
       case ReminderType.petCare:
-        return '🐕';
+        return '\u{1F415}';
       case ReminderType.general:
-        return '🔔';
+        return '\u{1F514}';
     }
   }
 }

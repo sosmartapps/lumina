@@ -61,7 +61,9 @@ class LocationService {
       if (!hasPermission) return null;
 
       _lastPosition = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
 
       return _lastPosition;

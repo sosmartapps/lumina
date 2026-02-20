@@ -1,21 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/providers/user_provider.dart';
-import '../../core/services/location_service.dart';
-import '../../core/services/tts_service.dart';
+import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/large_action_tile.dart';
 import '../../core/models/app_user.dart';
 
 /// Screen for navigating to saved locations
-class NavigationScreen extends StatelessWidget {
+class NavigationScreen extends ConsumerWidget {
   const NavigationScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(
@@ -32,8 +30,10 @@ class NavigationScreen extends StatelessWidget {
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
-      body: Consumer<UserProvider>(
-        builder: (context, userProvider, child) {
+      body: ListenableBuilder(
+        listenable: ref.read(userNotifierProvider),
+        builder: (context, child) {
+          final userProvider = ref.read(userNotifierProvider);
           final user = userProvider.user;
           if (user == null) {
             return const Center(child: CircularProgressIndicator());
@@ -47,7 +47,7 @@ class NavigationScreen extends StatelessWidget {
                 // Home button (large and prominent)
                 if (user.homeLocation != null) ...[
                   _buildLargeLocationTile(
-                    context: context,
+                    ref: ref,
                     name: 'HOME',
                     address: user.homeAddress,
                     icon: Icons.home,
@@ -75,11 +75,11 @@ class NavigationScreen extends StatelessWidget {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: user.savedLocations.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final location = user.savedLocations[index];
                       return _buildLocationTile(
-                        context: context,
+                        ref: ref,
                         savedLocation: location,
                         index: index,
                       );
@@ -101,7 +101,7 @@ class NavigationScreen extends StatelessWidget {
   }
 
   Widget _buildLargeLocationTile({
-    required BuildContext context,
+    required WidgetRef ref,
     required String name,
     String? address,
     required IconData icon,
@@ -110,7 +110,7 @@ class NavigationScreen extends StatelessWidget {
     bool isLarge = false,
   }) {
     return GestureDetector(
-      onTap: () => _navigateToLocation(context, name, location),
+      onTap: () => _navigateToLocation(ref, name, location),
       child: Container(
         height: isLarge ? 160 : null,
         decoration: BoxDecoration(
@@ -194,7 +194,7 @@ class NavigationScreen extends StatelessWidget {
   }
 
   Widget _buildLocationTile({
-    required BuildContext context,
+    required WidgetRef ref,
     required SavedLocation savedLocation,
     required int index,
   }) {
@@ -207,7 +207,7 @@ class NavigationScreen extends StatelessWidget {
       icon: icon,
       color: color,
       onTap: () => _navigateToLocation(
-        context,
+        ref,
         savedLocation.name,
         savedLocation.location,
       ),
@@ -272,14 +272,14 @@ class NavigationScreen extends StatelessWidget {
   }
 
   Future<void> _navigateToLocation(
-    BuildContext context,
+    WidgetRef ref,
     String name,
     dynamic location,
   ) async {
     HapticFeedback.heavyImpact();
 
-    final tts = Provider.of<TTSService>(context, listen: false);
-    final locationService = Provider.of<LocationService>(context, listen: false);
+    final tts = ref.read(ttsServiceProvider);
+    final locationService = ref.read(locationServiceProvider);
 
     await tts.speak('Getting directions to $name');
     final url = await locationService.getGoogleMapsDirectionsUrl(

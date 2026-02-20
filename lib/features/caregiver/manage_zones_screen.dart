@@ -1,22 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/providers/providers.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../core/providers/caregiver_provider.dart';
 import '../../core/services/geofence_service.dart';
-import '../../core/services/location_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/models/geo_zone.dart';
 
 /// Screen for caregivers to manage geofence zones
-class ManageZonesScreen extends StatefulWidget {
+class ManageZonesScreen extends ConsumerStatefulWidget {
   const ManageZonesScreen({super.key});
 
   @override
-  State<ManageZonesScreen> createState() => _ManageZonesScreenState();
+  ConsumerState<ManageZonesScreen> createState() => _ManageZonesScreenState();
 }
 
-class _ManageZonesScreenState extends State<ManageZonesScreen> {
+class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -30,15 +31,16 @@ class _ManageZonesScreenState extends State<ManageZonesScreen> {
         icon: const Icon(Icons.add),
         label: const Text('Add Zone'),
       ),
-      body: Consumer<CaregiverProvider>(
-        builder: (context, provider, child) {
+      body: ListenableBuilder(
+        listenable: ref.read(caregiverNotifierProvider),
+        builder: (context, child) {
+          final provider = ref.read(caregiverNotifierProvider);
           final user = provider.selectedUser;
           if (user == null) {
             return const Center(child: Text('No user selected'));
           }
 
-          final geofenceService =
-              Provider.of<GeofenceServiceWrapper>(context, listen: false);
+          final geofenceService = ref.read(geofenceServiceProvider);
 
           return StreamBuilder<List<GeoZone>>(
             stream: geofenceService.getZones(user.id),
@@ -370,7 +372,7 @@ class _ManageZonesScreenState extends State<ManageZonesScreen> {
                       setState(() => isLoading = true);
 
                       final locationService =
-                          Provider.of<LocationService>(context, listen: false);
+                          ref.read(locationServiceProvider);
                       final center = await locationService
                           .getLocationFromAddress(addressController.text.trim());
 
@@ -385,9 +387,9 @@ class _ManageZonesScreenState extends State<ManageZonesScreen> {
                       }
 
                       final provider =
-                          Provider.of<CaregiverProvider>(context, listen: false);
+                          ref.read(caregiverNotifierProvider);
                       final geofenceService =
-                          Provider.of<GeofenceServiceWrapper>(context, listen: false);
+                          ref.read(geofenceServiceProvider);
                       final user = provider.selectedUser!;
 
                       final zone = GeoZone(

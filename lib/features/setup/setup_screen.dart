@@ -1,22 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/providers/app_state_provider.dart';
-import '../../core/providers/user_provider.dart';
-import '../../core/services/auth_service.dart';
-import '../../core/services/location_service.dart';
+import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../user_home/user_home_screen.dart';
 
 /// Initial setup screen for new users
-class SetupScreen extends StatefulWidget {
+class SetupScreen extends ConsumerStatefulWidget {
   const SetupScreen({super.key});
 
   @override
-  State<SetupScreen> createState() => _SetupScreenState();
+  ConsumerState<SetupScreen> createState() => _SetupScreenState();
 }
 
-class _SetupScreenState extends State<SetupScreen> {
+class _SetupScreenState extends ConsumerState<SetupScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
@@ -645,7 +642,7 @@ class _SetupScreenState extends State<SetupScreen> {
     });
 
     try {
-      final authService = Provider.of<AuthService>(context, listen: false);
+      final authService = ref.read(authServiceProvider);
 
       if (_isNewCaregiver) {
         final credential = await authService.registerWithEmail(
@@ -683,9 +680,8 @@ class _SetupScreenState extends State<SetupScreen> {
     });
 
     try {
-      final authService = Provider.of<AuthService>(context, listen: false);
-      final locationService =
-          Provider.of<LocationService>(context, listen: false);
+      final authService = ref.read(authServiceProvider);
+      final locationService = ref.read(locationServiceProvider);
 
       // Get home location from address
       final homeLocation =
@@ -714,7 +710,7 @@ class _SetupScreenState extends State<SetupScreen> {
       if (!mounted) return;
 
       // Save to app state
-      final appState = Provider.of<AppStateProvider>(context, listen: false);
+      final appState = ref.read(appStateNotifierProvider);
       await appState.setSetupComplete(
         userId: user.id,
         caregiverId: _caregiverId,
@@ -723,7 +719,7 @@ class _SetupScreenState extends State<SetupScreen> {
       if (!mounted) return;
 
       // Load user data
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final userProvider = ref.read(userNotifierProvider);
       await userProvider.loadUser(user.id);
 
       _nextPage();

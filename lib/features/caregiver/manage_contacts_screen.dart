@@ -1,30 +1,33 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/providers/caregiver_provider.dart';
+import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/models/app_user.dart';
 
 /// Screen for caregivers to manage emergency contacts
-class ManageContactsScreen extends StatelessWidget {
+class ManageContactsScreen extends ConsumerWidget {
   const ManageContactsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: AppTheme.primaryGreen,
         title: const Text('Emergency Contacts'),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddContactDialog(context),
+        onPressed: () => _showAddContactDialog(context, ref),
         backgroundColor: AppTheme.primaryGreen,
         icon: const Icon(Icons.add),
         label: const Text('Add Contact'),
       ),
-      body: Consumer<CaregiverProvider>(
-        builder: (context, provider, child) {
+      body: ListenableBuilder(
+        listenable: ref.read(caregiverNotifierProvider),
+        builder: (context, child) {
+          final provider = ref.read(caregiverNotifierProvider);
           final user = provider.selectedUser;
           if (user == null) {
             return const Center(child: Text('No user selected'));
@@ -124,7 +127,7 @@ class ManageContactsScreen extends StatelessWidget {
     );
   }
 
-  void _showAddContactDialog(BuildContext context) {
+  void _showAddContactDialog(BuildContext context, WidgetRef ref) {
     final nameController = TextEditingController();
     final phoneController = TextEditingController();
     final relationshipController = TextEditingController();
@@ -175,8 +178,7 @@ class ManageContactsScreen extends StatelessWidget {
             onPressed: () {
               if (nameController.text.isNotEmpty &&
                   phoneController.text.isNotEmpty) {
-                final provider =
-                    Provider.of<CaregiverProvider>(context, listen: false);
+                final provider = ref.read(caregiverNotifierProvider);
                 final user = provider.selectedUser!;
 
                 final contact = EmergencyContact(

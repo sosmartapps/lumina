@@ -1,14 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/reminder.dart';
-import '../services/tts_service.dart';
+import '../providers/providers.dart';
 import '../theme/app_theme.dart';
 
 /// Full-screen reminder popup with voice and visual alerts
-class ReminderPopup extends StatefulWidget {
+class ReminderPopup extends ConsumerStatefulWidget {
   final String userName;
   final String title;
   final String message;
@@ -31,10 +31,10 @@ class ReminderPopup extends StatefulWidget {
   });
 
   @override
-  State<ReminderPopup> createState() => _ReminderPopupState();
+  ConsumerState<ReminderPopup> createState() => _ReminderPopupState();
 }
 
-class _ReminderPopupState extends State<ReminderPopup>
+class _ReminderPopupState extends ConsumerState<ReminderPopup>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
@@ -75,7 +75,7 @@ class _ReminderPopupState extends State<ReminderPopup>
   }
 
   Future<void> _playVoiceAlert() async {
-    final tts = Provider.of<TTSService>(context, listen: false);
+    final tts = ref.read(ttsServiceProvider);
 
     if (widget.reminderType == ReminderType.medication) {
       await tts.speakMedicationReminder(

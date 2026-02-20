@@ -18,12 +18,6 @@
 @import audioplayers_darwin;
 #endif
 
-#if __has_include(<awesome_notifications/AwesomeNotificationsPlugin.h>)
-#import <awesome_notifications/AwesomeNotificationsPlugin.h>
-#else
-@import awesome_notifications;
-#endif
-
 #if __has_include(<camera_avfoundation/CameraPlugin.h>)
 #import <camera_avfoundation/CameraPlugin.h>
 #else
@@ -48,6 +42,18 @@
 @import device_info_plus;
 #endif
 
+#if __has_include(<firebase_analytics/FirebaseAnalyticsPlugin.h>)
+#import <firebase_analytics/FirebaseAnalyticsPlugin.h>
+#else
+@import firebase_analytics;
+#endif
+
+#if __has_include(<firebase_app_check/FLTFirebaseAppCheckPlugin.h>)
+#import <firebase_app_check/FLTFirebaseAppCheckPlugin.h>
+#else
+@import firebase_app_check;
+#endif
+
 #if __has_include(<firebase_auth/FLTFirebaseAuthPlugin.h>)
 #import <firebase_auth/FLTFirebaseAuthPlugin.h>
 #else
@@ -58,6 +64,12 @@
 #import <firebase_core/FLTFirebaseCorePlugin.h>
 #else
 @import firebase_core;
+#endif
+
+#if __has_include(<firebase_crashlytics/FLTFirebaseCrashlyticsPlugin.h>)
+#import <firebase_crashlytics/FLTFirebaseCrashlyticsPlugin.h>
+#else
+@import firebase_crashlytics;
 #endif
 
 #if __has_include(<firebase_messaging/FLTFirebaseMessagingPlugin.h>)
@@ -88,12 +100,6 @@
 #import <flutter_background_service_ios/FlutterBackgroundServicePlugin.h>
 #else
 @import flutter_background_service_ios;
-#endif
-
-#if __has_include(<flutter_foreground_task/FlutterForegroundTaskPlugin.h>)
-#import <flutter_foreground_task/FlutterForegroundTaskPlugin.h>
-#else
-@import flutter_foreground_task;
 #endif
 
 #if __has_include(<flutter_local_notifications/FlutterLocalNotificationsPlugin.h>)
@@ -132,8 +138,8 @@
 @import geolocator_apple;
 #endif
 
-#if __has_include(<google_maps_flutter_ios/FLTGoogleMapsPlugin.h>)
-#import <google_maps_flutter_ios/FLTGoogleMapsPlugin.h>
+#if __has_include(<google_maps_flutter_ios/FGMGoogleMapsPlugin.h>)
+#import <google_maps_flutter_ios/FGMGoogleMapsPlugin.h>
 #else
 @import google_maps_flutter_ios;
 #endif
@@ -148,6 +154,12 @@
 #import <just_audio/JustAudioPlugin.h>
 #else
 @import just_audio;
+#endif
+
+#if __has_include(<package_info_plus/FPPPackageInfoPlusPlugin.h>)
+#import <package_info_plus/FPPPackageInfoPlusPlugin.h>
+#else
+@import package_info_plus;
 #endif
 
 #if __has_include(<permission_handler_apple/PermissionHandlerPlugin.h>)
@@ -180,10 +192,10 @@
 @import url_launcher_ios;
 #endif
 
-#if __has_include(<workmanager/WorkmanagerPlugin.h>)
-#import <workmanager/WorkmanagerPlugin.h>
+#if __has_include(<workmanager_apple/WorkmanagerPlugin.h>)
+#import <workmanager_apple/WorkmanagerPlugin.h>
 #else
-@import workmanager;
+@import workmanager_apple;
 #endif
 
 @implementation GeneratedPluginRegistrant
@@ -191,28 +203,30 @@
 + (void)registerWithRegistry:(NSObject<FlutterPluginRegistry>*)registry {
   [AudioSessionPlugin registerWithRegistrar:[registry registrarForPlugin:@"AudioSessionPlugin"]];
   [AudioplayersDarwinPlugin registerWithRegistrar:[registry registrarForPlugin:@"AudioplayersDarwinPlugin"]];
-  [AwesomeNotificationsPlugin registerWithRegistrar:[registry registrarForPlugin:@"AwesomeNotificationsPlugin"]];
   [CameraPlugin registerWithRegistrar:[registry registrarForPlugin:@"CameraPlugin"]];
   [FLTFirebaseFirestorePlugin registerWithRegistrar:[registry registrarForPlugin:@"FLTFirebaseFirestorePlugin"]];
   [ConnectivityPlusPlugin registerWithRegistrar:[registry registrarForPlugin:@"ConnectivityPlusPlugin"]];
   [FPPDeviceInfoPlusPlugin registerWithRegistrar:[registry registrarForPlugin:@"FPPDeviceInfoPlusPlugin"]];
+  [FirebaseAnalyticsPlugin registerWithRegistrar:[registry registrarForPlugin:@"FirebaseAnalyticsPlugin"]];
+  [FLTFirebaseAppCheckPlugin registerWithRegistrar:[registry registrarForPlugin:@"FLTFirebaseAppCheckPlugin"]];
   [FLTFirebaseAuthPlugin registerWithRegistrar:[registry registrarForPlugin:@"FLTFirebaseAuthPlugin"]];
   [FLTFirebaseCorePlugin registerWithRegistrar:[registry registrarForPlugin:@"FLTFirebaseCorePlugin"]];
+  [FLTFirebaseCrashlyticsPlugin registerWithRegistrar:[registry registrarForPlugin:@"FLTFirebaseCrashlyticsPlugin"]];
   [FLTFirebaseMessagingPlugin registerWithRegistrar:[registry registrarForPlugin:@"FLTFirebaseMessagingPlugin"]];
   [FLTFirebaseStoragePlugin registerWithRegistrar:[registry registrarForPlugin:@"FLTFirebaseStoragePlugin"]];
   [FlLocationPlugin registerWithRegistrar:[registry registrarForPlugin:@"FlLocationPlugin"]];
   [FlutterActivityRecognitionPlugin registerWithRegistrar:[registry registrarForPlugin:@"FlutterActivityRecognitionPlugin"]];
   [FlutterBackgroundServicePlugin registerWithRegistrar:[registry registrarForPlugin:@"FlutterBackgroundServicePlugin"]];
-  [FlutterForegroundTaskPlugin registerWithRegistrar:[registry registrarForPlugin:@"FlutterForegroundTaskPlugin"]];
   [FlutterLocalNotificationsPlugin registerWithRegistrar:[registry registrarForPlugin:@"FlutterLocalNotificationsPlugin"]];
   [FlutterPhoneDirectCallerPlugin registerWithRegistrar:[registry registrarForPlugin:@"FlutterPhoneDirectCallerPlugin"]];
   [FlutterTtsPlugin registerWithRegistrar:[registry registrarForPlugin:@"FlutterTtsPlugin"]];
   [GeocodingPlugin registerWithRegistrar:[registry registrarForPlugin:@"GeocodingPlugin"]];
   [GeofenceServicePlugin registerWithRegistrar:[registry registrarForPlugin:@"GeofenceServicePlugin"]];
   [GeolocatorPlugin registerWithRegistrar:[registry registrarForPlugin:@"GeolocatorPlugin"]];
-  [FLTGoogleMapsPlugin registerWithRegistrar:[registry registrarForPlugin:@"FLTGoogleMapsPlugin"]];
+  [FGMGoogleMapsPlugin registerWithRegistrar:[registry registrarForPlugin:@"FGMGoogleMapsPlugin"]];
   [FLTImagePickerPlugin registerWithRegistrar:[registry registrarForPlugin:@"FLTImagePickerPlugin"]];
   [JustAudioPlugin registerWithRegistrar:[registry registrarForPlugin:@"JustAudioPlugin"]];
+  [FPPPackageInfoPlusPlugin registerWithRegistrar:[registry registrarForPlugin:@"FPPPackageInfoPlusPlugin"]];
   [PermissionHandlerPlugin registerWithRegistrar:[registry registrarForPlugin:@"PermissionHandlerPlugin"]];
   [FPPSharePlusPlugin registerWithRegistrar:[registry registrarForPlugin:@"FPPSharePlusPlugin"]];
   [SharedPreferencesPlugin registerWithRegistrar:[registry registrarForPlugin:@"SharedPreferencesPlugin"]];

@@ -1,22 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/providers/app_state_provider.dart';
-import '../../core/providers/caregiver_provider.dart';
-import '../../core/services/auth_service.dart';
+import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../user_home/user_home_screen.dart';
 import 'caregiver_dashboard_screen.dart';
 
 /// Login screen for caregivers to access management features
-class CaregiverLoginScreen extends StatefulWidget {
+class CaregiverLoginScreen extends ConsumerStatefulWidget {
   const CaregiverLoginScreen({super.key});
 
   @override
-  State<CaregiverLoginScreen> createState() => _CaregiverLoginScreenState();
+  ConsumerState<CaregiverLoginScreen> createState() => _CaregiverLoginScreenState();
 }
 
-class _CaregiverLoginScreenState extends State<CaregiverLoginScreen> {
+class _CaregiverLoginScreenState extends ConsumerState<CaregiverLoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
@@ -219,7 +217,7 @@ class _CaregiverLoginScreenState extends State<CaregiverLoginScreen> {
     });
 
     try {
-      final authService = Provider.of<AuthService>(context, listen: false);
+      final authService = ref.read(authServiceProvider);
       final credential = await authService.signInWithEmail(
         email: _emailController.text.trim(),
         password: _passwordController.text,
@@ -228,14 +226,14 @@ class _CaregiverLoginScreenState extends State<CaregiverLoginScreen> {
       if (!mounted) return;
 
       // Set caregiver mode
-      final appState = Provider.of<AppStateProvider>(context, listen: false);
+      final appState = ref.read(appStateNotifierProvider);
       await appState.setCaregiverMode(true, caregiverId: credential.user!.uid);
 
       if (!mounted) return;
 
       // Load caregiver data
       final caregiverProvider =
-          Provider.of<CaregiverProvider>(context, listen: false);
+          ref.read(caregiverNotifierProvider);
       await caregiverProvider.loadCaregiver(credential.user!.uid);
       caregiverProvider.listenToCaregiver(credential.user!.uid);
 
@@ -252,6 +250,7 @@ class _CaregiverLoginScreenState extends State<CaregiverLoginScreen> {
   }
 
   void _showForgotPassword() {
+    final authService = ref.read(authServiceProvider);
     showDialog(
       context: context,
       builder: (context) {
@@ -282,8 +281,6 @@ class _CaregiverLoginScreenState extends State<CaregiverLoginScreen> {
             ElevatedButton(
               onPressed: () async {
                 if (resetEmailController.text.isNotEmpty) {
-                  final authService =
-                      Provider.of<AuthService>(context, listen: false);
                   await authService.resetPassword(resetEmailController.text.trim());
                   if (context.mounted) {
                     Navigator.pop(context);

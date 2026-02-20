@@ -27,6 +27,32 @@
 - `firebase_options.dart` is gitignored (contains API keys) but CI needs it for `flutter analyze`
 - Added a step in `daily-doctor.yml` that generates a stub with dummy values before analysis
 
+## 2026-02-19 - Major Dependency Upgrade & Riverpod 3 Migration
+
+**SDK & Dependencies:**
+- Dart SDK constraint updated to `>=3.7.0 <4.0.0`
+- Ran `dart fix --apply` and `flutter pub upgrade --major-versions` (25 packages upgraded)
+- Ran `flutterfire configure` for Firebase project `lumina-sosmartapps`
+
+**Package changes:**
+- Removed `provider`, added `flutter_riverpod:^3.2.1`
+- Removed `awesome_notifications`, kept `flutter_local_notifications:^21.0.0-dev.1`
+- Added `firebase_crashlytics:^5.0.7`, `firebase_analytics:^12.1.2`, `firebase_ai:^3.8.0`
+- Upgraded `geolocator` to `^14.0.2`
+
+**Riverpod 3 migration (provider → flutter_riverpod):**
+- Created central `lib/core/providers/providers.dart` with all Riverpod provider definitions
+- Replaced `MultiProvider` in main.dart with `ProviderScope`
+- Migrated 15+ screens from `Provider.of<T>()` to `ref.read()` + `ListenableBuilder`
+- Pattern: `Provider<T>` for DI, `ListenableBuilder` for reactive ChangeNotifier rebuilds
+
+**API fixes:**
+- flutter_local_notifications v21: all positional params → named (`settings:`, `id:`, `title:`, `body:`, etc.), removed `uiLocalNotificationDateInterpretation`
+- geolocator v14: `desiredAccuracy` → `locationSettings: LocationSettings(accuracy:)`
+- share_plus: `Share.share()` → `SharePlus.instance.share(ShareParams(...))`
+
+**Result:** `flutter analyze` passes with 0 issues.
+
 ## 2026-02-05 - Security Hardening & Geofence Fix
 
 **Firestore rules — closed unauthenticated write holes:**
