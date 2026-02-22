@@ -22,6 +22,7 @@ class Reminder {
   final DateTime? lastTriggeredAt;
   final DateTime? completedAt;
   final String? completionPhotoUrl;
+  final bool homeOnly; // Only trigger when user is at home
   final DateTime createdAt;
   final String createdBy; // Caregiver ID
 
@@ -46,9 +47,18 @@ class Reminder {
     this.lastTriggeredAt,
     this.completedAt,
     this.completionPhotoUrl,
+    bool? homeOnly,
     DateTime? createdAt,
     required this.createdBy,
-  }) : createdAt = createdAt ?? DateTime.now();
+  }) : homeOnly = homeOnly ?? _defaultHomeOnly(type),
+       createdAt = createdAt ?? DateTime.now();
+
+  /// Reminder types that default to home-only triggering
+  static bool _defaultHomeOnly(ReminderType type) {
+    return type == ReminderType.medication ||
+        type == ReminderType.petCare ||
+        type == ReminderType.mealTime;
+  }
 
   factory Reminder.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
@@ -76,6 +86,7 @@ class Reminder {
       lastTriggeredAt: (data['lastTriggeredAt'] as Timestamp?)?.toDate(),
       completedAt: (data['completedAt'] as Timestamp?)?.toDate(),
       completionPhotoUrl: data['completionPhotoUrl'],
+      homeOnly: data['homeOnly'],
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       createdBy: data['createdBy'] ?? '',
     );
@@ -104,6 +115,7 @@ class Reminder {
       'completedAt':
           completedAt != null ? Timestamp.fromDate(completedAt!) : null,
       'completionPhotoUrl': completionPhotoUrl,
+      'homeOnly': homeOnly,
       'createdAt': Timestamp.fromDate(createdAt),
       'createdBy': createdBy,
     };
@@ -128,6 +140,7 @@ class Reminder {
     DateTime? lastTriggeredAt,
     DateTime? completedAt,
     String? completionPhotoUrl,
+    bool? homeOnly,
   }) {
     return Reminder(
       id: id,
@@ -150,6 +163,7 @@ class Reminder {
       lastTriggeredAt: lastTriggeredAt ?? this.lastTriggeredAt,
       completedAt: completedAt ?? this.completedAt,
       completionPhotoUrl: completionPhotoUrl ?? this.completionPhotoUrl,
+      homeOnly: homeOnly ?? this.homeOnly,
       createdAt: createdAt,
       createdBy: createdBy,
     );

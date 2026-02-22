@@ -131,6 +131,10 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
                     style: TextStyle(fontSize: 12, color: color),
                   ),
                 ),
+                if (reminder.homeOnly) ...[
+                  const SizedBox(width: 8),
+                  Icon(Icons.home, size: 16, color: Colors.grey.shade600),
+                ],
               ],
             ),
           ],
@@ -201,6 +205,7 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
     TimeOfDay selectedTime = TimeOfDay.now();
     RepeatFrequency repeatFrequency = RepeatFrequency.daily;
     bool requiresPhoto = false;
+    bool homeOnly = true;
 
     showDialog(
       context: context,
@@ -254,7 +259,14 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
                     );
                   }).toList(),
                   onChanged: (value) {
-                    if (value != null) setState(() => selectedType = value);
+                    if (value != null) {
+                      setState(() {
+                        selectedType = value;
+                        homeOnly = value == ReminderType.medication ||
+                            value == ReminderType.petCare ||
+                            value == ReminderType.mealTime;
+                      });
+                    }
                   },
                 ),
                 const SizedBox(height: 16),
@@ -296,6 +308,13 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
                   value: requiresPhoto,
                   onChanged: (value) => setState(() => requiresPhoto = value),
                 ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Only remind at home'),
+                  subtitle: const Text('Defers reminder until user is home'),
+                  value: homeOnly,
+                  onChanged: (value) => setState(() => homeOnly = value),
+                ),
               ],
             ),
           ),
@@ -335,6 +354,7 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
                   scheduledTime: scheduledTime,
                   repeatFrequency: repeatFrequency,
                   requiresPhoto: requiresPhoto,
+                  homeOnly: homeOnly,
                   createdBy: provider.caregiver!.id,
                 );
 
@@ -363,6 +383,7 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
     );
     RepeatFrequency repeatFrequency = reminder.repeatFrequency;
     bool requiresPhoto = reminder.requiresPhoto;
+    bool homeOnly = reminder.homeOnly;
 
     showDialog(
       context: context,
@@ -413,7 +434,14 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
                     );
                   }).toList(),
                   onChanged: (value) {
-                    if (value != null) setState(() => selectedType = value);
+                    if (value != null) {
+                      setState(() {
+                        selectedType = value;
+                        homeOnly = value == ReminderType.medication ||
+                            value == ReminderType.petCare ||
+                            value == ReminderType.mealTime;
+                      });
+                    }
                   },
                 ),
                 const SizedBox(height: 16),
@@ -455,6 +483,13 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
                   value: requiresPhoto,
                   onChanged: (value) => setState(() => requiresPhoto = value),
                 ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Only remind at home'),
+                  subtitle: const Text('Defers reminder until user is home'),
+                  value: homeOnly,
+                  onChanged: (value) => setState(() => homeOnly = value),
+                ),
               ],
             ),
           ),
@@ -490,6 +525,7 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
                   scheduledTime: scheduledTime,
                   repeatFrequency: repeatFrequency,
                   requiresPhoto: requiresPhoto,
+                  homeOnly: homeOnly,
                 );
 
                 await reminderService.updateReminder(updatedReminder);

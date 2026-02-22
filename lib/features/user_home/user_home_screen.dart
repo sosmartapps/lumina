@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../core/providers/providers.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -34,6 +35,8 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
   Timer? _reminderCheckTimer;
   StreamSubscription? _reminderSubscription;
   List<Reminder> _todayReminders = [];
+  final List<Reminder> _deferredReminders = []; // Home-only reminders waiting for arrival
+  bool _wasAtHome = false; // Track home arrival
 
   @override
   void initState() {
@@ -117,17 +120,57 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
     });
   }
 
-  /// Check if any reminder is due and show popup
+  /// Check if user is within 200m of home
+  bool _isUserAtHome() {
+    final locationService = ref.read(locationServiceProvider);
+    final userProvider = ref.read(userNotifierProvider);
+    final user = userProvider.user;
+    final position = locationService.lastPosition;
+
+    if (user?.homeLocation == null || position == null) {
+      // If we can't determine location, allow reminders to fire
+      return true;
+    }
+
+    final distance = Geolocator.distanceBetween(
+      position.latitude,
+      position.longitude,
+      user!.homeLocation!.latitude,
+      user.homeLocation!.longitude,
+    );
+
+    return distance <= 200;
+  }
+
+  /// Check if any reminder is due and show popup (location-aware)
   void _checkDueReminders() {
     if (!mounted || _reminderPopupShowing || _sundownPopupShowing) return;
+
+    final isAtHome = _isUserAtHome();
+
+    // If user just arrived home, fire all deferred reminders first
+    if (isAtHome && !_wasAtHome && _deferredReminders.isNotEmpty) {
+      _wasAtHome = true;
+      final next = _deferredReminders.removeAt(0);
+      _showReminderPopup(next);
+      return;
+    }
+    _wasAtHome = isAtHome;
 
     final now = DateTime.now();
     for (final reminder in _todayReminders) {
       if (reminder.completedAt != null) continue;
+      if (_deferredReminders.any((d) => d.id == reminder.id)) continue;
 
       final diff = now.difference(reminder.scheduledTime).inMinutes;
-      // Show popup if reminder is due (within 0-2 min window)
-      if (diff >= 0 && diff <= 2 && reminder.lastTriggeredAt == null) {
+      // Show popup if reminder is due (within 0-5 min window)
+      if (diff >= 0 && diff <= 5 && reminder.lastTriggeredAt == null) {
+        if (reminder.homeOnly && !isAtHome) {
+          // Defer home-only reminders until user arrives home
+          _deferredReminders.add(reminder);
+          debugPrint('Deferred home-only reminder: ${reminder.title}');
+          continue;
+        }
         _showReminderPopup(reminder);
         break;
       }
@@ -186,6 +229,15 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
       ),
     ).then((_) {
       _reminderPopupShowing = false;
+      // If there are more deferred reminders and user is home, show next
+      if (_deferredReminders.isNotEmpty && _isUserAtHome()) {
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted && !_reminderPopupShowing) {
+            final next = _deferredReminders.removeAt(0);
+            _showReminderPopup(next);
+          }
+        });
+      }
     });
   }
 
