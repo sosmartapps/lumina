@@ -6,7 +6,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/large_action_tile.dart';
+import '../../core/widgets/sundown_alert_popup.dart';
 import '../../core/models/app_user.dart';
+import '../../core/services/sundown_service.dart';
 import '../navigation/navigation_screen.dart';
 import '../contacts/contacts_screen.dart';
 import '../reminders/reminders_screen.dart';
@@ -22,11 +24,61 @@ class UserHomeScreen extends ConsumerStatefulWidget {
 
 class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
   int _caregiverTapCount = 0;
+  bool _sundownPopupShowing = false;
 
   @override
   void initState() {
     super.initState();
     _speakWelcome();
+    _listenForSundownAlerts();
+  }
+
+  void _listenForSundownAlerts() {
+    final sundownService = ref.read(sundownServiceProvider);
+    sundownService.alertNotifier.addListener(_onSundownAlert);
+  }
+
+  void _onSundownAlert() {
+    if (!mounted) return;
+    final sundownService = ref.read(sundownServiceProvider);
+    final result = sundownService.alertNotifier.value;
+
+    if (result != null && !_sundownPopupShowing) {
+      _showSundownAlert(result);
+    }
+  }
+
+  void _showSundownAlert(SundownCheckResult result) {
+    final userProvider = ref.read(userNotifierProvider);
+    final user = userProvider.user;
+    if (user == null || user.homeLocation == null) return;
+
+    _sundownPopupShowing = true;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (context) => SundownAlertPopup(
+          userName: user.name,
+          checkResult: result,
+          homeLocation: user.homeLocation!,
+          homeAddress: user.homeAddress,
+          onDismiss: () {
+            Navigator.of(context).pop();
+            _sundownPopupShowing = false;
+            ref.read(sundownServiceProvider).onAlertDismissed();
+          },
+        ),
+      ),
+    ).then((_) {
+      _sundownPopupShowing = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    final sundownService = ref.read(sundownServiceProvider);
+    sundownService.alertNotifier.removeListener(_onSundownAlert);
+    super.dispose();
   }
 
   void _speakWelcome() async {

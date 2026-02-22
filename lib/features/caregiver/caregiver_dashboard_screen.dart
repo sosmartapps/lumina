@@ -17,6 +17,7 @@ import 'manage_medications_screen.dart';
 import 'manage_reminders_screen.dart';
 import 'manage_zones_screen.dart';
 import 'app_protection_screen.dart';
+import 'sundown_settings_screen.dart';
 import 'medical_profile_screen.dart';
 import 'user_profile_screen.dart';
 
@@ -581,6 +582,16 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
             () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const AppProtectionScreen()),
+            ),
+          ),
+          _buildManageItem(
+            'Sundown Alerts',
+            'Return home before sunset reminders',
+            Icons.wb_twilight,
+            AppTheme.primaryOrange,
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const SundownSettingsScreen()),
             ),
           ),
           _buildManageItem(

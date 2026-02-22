@@ -205,6 +205,8 @@ class UserSettings {
   final bool voicePromptsEnabled;
   final int reminderVolume; // 0-100
   final String voiceLanguage;
+  final bool sundownAlertEnabled;
+  final int sundownBufferMinutes; // minutes before sunset to alert
 
   UserSettings({
     this.highContrastMode = false,
@@ -214,6 +216,8 @@ class UserSettings {
     this.voicePromptsEnabled = true,
     this.reminderVolume = 80,
     this.voiceLanguage = 'en-US',
+    this.sundownAlertEnabled = true,
+    this.sundownBufferMinutes = 30,
   });
 
   factory UserSettings.fromMap(Map<String, dynamic> map) {
@@ -225,6 +229,8 @@ class UserSettings {
       voicePromptsEnabled: map['voicePromptsEnabled'] ?? true,
       reminderVolume: map['reminderVolume'] ?? 80,
       voiceLanguage: map['voiceLanguage'] ?? 'en-US',
+      sundownAlertEnabled: map['sundownAlertEnabled'] ?? true,
+      sundownBufferMinutes: map['sundownBufferMinutes'] ?? 30,
     );
   }
 
@@ -237,6 +243,8 @@ class UserSettings {
       'voicePromptsEnabled': voicePromptsEnabled,
       'reminderVolume': reminderVolume,
       'voiceLanguage': voiceLanguage,
+      'sundownAlertEnabled': sundownAlertEnabled,
+      'sundownBufferMinutes': sundownBufferMinutes,
     };
   }
 
@@ -248,6 +256,8 @@ class UserSettings {
     bool? voicePromptsEnabled,
     int? reminderVolume,
     String? voiceLanguage,
+    bool? sundownAlertEnabled,
+    int? sundownBufferMinutes,
   }) {
     return UserSettings(
       highContrastMode: highContrastMode ?? this.highContrastMode,
@@ -257,6 +267,8 @@ class UserSettings {
       voicePromptsEnabled: voicePromptsEnabled ?? this.voicePromptsEnabled,
       reminderVolume: reminderVolume ?? this.reminderVolume,
       voiceLanguage: voiceLanguage ?? this.voiceLanguage,
+      sundownAlertEnabled: sundownAlertEnabled ?? this.sundownAlertEnabled,
+      sundownBufferMinutes: sundownBufferMinutes ?? this.sundownBufferMinutes,
     );
   }
 }

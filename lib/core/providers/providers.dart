@@ -8,6 +8,7 @@ import '../services/location_service.dart';
 import '../services/tts_service.dart';
 import '../services/reminder_service.dart';
 import '../services/geofence_service.dart';
+import '../services/sundown_service.dart';
 
 // ChangeNotifier providers — use ref.read() to get instance,
 // ListenableBuilder to reactively rebuild on notifyListeners().
@@ -21,3 +22,7 @@ final locationServiceProvider = Provider((ref) => LocationService());
 final ttsServiceProvider = Provider((ref) => TTSService());
 final reminderServiceProvider = Provider((ref) => ReminderService());
 final geofenceServiceProvider = Provider((ref) => GeofenceServiceWrapper());
+final sundownServiceProvider = Provider((ref) {
+  final locationService = ref.read(locationServiceProvider);
+  return SundownService(locationService: locationService);
+});

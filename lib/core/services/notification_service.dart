@@ -5,6 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/reminder.dart';
 import '../models/medication.dart';
@@ -362,6 +363,36 @@ class NotificationService {
           'createdAt': FieldValue.serverTimestamp(),
         });
       }
+    }
+  }
+
+  /// Send SMS to primary caregiver about a sundown alert
+  static Future<void> sendSmsToCaregiver({
+    required String userId,
+    required String userName,
+    required String message,
+  }) async {
+    try {
+      // Get user's primary caregiver
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      final primaryCaregiverId = userDoc.data()?['primaryCaregiverId'] as String?;
+      final caregiverIds = List<String>.from(userDoc.data()?['caregiverIds'] ?? []);
+
+      final caregiverId = primaryCaregiverId ?? (caregiverIds.isNotEmpty ? caregiverIds.first : null);
+      if (caregiverId == null) return;
+
+      final caregiverDoc = await _firestore.collection('caregivers').doc(caregiverId).get();
+      final phoneNumber = caregiverDoc.data()?['phoneNumber'] as String?;
+      if (phoneNumber == null || phoneNumber.isEmpty) return;
+
+      // Use sms: URI scheme to send text message
+      final encodedMessage = Uri.encodeComponent(message);
+      final smsUri = Uri.parse('sms:$phoneNumber?body=$encodedMessage');
+      if (await canLaunchUrl(smsUri)) {
+        await launchUrl(smsUri);
+      }
+    } catch (e) {
+      debugPrint('Error sending SMS to caregiver: $e');
     }
   }
 

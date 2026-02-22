@@ -90,6 +90,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
       if (!mounted) return;
 
+      // Initialize sundown monitoring
+      if (userProv.user != null) {
+        final sundownService = ref.read(sundownServiceProvider);
+        await sundownService.initialize(appState.currentUserId!, userProv.user!);
+      }
+
+      if (!mounted) return;
+
       if (appState.isCaregiverMode && appState.currentCaregiverId != null) {
         // Caregiver mode
         final caregiverProv = ref.read(caregiverNotifierProvider);

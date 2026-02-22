@@ -235,6 +235,7 @@ class LocationService {
     required GeoPoint destination,
     GeoPoint? origin,
     String? destinationName,
+    String travelMode = 'driving',
   }) async {
     final destLat = destination.latitude;
     final destLng = destination.longitude;
@@ -249,7 +250,7 @@ class LocationService {
       url += '&destination_place_id=${Uri.encodeComponent(destinationName)}';
     }
 
-    url += '&travelmode=driving';
+    url += '&travelmode=$travelMode';
 
     return url;
   }
