@@ -730,7 +730,13 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
     }
   }
 
-  void _completeSetup() {
+  void _completeSetup() async {
+    // Request background location permission for safety monitoring
+    final locationService = ref.read(locationServiceProvider);
+    await locationService.requestBackgroundPermission();
+
+    if (!mounted) return;
+
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (context) => const UserHomeScreen()),
     );

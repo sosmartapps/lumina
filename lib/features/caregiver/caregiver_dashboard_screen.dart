@@ -18,6 +18,7 @@ import 'manage_reminders_screen.dart';
 import 'manage_zones_screen.dart';
 import 'app_protection_screen.dart';
 import 'sundown_settings_screen.dart';
+import 'user_settings_screen.dart';
 import 'medical_profile_screen.dart';
 import 'user_profile_screen.dart';
 
@@ -598,8 +599,11 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
             'User Settings',
             'Customize app behavior',
             Icons.settings,
-            Colors.grey,
-            () {},
+            Colors.blueGrey,
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const UserSettingsScreen()),
+            ),
           ),
         ],
       ),
