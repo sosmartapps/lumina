@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:uuid/uuid.dart';
 
 import '../models/reminder.dart';
 import '../providers/providers.dart';
@@ -269,13 +273,14 @@ class _ReminderPopupState extends ConsumerState<ReminderPopup>
   }
 
   void _showPhotoCapture() {
-    // Navigate to photo capture screen
+    final userId = ref.read(appStateNotifierProvider).currentUserId;
     Navigator.of(context).push(
       MaterialPageRoute(
         fullscreenDialog: true,
         builder: (context) => PhotoCaptureScreen(
           title: 'Show Empty ${widget.title}',
           instructions: 'Take a photo of the empty pill container',
+          userId: userId,
           onPhotoTaken: (photoUrl) {
             Navigator.of(context).pop();
             widget.onComplete?.call(photoUrl);
@@ -323,12 +328,13 @@ class _ReminderPopupState extends ConsumerState<ReminderPopup>
   }
 }
 
-/// Photo capture screen for verification
+/// Photo capture screen for medication verification
 class PhotoCaptureScreen extends StatefulWidget {
   final String title;
   final String instructions;
   final Function(String) onPhotoTaken;
   final VoidCallback onCancel;
+  final String? userId;
 
   const PhotoCaptureScreen({
     super.key,
@@ -336,6 +342,7 @@ class PhotoCaptureScreen extends StatefulWidget {
     required this.instructions,
     required this.onPhotoTaken,
     required this.onCancel,
+    this.userId,
   });
 
   @override
@@ -343,15 +350,64 @@ class PhotoCaptureScreen extends StatefulWidget {
 }
 
 class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
-  @override
-  void initState() {
-    super.initState();
-    _initializeCamera();
+  final ImagePicker _picker = ImagePicker();
+  File? _capturedImage;
+  bool _isUploading = false;
+
+  Future<void> _takePhoto() async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 85,
+        preferredCameraDevice: CameraDevice.rear,
+      );
+
+      if (image == null) return;
+
+      setState(() {
+        _capturedImage = File(image.path);
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open camera: $e')),
+        );
+      }
+    }
   }
 
-  Future<void> _initializeCamera() async {
-    // Camera initialization would go here
-    // Using image_picker for simplicity
+  Future<void> _confirmAndUpload() async {
+    if (_capturedImage == null) return;
+
+    setState(() => _isUploading = true);
+
+    try {
+      final photoId = const Uuid().v4();
+      final filename = 'med_verify_$photoId.jpg';
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('medication_photos')
+          .child(widget.userId ?? 'unknown')
+          .child(filename);
+
+      final imageBytes = await _capturedImage!.readAsBytes();
+      await ref.putData(
+        imageBytes,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+
+      final downloadUrl = await ref.getDownloadURL();
+      widget.onPhotoTaken(downloadUrl);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUploading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -367,16 +423,20 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
               child: Row(
                 children: [
                   IconButton(
-                    onPressed: widget.onCancel,
+                    onPressed: _isUploading ? null : widget.onCancel,
                     icon: const Icon(Icons.close, color: Colors.white, size: 32),
                   ),
                   const Spacer(),
-                  Text(
-                    widget.title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
+                  Flexible(
+                    child: Text(
+                      widget.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   const Spacer(),
@@ -385,7 +445,7 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
               ),
             ),
 
-            // Camera preview area
+            // Photo preview or camera prompt
             Expanded(
               child: Container(
                 margin: const EdgeInsets.all(16),
@@ -394,55 +454,125 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: Colors.white30, width: 2),
                 ),
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.camera_alt,
-                        size: 80,
-                        color: Colors.white.withValues(alpha: 0.5),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        widget.instructions,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.7),
-                          fontSize: 20,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(18),
+                  child: _capturedImage != null
+                      ? Image.file(
+                          _capturedImage!,
+                          fit: BoxFit.contain,
+                          width: double.infinity,
+                          height: double.infinity,
+                        )
+                      : Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.camera_alt,
+                                size: 80,
+                                color: Colors.white.withValues(alpha: 0.5),
+                              ),
+                              const SizedBox(height: 16),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 24),
+                                child: Text(
+                                  widget.instructions,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.7),
+                                    fontSize: 20,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ),
 
-            // Capture button
+            // Action buttons
             Padding(
               padding: const EdgeInsets.all(24),
-              child: GestureDetector(
-                onTap: () async {
-                  HapticFeedback.heavyImpact();
-                  // Simulate photo capture
-                  // In real implementation, use image_picker or camera package
-                  widget.onPhotoTaken('photo_url_placeholder');
-                },
-                child: Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppTheme.primaryBlue, width: 4),
-                  ),
-                  child: const Icon(
-                    Icons.camera,
-                    size: 40,
-                    color: AppTheme.primaryBlue,
-                  ),
-                ),
-              ),
+              child: _isUploading
+                  ? const Column(
+                      children: [
+                        CircularProgressIndicator(color: Colors.white),
+                        SizedBox(height: 12),
+                        Text(
+                          'Saving photo...',
+                          style: TextStyle(color: Colors.white70, fontSize: 18),
+                        ),
+                      ],
+                    )
+                  : _capturedImage != null
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            // Retake button
+                            GestureDetector(
+                              onTap: () {
+                                HapticFeedback.mediumImpact();
+                                setState(() => _capturedImage = null);
+                                _takePhoto();
+                              },
+                              child: Container(
+                                width: 70,
+                                height: 70,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[800],
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.refresh,
+                                  size: 36,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                            // Confirm button
+                            GestureDetector(
+                              onTap: () {
+                                HapticFeedback.heavyImpact();
+                                _confirmAndUpload();
+                              },
+                              child: Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryGreen,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 4),
+                                ),
+                                child: const Icon(
+                                  Icons.check,
+                                  size: 44,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : GestureDetector(
+                          onTap: () {
+                            HapticFeedback.heavyImpact();
+                            _takePhoto();
+                          },
+                          child: Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppTheme.primaryBlue, width: 4),
+                            ),
+                            child: const Icon(
+                              Icons.camera,
+                              size: 40,
+                              color: AppTheme.primaryBlue,
+                            ),
+                          ),
+                        ),
             ),
           ],
         ),

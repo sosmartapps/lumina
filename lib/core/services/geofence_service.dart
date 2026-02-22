@@ -56,7 +56,7 @@ class GeofenceServiceWrapper {
   }
 
   /// Initialize zone states based on current position
-  void _initializeZoneStates() async {
+  Future<void> _initializeZoneStates() async {
     final position = await _locationService.getCurrentPosition();
     if (position == null) return;
 

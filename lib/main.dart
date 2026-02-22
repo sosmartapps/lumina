@@ -1,15 +1,19 @@
 
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/notification_service.dart';
+import 'core/services/background_service.dart';
 import 'core/services/screenshot_feedback_service.dart';
 import 'features/splash/splash_screen.dart';
 import 'features/feedback/bug_report_screen.dart';
@@ -25,6 +29,13 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  // Initialize Crashlytics
+  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+  PlatformDispatcher.instance.onError = (error, stack) {
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    return true;
+  };
+
   // Lock to portrait mode for easier use
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -34,12 +45,18 @@ void main() async {
   // Initialize notifications
   await NotificationService.initialize();
 
+  // Initialize background monitoring service
+  await BackgroundMonitoringService.initialize();
+
   // Ensure the device always has a Firebase Auth context.
   // Patients don't log in, so we use anonymous auth to satisfy
   // Firestore security rules that require isAuthenticated().
   if (FirebaseAuth.instance.currentUser == null) {
     await FirebaseAuth.instance.signInAnonymously();
   }
+
+  // Log app open event
+  unawaited(FirebaseAnalytics.instance.logAppOpen());
 
   runApp(const ProviderScope(child: CaregiverApp()));
 }

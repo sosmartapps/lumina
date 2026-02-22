@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/providers.dart';
+import '../../core/services/background_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../setup/setup_screen.dart';
 import '../user_home/user_home_screen.dart';
@@ -95,6 +96,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         final sundownService = ref.read(sundownServiceProvider);
         await sundownService.initialize(appState.currentUserId!, userProv.user!);
       }
+
+      // Start background monitoring service
+      await BackgroundMonitoringService.start();
 
       if (!mounted) return;
 
