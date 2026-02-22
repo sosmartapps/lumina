@@ -1,13 +1,18 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/providers/providers.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/large_action_tile.dart';
+import '../../core/widgets/reminder_popup.dart';
 import '../../core/widgets/sundown_alert_popup.dart';
 import '../../core/models/app_user.dart';
+import '../../core/models/reminder.dart';
+import '../../core/services/notification_service.dart';
 import '../../core/services/sundown_service.dart';
 import '../navigation/navigation_screen.dart';
 import '../contacts/contacts_screen.dart';
@@ -25,12 +30,17 @@ class UserHomeScreen extends ConsumerStatefulWidget {
 class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
   int _caregiverTapCount = 0;
   bool _sundownPopupShowing = false;
+  bool _reminderPopupShowing = false;
+  Timer? _reminderCheckTimer;
+  StreamSubscription? _reminderSubscription;
+  List<Reminder> _todayReminders = [];
 
   @override
   void initState() {
     super.initState();
     _speakWelcome();
     _listenForSundownAlerts();
+    _setupReminderSystem();
   }
 
   void _listenForSundownAlerts() {
@@ -74,8 +84,115 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
     });
   }
 
+  /// Set up the reminder notification handler and periodic check
+  void _setupReminderSystem() {
+    final appState = ref.read(appStateNotifierProvider);
+    final userId = appState.currentUserId;
+    if (userId == null) return;
+
+    // Wire notification tap handler to show ReminderPopup
+    NotificationService.onNotificationTapped = (payload) {
+      if (payload != null && payload.startsWith('reminder:') && mounted) {
+        final reminderId = payload.replaceFirst('reminder:', '');
+        _showReminderPopupById(reminderId);
+      }
+    };
+
+    // Schedule all notifications
+    final userProvider = ref.read(userNotifierProvider);
+    if (userProvider.user != null) {
+      final reminderService = ref.read(reminderServiceProvider);
+      reminderService.scheduleAllNotifications(userId, userProvider.user!.name);
+    }
+
+    // Subscribe to today's reminders for auto-trigger
+    final reminderService = ref.read(reminderServiceProvider);
+    _reminderSubscription = reminderService.getTodayReminders(userId).listen((reminders) {
+      _todayReminders = reminders;
+    });
+
+    // Check every 30 seconds if a reminder is due
+    _reminderCheckTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _checkDueReminders();
+    });
+  }
+
+  /// Check if any reminder is due and show popup
+  void _checkDueReminders() {
+    if (!mounted || _reminderPopupShowing || _sundownPopupShowing) return;
+
+    final now = DateTime.now();
+    for (final reminder in _todayReminders) {
+      if (reminder.completedAt != null) continue;
+
+      final diff = now.difference(reminder.scheduledTime).inMinutes;
+      // Show popup if reminder is due (within 0-2 min window)
+      if (diff >= 0 && diff <= 2 && reminder.lastTriggeredAt == null) {
+        _showReminderPopup(reminder);
+        break;
+      }
+    }
+  }
+
+  /// Show ReminderPopup by fetching reminder from Firestore
+  Future<void> _showReminderPopupById(String reminderId) async {
+    if (_reminderPopupShowing) return;
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('reminders')
+          .doc(reminderId)
+          .get();
+      if (!doc.exists || !mounted) return;
+      final reminder = Reminder.fromFirestore(doc);
+      _showReminderPopup(reminder);
+    } catch (e) {
+      debugPrint('Error loading reminder for popup: $e');
+    }
+  }
+
+  /// Display the full-screen ReminderPopup
+  void _showReminderPopup(Reminder reminder) {
+    final userProvider = ref.read(userNotifierProvider);
+    final user = userProvider.user;
+    if (user == null) return;
+
+    _reminderPopupShowing = true;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (context) => ReminderPopup(
+          userName: user.name,
+          title: reminder.title,
+          message: reminder.getSpokenMessage(user.name),
+          reminderType: reminder.type,
+          requiresPhoto: reminder.requiresPhoto,
+          onDismiss: () {
+            Navigator.of(context).pop();
+            _reminderPopupShowing = false;
+          },
+          onSnooze: () {
+            Navigator.of(context).pop();
+            _reminderPopupShowing = false;
+            final reminderService = ref.read(reminderServiceProvider);
+            reminderService.snoozeReminder(reminder.id, reminder.snoozeMinutes);
+          },
+          onComplete: (photoUrl) {
+            Navigator.of(context).pop();
+            _reminderPopupShowing = false;
+            final reminderService = ref.read(reminderServiceProvider);
+            reminderService.completeReminder(reminder.id, photoUrl: photoUrl);
+          },
+        ),
+      ),
+    ).then((_) {
+      _reminderPopupShowing = false;
+    });
+  }
+
   @override
   void dispose() {
+    _reminderCheckTimer?.cancel();
+    _reminderSubscription?.cancel();
     final sundownService = ref.read(sundownServiceProvider);
     sundownService.alertNotifier.removeListener(_onSundownAlert);
     super.dispose();

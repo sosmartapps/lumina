@@ -97,6 +97,15 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         await sundownService.initialize(appState.currentUserId!, userProv.user!);
       }
 
+      // Schedule all reminder notifications
+      if (userProv.user != null) {
+        final reminderService = ref.read(reminderServiceProvider);
+        await reminderService.scheduleAllNotifications(
+          appState.currentUserId!,
+          userProv.user!.name,
+        );
+      }
+
       // Start background monitoring service
       await BackgroundMonitoringService.start();
 
