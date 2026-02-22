@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../core/models/app_user.dart';
+import '../../core/models/reminder.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../user_home/user_home_screen.dart';
@@ -33,6 +38,23 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   String? _caregiverId;
   bool _isNewCaregiver = true;
 
+  // Emergency contact fields
+  final _contactNameController = TextEditingController();
+  final _contactPhoneController = TextEditingController();
+  String _contactRelationship = 'Family';
+  final List<EmergencyContact> _contacts = [];
+
+  // Permissions state
+  bool _locationGranted = false;
+  bool _notificationsGranted = false;
+
+  // Quick reminder fields
+  final _reminderTitleController = TextEditingController();
+  TimeOfDay _reminderTime = const TimeOfDay(hour: 8, minute: 0);
+  ReminderType _reminderType = ReminderType.medication;
+
+  static const _totalPages = 7;
+
   @override
   void dispose() {
     _pageController.dispose();
@@ -43,11 +65,14 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
     _userNameController.dispose();
     _userPhoneController.dispose();
     _homeAddressController.dispose();
+    _contactNameController.dispose();
+    _contactPhoneController.dispose();
+    _reminderTitleController.dispose();
     super.dispose();
   }
 
   void _nextPage() {
-    if (_currentPage < 3) {
+    if (_currentPage < _totalPages - 1) {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
@@ -75,7 +100,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
             Padding(
               padding: const EdgeInsets.all(24),
               child: Row(
-                children: List.generate(4, (index) {
+                children: List.generate(_totalPages, (index) {
                   return Expanded(
                     child: Container(
                       height: 8,
@@ -104,6 +129,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                   _buildWelcomePage(),
                   _buildCaregiverAuthPage(),
                   _buildUserInfoPage(),
+                  _buildEmergencyContactPage(),
+                  _buildPermissionsPage(),
+                  _buildQuickReminderPage(),
                   _buildCompletePage(),
                 ],
               ),
@@ -517,6 +545,605 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildEmergencyContactPage() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          IconButton(
+            onPressed: _previousPage,
+            icon: const Icon(Icons.arrow_back, size: 28),
+          ),
+          const SizedBox(height: 16),
+
+          const Text(
+            'Emergency Contacts',
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Add people the user can call for help',
+            style: TextStyle(
+              fontSize: 18,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Added contacts list
+          if (_contacts.isNotEmpty) ...[
+            ...List.generate(_contacts.length, (index) {
+              final contact = _contacts[index];
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: AppTheme.tileColors[index % AppTheme.tileColors.length],
+                    child: Text(
+                      contact.name[0].toUpperCase(),
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  title: Text(contact.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text('${contact.relationship ?? ''} - ${contact.phoneNumber}'),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.close, color: Colors.red),
+                    onPressed: () => setState(() => _contacts.removeAt(index)),
+                  ),
+                ),
+              );
+            }),
+            const Divider(height: 24),
+          ],
+
+          // Add contact form
+          TextField(
+            controller: _contactNameController,
+            decoration: const InputDecoration(
+              labelText: 'Contact Name',
+              prefixIcon: Icon(Icons.person),
+              hintText: 'e.g., Sarah (daughter)',
+            ),
+            textCapitalization: TextCapitalization.words,
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _contactPhoneController,
+            decoration: const InputDecoration(
+              labelText: 'Phone Number',
+              prefixIcon: Icon(Icons.phone),
+              hintText: '(520) 555-1234',
+            ),
+            keyboardType: TextInputType.phone,
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: _contactRelationship,
+            decoration: const InputDecoration(
+              labelText: 'Relationship',
+              prefixIcon: Icon(Icons.people),
+            ),
+            items: const [
+              DropdownMenuItem(value: 'Family', child: Text('Family')),
+              DropdownMenuItem(value: 'Spouse', child: Text('Spouse')),
+              DropdownMenuItem(value: 'Child', child: Text('Son/Daughter')),
+              DropdownMenuItem(value: 'Sibling', child: Text('Sibling')),
+              DropdownMenuItem(value: 'Friend', child: Text('Friend')),
+              DropdownMenuItem(value: 'Neighbor', child: Text('Neighbor')),
+              DropdownMenuItem(value: 'Doctor', child: Text('Doctor')),
+              DropdownMenuItem(value: 'Other', child: Text('Other')),
+            ],
+            onChanged: (v) {
+              if (v != null) setState(() => _contactRelationship = v);
+            },
+          ),
+          const SizedBox(height: 16),
+
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: OutlinedButton.icon(
+              onPressed: _addContact,
+              icon: const Icon(Icons.add),
+              label: const Text('ADD CONTACT', style: TextStyle(fontWeight: FontWeight.bold)),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppTheme.primaryBlue),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+
+          if (_errorMessage != null) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryRed.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(_errorMessage!, style: const TextStyle(color: AppTheme.primaryRed)),
+            ),
+          ],
+
+          const SizedBox(height: 32),
+
+          SizedBox(
+            width: double.infinity,
+            height: 64,
+            child: ElevatedButton(
+              onPressed: _isLoading ? null : _saveContacts,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryGreen,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              child: _isLoading
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : Text(
+                      _contacts.isEmpty ? 'SKIP FOR NOW' : 'CONTINUE',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _addContact() {
+    if (_contactNameController.text.trim().isEmpty ||
+        _contactPhoneController.text.trim().isEmpty) {
+      setState(() => _errorMessage = 'Please enter a name and phone number');
+      return;
+    }
+
+    setState(() {
+      _errorMessage = null;
+      _contacts.add(EmergencyContact(
+        id: const Uuid().v4(),
+        name: _contactNameController.text.trim(),
+        phoneNumber: _contactPhoneController.text.trim(),
+        relationship: _contactRelationship,
+        orderIndex: _contacts.length,
+      ));
+      _contactNameController.clear();
+      _contactPhoneController.clear();
+      _contactRelationship = 'Family';
+    });
+  }
+
+  Future<void> _saveContacts() async {
+    if (_contacts.isNotEmpty) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+
+      try {
+        final userProvider = ref.read(userNotifierProvider);
+        final user = userProvider.user;
+        if (user != null) {
+          final authService = ref.read(authServiceProvider);
+          await authService.updateUser(user.copyWith(
+            emergencyContacts: _contacts,
+          ));
+          await userProvider.loadUser(user.id);
+        }
+      } catch (e) {
+        setState(() => _errorMessage = e.toString());
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      setState(() => _isLoading = false);
+    }
+
+    _nextPage();
+  }
+
+  Widget _buildPermissionsPage() {
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          IconButton(
+            onPressed: _previousPage,
+            icon: const Icon(Icons.arrow_back, size: 28),
+          ),
+          const SizedBox(height: 16),
+
+          const Text(
+            'App Permissions',
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Lumina needs a few permissions to keep the user safe',
+            style: TextStyle(
+              fontSize: 18,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 32),
+
+          // Location permission
+          _buildPermissionCard(
+            icon: Icons.location_on,
+            title: 'Location (Always)',
+            description: 'Tracks location so caregivers know where the user is, enables the "Go Home" button, and powers safe zone alerts.',
+            granted: _locationGranted,
+            onRequest: _requestLocationPermission,
+          ),
+          const SizedBox(height: 16),
+
+          // Notifications permission
+          _buildPermissionCard(
+            icon: Icons.notifications_active,
+            title: 'Notifications',
+            description: 'Sends medication reminders, task alerts, and safety notifications even when the app is in the background.',
+            granted: _notificationsGranted,
+            onRequest: _requestNotificationPermission,
+          ),
+
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.shield, color: AppTheme.primaryBlue),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Data stays private. Location is only shared with caregivers you add.',
+                    style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const Spacer(),
+
+          SizedBox(
+            width: double.infinity,
+            height: 64,
+            child: ElevatedButton(
+              onPressed: _nextPage,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryBlue,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              child: const Text(
+                'CONTINUE',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPermissionCard({
+    required IconData icon,
+    required String title,
+    required String description,
+    required bool granted,
+    required VoidCallback onRequest,
+  }) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: granted
+                    ? AppTheme.primaryGreen.withValues(alpha: 0.1)
+                    : AppTheme.primaryOrange.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                color: granted ? AppTheme.primaryGreen : AppTheme.primaryOrange,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 4),
+                  Text(description, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            granted
+                ? const Icon(Icons.check_circle, color: AppTheme.primaryGreen, size: 32)
+                : ElevatedButton(
+                    onPressed: onRequest,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryBlue,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Allow', style: TextStyle(color: Colors.white)),
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _requestLocationPermission() async {
+    final permission = await Geolocator.requestPermission();
+    if (permission == LocationPermission.always ||
+        permission == LocationPermission.whileInUse) {
+      setState(() => _locationGranted = true);
+
+      // Also try to get "always" if we only got "whileInUse"
+      if (permission == LocationPermission.whileInUse) {
+        final bg = await Geolocator.requestPermission();
+        setState(() => _locationGranted = bg == LocationPermission.always || bg == LocationPermission.whileInUse);
+      }
+    }
+  }
+
+  Future<void> _requestNotificationPermission() async {
+    // iOS permissions are handled during NotificationService.initialize().
+    // On Android 13+, request the POST_NOTIFICATIONS runtime permission.
+    final settings = await FirebaseMessaging.instance.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    setState(() => _notificationsGranted =
+        settings.authorizationStatus == AuthorizationStatus.authorized ||
+        settings.authorizationStatus == AuthorizationStatus.provisional);
+  }
+
+  Widget _buildQuickReminderPage() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          IconButton(
+            onPressed: _previousPage,
+            icon: const Icon(Icons.arrow_back, size: 28),
+          ),
+          const SizedBox(height: 16),
+
+          const Text(
+            'First Reminder',
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Set up a daily reminder (you can add more later)',
+            style: TextStyle(
+              fontSize: 18,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 32),
+
+          // Quick presets
+          const Text('Quick presets:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildPresetChip('Take Medicine', ReminderType.medication, const TimeOfDay(hour: 8, minute: 0)),
+              _buildPresetChip('Feed the Dog', ReminderType.petCare, const TimeOfDay(hour: 7, minute: 0)),
+              _buildPresetChip('Drink Water', ReminderType.hydration, const TimeOfDay(hour: 10, minute: 0)),
+              _buildPresetChip('Take a Walk', ReminderType.exercise, const TimeOfDay(hour: 9, minute: 0)),
+              _buildPresetChip('Eat Lunch', ReminderType.mealTime, const TimeOfDay(hour: 12, minute: 0)),
+              _buildPresetChip('Check Water Bowl', ReminderType.petCare, const TimeOfDay(hour: 17, minute: 0)),
+            ],
+          ),
+
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 16),
+          const Text('Or create your own:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 12),
+
+          TextField(
+            controller: _reminderTitleController,
+            decoration: const InputDecoration(
+              labelText: 'Reminder Title',
+              prefixIcon: Icon(Icons.edit),
+              hintText: 'e.g., Water the plants',
+            ),
+            textCapitalization: TextCapitalization.sentences,
+          ),
+          const SizedBox(height: 16),
+
+          DropdownButtonFormField<ReminderType>(
+            initialValue: _reminderType,
+            decoration: const InputDecoration(
+              labelText: 'Type',
+              prefixIcon: Icon(Icons.category),
+            ),
+            items: ReminderType.values.map((type) {
+              return DropdownMenuItem(value: type, child: Text(type.displayName));
+            }).toList(),
+            onChanged: (v) {
+              if (v != null) setState(() => _reminderType = v);
+            },
+          ),
+          const SizedBox(height: 16),
+
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.access_time, color: AppTheme.primaryBlue),
+            title: Text(
+              'Time: ${_reminderTime.format(context)}',
+              style: const TextStyle(fontSize: 16),
+            ),
+            trailing: const Icon(Icons.edit),
+            onTap: () async {
+              final time = await showTimePicker(
+                context: context,
+                initialTime: _reminderTime,
+              );
+              if (time != null) setState(() => _reminderTime = time);
+            },
+          ),
+
+          const SizedBox(height: 32),
+
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 64,
+                  child: OutlinedButton(
+                    onPressed: _nextPage,
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppTheme.primaryBlue),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    child: const Text(
+                      'SKIP',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: SizedBox(
+                  height: 64,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _saveQuickReminder,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryGreen,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    child: _isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text(
+                            'ADD',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPresetChip(String title, ReminderType type, TimeOfDay time) {
+    return ActionChip(
+      avatar: Icon(_getPresetIcon(type), size: 18),
+      label: Text(title),
+      backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.1),
+      onPressed: () {
+        setState(() {
+          _reminderTitleController.text = title;
+          _reminderType = type;
+          _reminderTime = time;
+        });
+      },
+    );
+  }
+
+  IconData _getPresetIcon(ReminderType type) {
+    switch (type) {
+      case ReminderType.medication:
+        return Icons.medication;
+      case ReminderType.petCare:
+        return Icons.pets;
+      case ReminderType.mealTime:
+        return Icons.restaurant;
+      case ReminderType.hydration:
+        return Icons.water_drop;
+      case ReminderType.exercise:
+        return Icons.fitness_center;
+      default:
+        return Icons.notifications;
+    }
+  }
+
+  Future<void> _saveQuickReminder() async {
+    if (_reminderTitleController.text.trim().isEmpty) {
+      setState(() => _errorMessage = 'Please enter a reminder title or pick a preset');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final userProvider = ref.read(userNotifierProvider);
+      final user = userProvider.user;
+      if (user == null) return;
+
+      final reminderService = ref.read(reminderServiceProvider);
+      final now = DateTime.now();
+      final scheduledTime = DateTime(
+        now.year, now.month, now.day,
+        _reminderTime.hour, _reminderTime.minute,
+      );
+
+      await reminderService.createReminder(Reminder(
+        id: '',
+        userId: user.id,
+        title: _reminderTitleController.text.trim(),
+        type: _reminderType,
+        scheduledTime: scheduledTime,
+        repeatFrequency: RepeatFrequency.daily,
+        createdBy: _caregiverId ?? '',
+      ));
+
+      if (!mounted) return;
+      _nextPage();
+    } catch (e) {
+      setState(() => _errorMessage = e.toString());
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   Widget _buildCompletePage() {
