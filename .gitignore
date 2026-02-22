@@ -81,3 +81,7 @@ DerivedData/
 *.jks
 *.keystore
 local.properties
+
+# Firebase Functions build artifacts
+functions/lib/
+functions/node_modules/
