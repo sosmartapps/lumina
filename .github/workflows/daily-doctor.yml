@@ -91,3 +91,25 @@ jobs:
         with:
           name: daily-doctor-patch
           path: patch.diff
+
+      # Email summary
+      - name: Send email summary
+        if: always()
+        continue-on-error: true
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_HOST }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "Lumina Daily Doctor: ${{ job.status }}"
+          to: leon@sosmartapps.app
+          from: ${{ secrets.SMTP_FROM || secrets.SMTP_USERNAME }}
+          body: |
+            Daily Doctor run status: ${{ job.status }}
+
+            Repo: ${{ github.repository }}
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            If patch.diff is non-empty, it contains the best-effort automated fixes (dart fix/format).
+          attachments: patch.diff
