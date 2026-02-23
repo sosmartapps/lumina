@@ -30,7 +30,7 @@ class VoiceRecorder {
       },
       listenFor: const Duration(minutes: 2),
       pauseFor: const Duration(seconds: 5),
-      partialResults: true,
+      listenOptions: SpeechListenOptions(partialResults: true),
     );
   }
 

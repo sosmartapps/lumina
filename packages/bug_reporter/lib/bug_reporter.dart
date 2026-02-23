@@ -1,7 +1,7 @@
 /// Bug Reporter — shared package for all So Smart Apps.
 /// Provides crash detection, screenshot capture, voice-to-text,
 /// photo attachments, and report submission.
-library bug_reporter;
+library;
 
 export 'models/bug_report.dart';
 export 'models/report_type.dart';

@@ -48,13 +48,21 @@ void main() async {
   await NotificationService.initialize();
 
   // Initialize background monitoring service
-  await BackgroundMonitoringService.initialize();
+  try {
+    await BackgroundMonitoringService.initialize();
+  } catch (e) {
+    debugPrint('Background service init failed: $e');
+  }
 
   // Ensure the device always has a Firebase Auth context.
   // Patients don't log in, so we use anonymous auth to satisfy
   // Firestore security rules that require isAuthenticated().
-  if (FirebaseAuth.instance.currentUser == null) {
-    await FirebaseAuth.instance.signInAnonymously();
+  try {
+    if (FirebaseAuth.instance.currentUser == null) {
+      await FirebaseAuth.instance.signInAnonymously();
+    }
+  } catch (e) {
+    debugPrint('Anonymous auth failed (enable in Firebase console): $e');
   }
 
   // Log app open event

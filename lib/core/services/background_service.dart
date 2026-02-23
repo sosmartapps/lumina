@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -16,10 +18,25 @@ class BackgroundMonitoringService {
 
   /// Initialize and start the background service
   static Future<void> initialize() async {
+    // Create the notification channel on Android before configuring the service.
+    if (Platform.isAndroid) {
+      const channel = AndroidNotificationChannel(
+        'lumina_background',
+        'Lumina Background Service',
+        description: 'Used for background location monitoring',
+        importance: Importance.low,
+      );
+      final plugin = FlutterLocalNotificationsPlugin();
+      await plugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(channel);
+    }
+
     await _service.configure(
       androidConfiguration: AndroidConfiguration(
         onStart: _onStart,
-        autoStart: true,
+        autoStart: false,
         isForegroundMode: true,
         foregroundServiceTypes: [AndroidForegroundType.location],
         notificationChannelId: 'lumina_background',
@@ -27,7 +44,7 @@ class BackgroundMonitoringService {
         initialNotificationContent: 'Monitoring your safety',
       ),
       iosConfiguration: IosConfiguration(
-        autoStart: true,
+        autoStart: false,
         onForeground: _onStart,
         onBackground: _onIosBackground,
       ),
