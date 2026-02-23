@@ -53,6 +53,9 @@ jobs:
           }
           DART
 
+      - name: Create dummy .env for CI
+        run: echo "# CI placeholder" > .env
+
       - name: Pub get
         run: flutter pub get
 
