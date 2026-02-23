@@ -1,22 +1,22 @@
 
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:bug_reporter/bug_reporter.dart';
+import 'package:screenshot/screenshot.dart';
 
 import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/background_service.dart';
-import 'core/services/screenshot_feedback_service.dart';
 import 'features/splash/splash_screen.dart';
-import 'features/feedback/bug_report_screen.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -24,17 +24,19 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Load environment variables
+  await dotenv.load(fileName: '.env');
+
   // Initialize Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Initialize Crashlytics
-  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
-  PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-    return true;
-  };
+  // Initialize Bug Reporter (replaces manual Crashlytics + screenshot feedback)
+  await BugReporterInitializer.init(
+    reportEndpoint: 'https://us-central1-ssa-bug-dashboard.cloudfunctions.net/api/reports',
+    shakeToReport: true,
+  );
 
   // Lock to portrait mode for easier use
   await SystemChrome.setPreferredOrientations([
@@ -58,49 +60,33 @@ void main() async {
   // Log app open event
   unawaited(FirebaseAnalytics.instance.logAppOpen());
 
-  runApp(const ProviderScope(child: CaregiverApp()));
+  runApp(
+    ProviderScope(
+      child: Screenshot(
+        controller: ScreenshotService.controller,
+        child: CaregiverApp(
+          navigatorKey: BugReporterInitializer.navigatorKey,
+        ),
+      ),
+    ),
+  );
 }
 
 class CaregiverApp extends StatelessWidget {
-  const CaregiverApp({super.key});
+  final GlobalKey<NavigatorState> navigatorKey;
+
+  const CaregiverApp({super.key, required this.navigatorKey});
 
   @override
   Widget build(BuildContext context) {
-    return ScreenshotFeedbackWrapper(
-      // Only enable screenshot feedback in debug/profile mode
-      enabled: !kReleaseMode,
-      autoPrompt: true,
-      onFeedbackRequested: (context, screenshot) async {
-        // Show the feedback prompt when a screenshot is taken
-        await showScreenshotFeedbackPrompt(
-          context: context,
-          screenshot: screenshot,
-          onSendFeedback: () async {
-            Uint8List? bytes;
-            if (screenshot != null) {
-              bytes = await screenshot.readAsBytes();
-            }
-
-            if (context.mounted) {
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => BugReportScreen(
-                    initialScreenshot: bytes,
-                  ),
-                ),
-              );
-            }
-          },
-        );
-      },
-      child: MaterialApp(
-        title: 'Lumina',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.darkTheme,
-        themeMode: ThemeMode.light, // Default to light for better visibility
-        home: const SplashScreen(),
-      ),
+    return MaterialApp(
+      navigatorKey: navigatorKey,
+      title: 'Lumina',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeMode.light, // Default to light for better visibility
+      home: const SplashScreen(),
     );
   }
 }

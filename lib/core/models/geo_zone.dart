@@ -192,7 +192,7 @@ enum GeoZoneEventType {
 /// Real-time location tracking record
 class LocationUpdate {
   final String id;
-  final String oderId;
+  final String userId;
   final GeoPoint location;
   final double? accuracy;
   final double? speed;
@@ -203,7 +203,7 @@ class LocationUpdate {
 
   LocationUpdate({
     required this.id,
-    required this.oderId,
+    required this.userId,
     required this.location,
     this.accuracy,
     this.speed,
@@ -217,7 +217,7 @@ class LocationUpdate {
     final data = doc.data() as Map<String, dynamic>;
     return LocationUpdate(
       id: doc.id,
-      oderId: data['userId'] ?? '',
+      userId: data['userId'] ?? '',
       location: data['location'] ?? const GeoPoint(0, 0),
       accuracy: data['accuracy']?.toDouble(),
       speed: data['speed']?.toDouble(),
@@ -230,7 +230,7 @@ class LocationUpdate {
 
   Map<String, dynamic> toFirestore() {
     return {
-      'userId': oderId,
+      'userId': userId,
       'location': location,
       'accuracy': accuracy,
       'speed': speed,

@@ -15,6 +15,9 @@
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
+		CAFE000100000000FEED0020 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAFE000100000000FEED0001 /* ShareViewController.swift */; };
+		CAFE000100000000FEED0021 /* MainInterface.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = CAFE000100000000FEED0003 /* MainInterface.storyboard */; };
+		CAFE000100000000FEED0022 /* ShareFeedbackExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = CAFE000100000000FEED0005 /* ShareFeedbackExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -24,6 +27,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 97C146ED1CF9000F007C117D;
 			remoteInfo = Runner;
+		};
+		CAFE000100000000FEED0070 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CAFE000100000000FEED0040;
+			remoteInfo = ShareFeedbackExtension;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -36,6 +46,17 @@
 			files = (
 			);
 			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CAFE000100000000FEED0080 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				CAFE000100000000FEED0022 /* ShareFeedbackExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -57,10 +78,23 @@
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		CAFE000100000000FEED0001 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		CAFE000100000000FEED0002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		CAFE000100000000FEED0003 /* MainInterface.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = MainInterface.storyboard; sourceTree = "<group>"; };
+		CAFE000100000000FEED0004 /* ShareFeedbackExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ShareFeedbackExtension.entitlements; sourceTree = "<group>"; };
+		CAFE000100000000FEED0005 /* ShareFeedbackExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareFeedbackExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		CAFE000100000000FEED0006 /* ShareFeedbackExtension.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = ShareFeedbackExtension.xcconfig; path = Flutter/ShareFeedbackExtension.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		97C146EB1CF9000F007C117D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CAFE000100000000FEED0031 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -85,6 +119,7 @@
 				9740EEB21CF90195004384FC /* Debug.xcconfig */,
 				7AFA3C8E1D35360C0083082E /* Release.xcconfig */,
 				9740EEB31CF90195004384FC /* Generated.xcconfig */,
+				CAFE000100000000FEED0006 /* ShareFeedbackExtension.xcconfig */,
 			);
 			name = Flutter;
 			sourceTree = "<group>";
@@ -96,6 +131,7 @@
 				97C146F01CF9000F007C117D /* Runner */,
 				97C146EF1CF9000F007C117D /* Products */,
 				331C8082294A63A400263BE5 /* RunnerTests */,
+				CAFE000100000000FEED0010 /* ShareFeedbackExtension */,
 				81DD900982847A31FB9DDD4A /* GoogleService-Info.plist */,
 			);
 			sourceTree = "<group>";
@@ -105,6 +141,7 @@
 			children = (
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
+				CAFE000100000000FEED0005 /* ShareFeedbackExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -122,6 +159,17 @@
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
 			path = Runner;
+			sourceTree = "<group>";
+		};
+		CAFE000100000000FEED0010 /* ShareFeedbackExtension */ = {
+			isa = PBXGroup;
+			children = (
+				CAFE000100000000FEED0001 /* ShareViewController.swift */,
+				CAFE000100000000FEED0003 /* MainInterface.storyboard */,
+				CAFE000100000000FEED0002 /* Info.plist */,
+				CAFE000100000000FEED0004 /* ShareFeedbackExtension.entitlements */,
+			);
+			path = ShareFeedbackExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -155,15 +203,34 @@
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				7EF607F745543D7326E41BD2 /* FlutterFire: "flutterfire upload-crashlytics-symbols" */,
+				CAFE000100000000FEED0080 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				CAFE000100000000FEED0071 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			productName = Runner;
 			productReference = 97C146EE1CF9000F007C117D /* Runner.app */;
 			productType = "com.apple.product-type.application";
+		};
+		CAFE000100000000FEED0040 /* ShareFeedbackExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CAFE000100000000FEED0060 /* Build configuration list for PBXNativeTarget "ShareFeedbackExtension" */;
+			buildPhases = (
+				CAFE000100000000FEED0030 /* Sources */,
+				CAFE000100000000FEED0031 /* Frameworks */,
+				CAFE000100000000FEED0032 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ShareFeedbackExtension;
+			productName = ShareFeedbackExtension;
+			productReference = CAFE000100000000FEED0005 /* ShareFeedbackExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -183,6 +250,9 @@
 						CreatedOnToolsVersion = 7.3.1;
 						LastSwiftMigration = 1100;
 					};
+					CAFE000100000000FEED0040 = {
+						CreatedOnToolsVersion = 15.1;
+					};
 				};
 			};
 			buildConfigurationList = 97C146E91CF9000F007C117D /* Build configuration list for PBXProject "Runner" */;
@@ -200,6 +270,7 @@
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
+				CAFE000100000000FEED0040 /* ShareFeedbackExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -221,6 +292,14 @@
 				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
 				97C146FC1CF9000F007C117D /* Main.storyboard in Resources */,
 				7C0B4A6C02B2361698C2DCC9 /* GoogleService-Info.plist in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CAFE000100000000FEED0032 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CAFE000100000000FEED0021 /* MainInterface.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -296,6 +375,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CAFE000100000000FEED0030 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CAFE000100000000FEED0020 /* ShareViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -303,6 +390,11 @@
 			isa = PBXTargetDependency;
 			target = 97C146ED1CF9000F007C117D /* Runner */;
 			targetProxy = 331C8085294A63A400263BE5 /* PBXContainerItemProxy */;
+		};
+		CAFE000100000000FEED0071 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CAFE000100000000FEED0040 /* ShareFeedbackExtension */;
+			targetProxy = CAFE000100000000FEED0070 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -603,6 +695,83 @@
 			};
 			name = Release;
 		};
+		CAFE000100000000FEED0050 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CAFE000100000000FEED0006 /* ShareFeedbackExtension.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ShareFeedbackExtension/ShareFeedbackExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = 968LPNNYKJ;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ShareFeedbackExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.carecompanion.lumina.ShareFeedbackExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		CAFE000100000000FEED0051 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CAFE000100000000FEED0006 /* ShareFeedbackExtension.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ShareFeedbackExtension/ShareFeedbackExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = 968LPNNYKJ;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ShareFeedbackExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.carecompanion.lumina.ShareFeedbackExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		CAFE000100000000FEED0052 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CAFE000100000000FEED0006 /* ShareFeedbackExtension.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ShareFeedbackExtension/ShareFeedbackExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = 968LPNNYKJ;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ShareFeedbackExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.carecompanion.lumina.ShareFeedbackExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Profile;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -632,6 +801,16 @@
 				97C147061CF9000F007C117D /* Debug */,
 				97C147071CF9000F007C117D /* Release */,
 				249021D4217E4FDB00AE95B9 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CAFE000100000000FEED0060 /* Build configuration list for PBXNativeTarget "ShareFeedbackExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CAFE000100000000FEED0050 /* Debug */,
+				CAFE000100000000FEED0051 /* Release */,
+				CAFE000100000000FEED0052 /* Profile */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

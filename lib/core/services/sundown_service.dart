@@ -81,9 +81,10 @@ class SundownService {
   }
 
   /// Update config from settings (called when caregiver changes settings).
+  /// Buffer enforces a minimum of 30 minutes leeway before sunset.
   void updateSettings({bool? enabled, int? bufferMinutes}) {
     if (enabled != null) _sundownAlertEnabled = enabled;
-    if (bufferMinutes != null) _sundownBufferMinutes = bufferMinutes;
+    if (bufferMinutes != null) _sundownBufferMinutes = bufferMinutes.clamp(30, 60);
   }
 
   /// Update cached user (called when user data changes).
@@ -102,82 +103,86 @@ class SundownService {
 
   /// Main periodic check — exposed for testing.
   Future<void> performCheck() async {
-    // Reset daily state if new day
-    final today = DateTime.now();
-    if (_lastAlertDate != null &&
-        _lastAlertDate!.day != today.day) {
-      _resetDailyState();
+    try {
+      // Reset daily state if new day
+      final today = DateTime.now();
+      if (_lastAlertDate != null &&
+          _lastAlertDate!.day != today.day) {
+        _resetDailyState();
+      }
+      _lastAlertDate = today;
+
+      if (!_sundownAlertEnabled) return;
+      if (_currentUser == null || _currentUser!.homeLocation == null) return;
+
+      final position = await _locationService.getCurrentPosition();
+      if (position == null) return;
+
+      final homeLocation = _currentUser!.homeLocation!;
+      final distance = _locationService.calculateDistance(
+        GeoPoint(position.latitude, position.longitude),
+        homeLocation,
+      );
+
+      // Already at home — clear everything
+      if (distance < _homeRadiusMeters) {
+        _clearAlert();
+        return;
+      }
+
+      // Calculate sunset
+      final sunsetTime = SunsetCalculator.getSunsetTime(
+        latitude: position.latitude,
+        longitude: position.longitude,
+        date: today,
+      );
+      if (sunsetTime == null) return;
+
+      final now = DateTime.now();
+      final timeToSunset = sunsetTime.difference(now);
+
+      // Detect travel mode from GPS speed
+      final travelMode = _detectTravelMode(position.speed);
+      final avgSpeed = _getAverageSpeed(travelMode);
+
+      // Estimate travel time with routing factor
+      final estimatedTravelSeconds = (distance * _routingFactor) / avgSpeed;
+      final estimatedTravelMinutes = (estimatedTravelSeconds / 60).ceil();
+      final bufferSeconds = _sundownBufferMinutes * 60;
+
+      // Determine alert level
+      int alertLevel = 0;
+      if (timeToSunset.isNegative) {
+        // Sun has already set
+        alertLevel = 3;
+      } else if (estimatedTravelSeconds >= timeToSunset.inSeconds) {
+        // Won't make it home even without buffer
+        alertLevel = 2;
+      } else if (estimatedTravelSeconds + bufferSeconds >= timeToSunset.inSeconds) {
+        // Need to leave now to have buffer time
+        alertLevel = 1;
+      }
+
+      if (alertLevel == 0) return;
+
+      final result = SundownCheckResult(
+        minutesToSunset: timeToSunset.isNegative ? 0 : timeToSunset.inMinutes,
+        estimatedTravelMinutes: estimatedTravelMinutes,
+        travelMode: travelMode,
+        distanceMeters: distance,
+        alertLevel: alertLevel,
+        sunsetTime: sunsetTime,
+        currentLocation: GeoPoint(position.latitude, position.longitude),
+      );
+
+      // Fire the alert
+      _fireAlert(result);
+
+      // Start persistent re-check timer if not already running
+      _startReCheckTimer();
+    } catch (e) {
+      debugPrint('Error during sundown check: $e');
     }
-    _lastAlertDate = today;
-
-    if (!_sundownAlertEnabled) return;
-    if (_currentUser == null || _currentUser!.homeLocation == null) return;
-
-    final position = await _locationService.getCurrentPosition();
-    if (position == null) return;
-
-    final homeLocation = _currentUser!.homeLocation!;
-    final distance = _locationService.calculateDistance(
-      GeoPoint(position.latitude, position.longitude),
-      homeLocation,
-    );
-
-    // Already at home — clear everything
-    if (distance < _homeRadiusMeters) {
-      _clearAlert();
-      return;
-    }
-
-    // Calculate sunset
-    final sunsetTime = SunsetCalculator.getSunsetTime(
-      latitude: position.latitude,
-      longitude: position.longitude,
-      date: today,
-    );
-    if (sunsetTime == null) return;
-
-    final now = DateTime.now();
-    final timeToSunset = sunsetTime.difference(now);
-
-    // Detect travel mode from GPS speed
-    final travelMode = _detectTravelMode(position.speed);
-    final avgSpeed = _getAverageSpeed(travelMode);
-
-    // Estimate travel time with routing factor
-    final estimatedTravelSeconds = (distance * _routingFactor) / avgSpeed;
-    final estimatedTravelMinutes = (estimatedTravelSeconds / 60).ceil();
-    final bufferSeconds = _sundownBufferMinutes * 60;
-
-    // Determine alert level
-    int alertLevel = 0;
-    if (timeToSunset.isNegative) {
-      // Sun has already set
-      alertLevel = 3;
-    } else if (estimatedTravelSeconds >= timeToSunset.inSeconds) {
-      // Won't make it home even without buffer
-      alertLevel = 2;
-    } else if (estimatedTravelSeconds + bufferSeconds >= timeToSunset.inSeconds) {
-      // Need to leave now to have buffer time
-      alertLevel = 1;
-    }
-
-    if (alertLevel == 0) return;
-
-    final result = SundownCheckResult(
-      minutesToSunset: timeToSunset.isNegative ? 0 : timeToSunset.inMinutes,
-      estimatedTravelMinutes: estimatedTravelMinutes,
-      travelMode: travelMode,
-      distanceMeters: distance,
-      alertLevel: alertLevel,
-      sunsetTime: sunsetTime,
-      currentLocation: GeoPoint(position.latitude, position.longitude),
-    );
-
-    // Fire the alert
-    _fireAlert(result);
-
-    // Start persistent re-check timer if not already running
-    _startReCheckTimer();
   }
 
   void _fireAlert(SundownCheckResult result) {
@@ -234,75 +239,79 @@ class SundownService {
   }
 
   Future<void> _reCheck() async {
-    if (_currentUser == null || _currentUser!.homeLocation == null) return;
+    try {
+      if (_currentUser == null || _currentUser!.homeLocation == null) return;
 
-    final position = await _locationService.getCurrentPosition();
-    if (position == null) return;
+      final position = await _locationService.getCurrentPosition();
+      if (position == null) return;
 
-    final homeLocation = _currentUser!.homeLocation!;
-    final distance = _locationService.calculateDistance(
-      GeoPoint(position.latitude, position.longitude),
-      homeLocation,
-    );
+      final homeLocation = _currentUser!.homeLocation!;
+      final distance = _locationService.calculateDistance(
+        GeoPoint(position.latitude, position.longitude),
+        homeLocation,
+      );
 
-    // Arrived home
-    if (distance < _homeRadiusMeters) {
-      _clearAlert();
-      return;
-    }
-
-    // Check if heading home (distance decreasing)
-    if (_previousDistanceToHome != null) {
-      final decreased = _previousDistanceToHome! - distance;
-      if (decreased >= _headingHomeThreshold) {
-        _consecutiveDecreases++;
-      } else {
-        _consecutiveDecreases = 0;
+      // Arrived home
+      if (distance < _homeRadiusMeters) {
+        _clearAlert();
+        return;
       }
+
+      // Check if heading home (distance decreasing)
+      if (_previousDistanceToHome != null) {
+        final decreased = _previousDistanceToHome! - distance;
+        if (decreased >= _headingHomeThreshold) {
+          _consecutiveDecreases++;
+        } else {
+          _consecutiveDecreases = 0;
+        }
+      }
+      _previousDistanceToHome = distance;
+
+      // If consistently heading home, suppress popup but keep monitoring
+      if (_consecutiveDecreases >= _consecutiveDecreaseTarget) {
+        alertNotifier.value = null; // hide popup
+        return;
+      }
+
+      // Not heading home — re-fire alert
+      final now = DateTime.now();
+      final sunsetTime = SunsetCalculator.getSunsetTime(
+        latitude: position.latitude,
+        longitude: position.longitude,
+        date: now,
+      );
+      if (sunsetTime == null) return;
+
+      final timeToSunset = sunsetTime.difference(now);
+      final travelMode = _detectTravelMode(position.speed);
+      final avgSpeed = _getAverageSpeed(travelMode);
+      final estimatedTravelSeconds = (distance * _routingFactor) / avgSpeed;
+      final estimatedTravelMinutes = (estimatedTravelSeconds / 60).ceil();
+
+      int alertLevel;
+      if (timeToSunset.isNegative) {
+        alertLevel = 3;
+      } else if (estimatedTravelSeconds >= timeToSunset.inSeconds) {
+        alertLevel = 2;
+      } else {
+        alertLevel = 1;
+      }
+
+      final result = SundownCheckResult(
+        minutesToSunset: timeToSunset.isNegative ? 0 : timeToSunset.inMinutes,
+        estimatedTravelMinutes: estimatedTravelMinutes,
+        travelMode: travelMode,
+        distanceMeters: distance,
+        alertLevel: alertLevel,
+        sunsetTime: sunsetTime,
+        currentLocation: GeoPoint(position.latitude, position.longitude),
+      );
+
+      alertNotifier.value = result;
+    } catch (e) {
+      debugPrint('Error during sundown re-check: $e');
     }
-    _previousDistanceToHome = distance;
-
-    // If consistently heading home, suppress popup but keep monitoring
-    if (_consecutiveDecreases >= _consecutiveDecreaseTarget) {
-      alertNotifier.value = null; // hide popup
-      return;
-    }
-
-    // Not heading home — re-fire alert
-    final now = DateTime.now();
-    final sunsetTime = SunsetCalculator.getSunsetTime(
-      latitude: position.latitude,
-      longitude: position.longitude,
-      date: now,
-    );
-    if (sunsetTime == null) return;
-
-    final timeToSunset = sunsetTime.difference(now);
-    final travelMode = _detectTravelMode(position.speed);
-    final avgSpeed = _getAverageSpeed(travelMode);
-    final estimatedTravelSeconds = (distance * _routingFactor) / avgSpeed;
-    final estimatedTravelMinutes = (estimatedTravelSeconds / 60).ceil();
-
-    int alertLevel;
-    if (timeToSunset.isNegative) {
-      alertLevel = 3;
-    } else if (estimatedTravelSeconds >= timeToSunset.inSeconds) {
-      alertLevel = 2;
-    } else {
-      alertLevel = 1;
-    }
-
-    final result = SundownCheckResult(
-      minutesToSunset: timeToSunset.isNegative ? 0 : timeToSunset.inMinutes,
-      estimatedTravelMinutes: estimatedTravelMinutes,
-      travelMode: travelMode,
-      distanceMeters: distance,
-      alertLevel: alertLevel,
-      sunsetTime: sunsetTime,
-      currentLocation: GeoPoint(position.latitude, position.longitude),
-    );
-
-    alertNotifier.value = result;
   }
 
   TravelMode _detectTravelMode(double speedMs) {

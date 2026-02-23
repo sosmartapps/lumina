@@ -230,7 +230,7 @@ class UserSettings {
       reminderVolume: map['reminderVolume'] ?? 80,
       voiceLanguage: map['voiceLanguage'] ?? 'en-US',
       sundownAlertEnabled: map['sundownAlertEnabled'] ?? true,
-      sundownBufferMinutes: map['sundownBufferMinutes'] ?? 30,
+      sundownBufferMinutes: ((map['sundownBufferMinutes'] ?? 30) as int).clamp(30, 60),
     );
   }
 

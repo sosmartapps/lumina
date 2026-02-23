@@ -43,6 +43,10 @@
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
 
+	<!-- Google Maps API Key (from Secrets.xcconfig) -->
+	<key>GMS_API_KEY</key>
+	<string>$(GMS_API_KEY)</string>
+
 	<!-- Location permissions -->
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Lumina needs your location to help you navigate to saved places and find your way home.</string>

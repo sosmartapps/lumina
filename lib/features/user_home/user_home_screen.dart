@@ -28,27 +28,63 @@ class UserHomeScreen extends ConsumerStatefulWidget {
   ConsumerState<UserHomeScreen> createState() => _UserHomeScreenState();
 }
 
-class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
+class _UserHomeScreenState extends ConsumerState<UserHomeScreen>
+    with WidgetsBindingObserver {
   int _caregiverTapCount = 0;
   bool _sundownPopupShowing = false;
   bool _reminderPopupShowing = false;
   Timer? _reminderCheckTimer;
   StreamSubscription? _reminderSubscription;
+  StreamSubscription? _userSettingsSubscription;
   List<Reminder> _todayReminders = [];
   final List<Reminder> _deferredReminders = []; // Home-only reminders waiting for arrival
   bool _wasAtHome = false; // Track home arrival
+  final List<_PendingAlert> _alertQueue = []; // Queued alerts to prevent stacking
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _speakWelcome();
     _listenForSundownAlerts();
+    _listenForUserSettingsChanges();
     _setupReminderSystem();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      _reminderCheckTimer?.cancel();
+    } else if (state == AppLifecycleState.resumed) {
+      // Restart periodic reminder check
+      _reminderCheckTimer?.cancel();
+      _reminderCheckTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+        _checkDueReminders();
+      });
+    }
   }
 
   void _listenForSundownAlerts() {
     final sundownService = ref.read(sundownServiceProvider);
     sundownService.alertNotifier.addListener(_onSundownAlert);
+  }
+
+  /// Listen for user settings changes and propagate to SundownService
+  void _listenForUserSettingsChanges() {
+    final appState = ref.read(appStateNotifierProvider);
+    final userId = appState.currentUserId;
+    if (userId == null) return;
+
+    _userSettingsSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .snapshots()
+        .listen((doc) {
+      if (!doc.exists || !mounted) return;
+      final user = AppUser.fromFirestore(doc);
+      final sundownService = ref.read(sundownServiceProvider);
+      sundownService.updateUser(user);
+    });
   }
 
   void _onSundownAlert() {
@@ -57,7 +93,12 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
     final result = sundownService.alertNotifier.value;
 
     if (result != null && !_sundownPopupShowing) {
-      _showSundownAlert(result);
+      if (_reminderPopupShowing) {
+        // Queue sundown alert — shows when reminder popup closes
+        _alertQueue.add(_PendingAlert.sundown(result));
+      } else {
+        _showSundownAlert(result);
+      }
     }
   }
 
@@ -84,6 +125,7 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
       ),
     ).then((_) {
       _sundownPopupShowing = false;
+      _processAlertQueue();
     });
   }
 
@@ -144,7 +186,7 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
 
   /// Check if any reminder is due and show popup (location-aware)
   void _checkDueReminders() {
-    if (!mounted || _reminderPopupShowing || _sundownPopupShowing) return;
+    if (!mounted || _reminderPopupShowing) return;
 
     final isAtHome = _isUserAtHome();
 
@@ -170,6 +212,11 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
           _deferredReminders.add(reminder);
           debugPrint('Deferred home-only reminder: ${reminder.title}');
           continue;
+        }
+        if (_sundownPopupShowing) {
+          // Queue reminder — shows when sundown popup closes
+          _alertQueue.add(_PendingAlert.reminder(reminder));
+          break;
         }
         _showReminderPopup(reminder);
         break;
@@ -229,10 +276,13 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
       ),
     ).then((_) {
       _reminderPopupShowing = false;
-      // If there are more deferred reminders and user is home, show next
-      if (_deferredReminders.isNotEmpty && _isUserAtHome()) {
+      // Process queued alerts first (e.g. sundown alert waiting)
+      if (_alertQueue.isNotEmpty) {
+        _processAlertQueue();
+      } else if (_deferredReminders.isNotEmpty && _isUserAtHome()) {
+        // Then show deferred home-only reminders
         Future.delayed(const Duration(seconds: 2), () {
-          if (mounted && !_reminderPopupShowing) {
+          if (mounted && !_reminderPopupShowing && !_sundownPopupShowing) {
             final next = _deferredReminders.removeAt(0);
             _showReminderPopup(next);
           }
@@ -241,10 +291,26 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
     });
   }
 
+  /// Process the next queued alert after a popup closes
+  void _processAlertQueue() {
+    if (_alertQueue.isEmpty || !mounted) return;
+    Future.delayed(const Duration(seconds: 1), () {
+      if (!mounted || _reminderPopupShowing || _sundownPopupShowing) return;
+      final next = _alertQueue.removeAt(0);
+      if (next.sundownResult != null) {
+        _showSundownAlert(next.sundownResult!);
+      } else if (next.reminder != null) {
+        _showReminderPopup(next.reminder!);
+      }
+    });
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _reminderCheckTimer?.cancel();
     _reminderSubscription?.cancel();
+    _userSettingsSubscription?.cancel();
     final sundownService = ref.read(sundownServiceProvider);
     sundownService.alertNotifier.removeListener(_onSundownAlert);
     super.dispose();
@@ -650,4 +716,18 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
       ),
     );
   }
+}
+
+/// Represents a queued alert (sundown or reminder) waiting to be shown.
+class _PendingAlert {
+  final SundownCheckResult? sundownResult;
+  final Reminder? reminder;
+
+  _PendingAlert.sundown(SundownCheckResult result)
+      : sundownResult = result,
+        reminder = null;
+
+  _PendingAlert.reminder(Reminder r)
+      : reminder = r,
+        sundownResult = null;
 }

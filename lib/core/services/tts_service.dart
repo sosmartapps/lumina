@@ -125,7 +125,7 @@ class TTSService {
     await speak(message);
   }
 
-  /// Play a pre-recorded alert sound
+  /// Play a pre-recorded alert sound, falling back to TTS if asset unavailable
   Future<void> playAlertSound({String? soundFile}) async {
     try {
       final source = soundFile != null
@@ -135,28 +135,36 @@ class TTSService {
       await _audioPlayer.setVolume(1.0);
       await _audioPlayer.play(source);
     } catch (e) {
-      debugPrint('Error playing alert sound: $e');
-      // Fallback: play system sound if available
+      debugPrint('Alert sound asset unavailable, using TTS fallback: $e');
+      if (!_isInitialized) await initialize();
+      await _tts.speak('Attention!');
+      await Future.delayed(const Duration(milliseconds: 800));
     }
   }
 
-  /// Play success sound
+  /// Play success sound, falling back to TTS if asset unavailable
   Future<void> playSuccessSound() async {
     try {
       await _audioPlayer.setVolume(1.0);
       await _audioPlayer.play(AssetSource('sounds/success.mp3'));
     } catch (e) {
-      debugPrint('Error playing success sound: $e');
+      debugPrint('Success sound asset unavailable, using TTS fallback: $e');
+      if (!_isInitialized) await initialize();
+      await _tts.speak('Done!');
+      await Future.delayed(const Duration(milliseconds: 500));
     }
   }
 
-  /// Play error sound
+  /// Play error sound, falling back to TTS if asset unavailable
   Future<void> playErrorSound() async {
     try {
       await _audioPlayer.setVolume(1.0);
       await _audioPlayer.play(AssetSource('sounds/error.mp3'));
     } catch (e) {
-      debugPrint('Error playing error sound: $e');
+      debugPrint('Error sound asset unavailable, using TTS fallback: $e');
+      if (!_isInitialized) await initialize();
+      await _tts.speak('Error!');
+      await Future.delayed(const Duration(milliseconds: 500));
     }
   }
 

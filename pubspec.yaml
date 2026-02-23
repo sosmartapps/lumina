@@ -10,6 +10,10 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # ── Shared Packages ──────────────────────────────────────────────────────
+  bug_reporter:
+    path: ../packages/bug_reporter
+
   # Firebase
   firebase_core: ^4.4.0
   firebase_auth: ^6.1.4
@@ -25,6 +29,8 @@ dependencies:
   geolocator: ^14.0.2
   geocoding: ^4.0.0
   flutter_polyline_points: ^3.1.0
+  latlong2: ^0.9.0
+  map_launcher: ^3.3.0
 
   # Phone & Communication
   url_launcher: ^6.2.2
@@ -48,6 +54,16 @@ dependencies:
 
   # Security
   crypto: ^3.0.3
+
+  # Bouncie / Vehicle Tracking
+  http: ^1.2.0
+  flutter_dotenv: ^5.2.1
+
+  # Battery Monitoring
+  battery_plus: ^6.0.0
+
+  # Screenshot (for bug reporter)
+  screenshot: ^3.0.0
 
   # Utilities
   intl: ^0.20.2
@@ -75,6 +91,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - .env
     - assets/images/
     - assets/sounds/
 

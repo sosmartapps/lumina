@@ -60,9 +60,13 @@ service cloud.firestore {
 
     // Medication logs collection
     match /medication_logs/{logId} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid ||
+         isCaregiverFor(resource.data.userId));
       allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
+      allow update: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid ||
+         isCaregiverFor(resource.data.userId));
     }
 
     // Geo zones collection

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
@@ -10,7 +11,11 @@ import '../../core/theme/app_theme.dart';
 import '../../core/models/app_user.dart';
 import '../../core/models/medication.dart';
 import '../../core/models/geo_zone.dart';
+import '../battery/battery_status_card.dart';
+import '../bouncie/vehicle_status_card.dart';
+import '../bouncie/trip_history_screen.dart';
 import '../user_home/user_home_screen.dart';
+import 'monitoring_settings_screen.dart';
 import 'manage_contacts_screen.dart';
 import 'manage_locations_screen.dart';
 import 'manage_medications_screen.dart';
@@ -32,6 +37,42 @@ class CaregiverDashboardScreen extends ConsumerStatefulWidget {
 
 class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScreen> {
   int _selectedIndex = 0;
+  LatLng? _vehiclePosition;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshVehicleLocation();
+  }
+
+  Future<void> _openDirectionsToVehicle() async {
+    if (_vehiclePosition == null) return;
+    final lat = _vehiclePosition!.latitude;
+    final lng = _vehiclePosition!.longitude;
+    // Apple Maps on iOS, Google Maps on Android
+    final uri = Uri.parse(
+      'https://maps.apple.com/?daddr=$lat,$lng&dirflg=d',
+    );
+    final googleUri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
+    );
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      await launchUrl(googleUri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<void> _refreshVehicleLocation() async {
+    try {
+      final bouncie = ref.read(bouncieServiceProvider);
+      final imei = ref.read(bouncieVehicleImeiProvider);
+      final loc = await bouncie.getVehicleLocation(imei);
+      if (loc != null && mounted) {
+        setState(() => _vehiclePosition = LatLng(loc.latitude, loc.longitude));
+      }
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -159,6 +200,14 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
               ),
             ],
           ),
+          const SizedBox(height: 12),
+
+          // Vehicle status
+          const VehicleStatusCard(),
+          const SizedBox(height: 12),
+
+          // Phone battery
+          const BatteryStatusCard(),
           const SizedBox(height: 12),
 
           // Medication status
@@ -436,6 +485,16 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
                         BitmapDescriptor.hueGreen,
                       ),
                     ),
+                  if (_vehiclePosition != null)
+                    Marker(
+                      markerId: const MarkerId('vehicle'),
+                      position: _vehiclePosition!,
+                      infoWindow: const InfoWindow(title: 'Vehicle'),
+                      icon: BitmapDescriptor.defaultMarkerWithHue(
+                        BitmapDescriptor.hueOrange,
+                      ),
+                      onTap: () => _openDirectionsToVehicle(),
+                    ),
                 },
                 myLocationButtonEnabled: false,
                 zoomControlsEnabled: true,
@@ -593,6 +652,26 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
             () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const SundownSettingsScreen()),
+            ),
+          ),
+          _buildManageItem(
+            'Trip History',
+            'View recent vehicle trips',
+            Icons.route,
+            AppTheme.primaryBlue,
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const TripHistoryScreen()),
+            ),
+          ),
+          _buildManageItem(
+            'Monitoring',
+            'Battery & fuel alert thresholds',
+            Icons.monitor_heart,
+            AppTheme.primaryOrange,
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const MonitoringSettingsScreen()),
             ),
           ),
           _buildManageItem(

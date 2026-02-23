@@ -49,6 +49,10 @@ android {
         targetSdk 36
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
+
+        manifestPlaceholders += [
+            mapsApiKey: localProperties.getProperty('MAPS_API_KEY', '')
+        ]
     }
 
     buildTypes {

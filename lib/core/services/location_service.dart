@@ -114,7 +114,7 @@ class LocationService {
     try {
       final locationUpdate = LocationUpdate(
         id: '',
-        oderId: userId,
+        userId: userId,
         location: GeoPoint(position.latitude, position.longitude),
         accuracy: position.accuracy,
         speed: position.speed,

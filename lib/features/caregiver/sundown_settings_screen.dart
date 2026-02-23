@@ -146,13 +146,13 @@ class _SundownSettingsScreenState extends ConsumerState<SundownSettingsScreen> {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    const Text('15', style: TextStyle(color: Colors.grey)),
+                    const Text('30', style: TextStyle(color: Colors.grey)),
                     Expanded(
                       child: Slider(
                         value: _bufferMinutes.toDouble(),
-                        min: 15,
+                        min: 30,
                         max: 60,
-                        divisions: 9,
+                        divisions: 6,
                         activeColor: AppTheme.primaryOrange,
                         label: '$_bufferMinutes min',
                         onChanged: _enabled

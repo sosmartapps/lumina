@@ -2,10 +2,14 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart' as ll;
 
 import '../models/geo_zone.dart';
 import 'notification_service.dart';
 import 'location_service.dart';
+import '../../features/bouncie/bouncie_service.dart';
+import '../../features/bouncie/bouncie_alert_manager.dart';
+import '../../features/fuel/fuel_monitor.dart';
 
 /// Service for managing geofencing and zone alerts
 class GeofenceServiceWrapper {
@@ -16,6 +20,20 @@ class GeofenceServiceWrapper {
   String? _currentUserId;
   List<GeoZone> _activeZones = [];
   Map<String, bool> _zoneStates = {}; // Track if user is inside each zone
+
+  // Bouncie vehicle location sync
+  BouncieService? _bouncieService;
+  String? _vehicleImei;
+  final LocationSyncChecker _syncChecker = const LocationSyncChecker();
+  final BouncieAlertManager _alertManager = BouncieAlertManager();
+  FuelMonitor? _fuelMonitor;
+
+  /// Configure Bouncie vehicle tracking for location sync checks.
+  void configureBouncie(BouncieService service, String imei, {FuelMonitor? fuelMonitor}) {
+    _bouncieService = service;
+    _vehicleImei = imei;
+    _fuelMonitor = fuelMonitor;
+  }
 
   /// Initialize geofencing for a user
   Future<void> initialize(String userId) async {
@@ -37,6 +55,8 @@ class GeofenceServiceWrapper {
       _activeZones =
           snapshot.docs.map((doc) => GeoZone.fromFirestore(doc)).toList();
       _initializeZoneStates();
+    }, onError: (e) {
+      debugPrint('Error listening to zone changes: $e');
     });
   }
 
@@ -44,24 +64,32 @@ class GeofenceServiceWrapper {
   Future<void> _loadActiveZones() async {
     if (_currentUserId == null) return;
 
-    final snapshot = await _firestore
-        .collection('geo_zones')
-        .where('userId', isEqualTo: _currentUserId)
-        .where('isActive', isEqualTo: true)
-        .get();
+    try {
+      final snapshot = await _firestore
+          .collection('geo_zones')
+          .where('userId', isEqualTo: _currentUserId)
+          .where('isActive', isEqualTo: true)
+          .get();
 
-    _activeZones =
-        snapshot.docs.map((doc) => GeoZone.fromFirestore(doc)).toList();
-    _initializeZoneStates();
+      _activeZones =
+          snapshot.docs.map((doc) => GeoZone.fromFirestore(doc)).toList();
+      _initializeZoneStates();
+    } catch (e) {
+      debugPrint('Error loading active zones: $e');
+    }
   }
 
   /// Initialize zone states based on current position
   Future<void> _initializeZoneStates() async {
-    final position = await _locationService.getCurrentPosition();
-    if (position == null) return;
+    try {
+      final position = await _locationService.getCurrentPosition();
+      if (position == null) return;
 
-    for (final zone in _activeZones) {
-      _zoneStates[zone.id] = _locationService.isPositionInZone(position, zone);
+      for (final zone in _activeZones) {
+        _zoneStates[zone.id] = _locationService.isPositionInZone(position, zone);
+      }
+    } catch (e) {
+      debugPrint('Error initializing zone states: $e');
     }
   }
 
@@ -74,27 +102,84 @@ class GeofenceServiceWrapper {
     );
   }
 
-  /// Check all geofences
+  /// Check all geofences and vehicle sync
   Future<void> _checkGeofences() async {
-    if (_currentUserId == null || _activeZones.isEmpty) return;
+    if (_currentUserId == null) return;
 
-    final position = await _locationService.getCurrentPosition();
-    if (position == null) return;
+    try {
+      final position = await _locationService.getCurrentPosition();
+      if (position == null) return;
 
-    for (final zone in _activeZones) {
-      final isInside = _locationService.isPositionInZone(position, zone);
-      final wasInside = _zoneStates[zone.id] ?? false;
+      // Check geofence zones
+      for (final zone in _activeZones) {
+        final isInside = _locationService.isPositionInZone(position, zone);
+        final wasInside = _zoneStates[zone.id] ?? false;
 
-      if (isInside != wasInside) {
-        // State changed
-        _zoneStates[zone.id] = isInside;
+        if (isInside != wasInside) {
+          // State changed
+          _zoneStates[zone.id] = isInside;
 
-        if (isInside && zone.alertOnEntry) {
-          await _handleZoneEntry(zone, position);
-        } else if (!isInside && zone.alertOnExit) {
-          await _handleZoneExit(zone, position);
+          if (isInside && zone.alertOnEntry) {
+            await _handleZoneEntry(zone, position);
+          } else if (!isInside && zone.alertOnExit) {
+            await _handleZoneExit(zone, position);
+          }
         }
       }
+
+      // Check vehicle-phone location sync
+      await _checkVehicleSync(position);
+    } catch (e) {
+      debugPrint('Error checking geofences: $e');
+    }
+  }
+
+  /// Compare phone GPS against Bouncie vehicle GPS.
+  Future<void> _checkVehicleSync(Position position) async {
+    if (_bouncieService == null || _vehicleImei == null) return;
+
+    try {
+      // Check fuel level if fuel monitor is configured
+      if (_fuelMonitor != null) {
+        final fuelLevel = await _bouncieService!.getFuelLevel(_vehicleImei!);
+        if (fuelLevel != null) {
+          await _fuelMonitor!.checkFuelLevel(fuelLevel);
+        }
+      }
+
+      final vehicleLocation =
+          await _bouncieService!.getVehicleLocation(_vehicleImei!);
+      if (vehicleLocation == null) return;
+
+      final phoneLocation = ll.LatLng(position.latitude, position.longitude);
+      final result = await _syncChecker.check(
+        phoneLocation: phoneLocation,
+        vehicleLocation: vehicleLocation,
+      );
+
+      await _alertManager.handleSyncResult(
+        result,
+        caregiverName: 'Caregiver',
+        caregiverWebhookUrl: '', // No webhook configured yet
+      );
+
+      if (!result.inSync) {
+        // Also notify via the standard caregiver notification system.
+        final distanceMi = (result.distanceMeters / 1609.34).toStringAsFixed(1);
+        await NotificationService.notifyCaregivers(
+          userId: _currentUserId!,
+          title: 'Vehicle Location Mismatch',
+          body: 'Phone is $distanceMi mi from vehicle ($vehicleLocation)',
+          data: {
+            'type': 'vehicle_sync_alert',
+            'distanceMeters': result.distanceMeters.toString(),
+            'vehicleLat': result.vehicleLocation.latitude.toString(),
+            'vehicleLng': result.vehicleLocation.longitude.toString(),
+          },
+        );
+      }
+    } catch (e) {
+      debugPrint('Error checking vehicle sync: $e');
     }
   }
 
