@@ -124,7 +124,7 @@ packages:
   bug_reporter:
     dependency: "direct main"
     description:
-      path: "../packages/bug_reporter"
+      path: "packages/bug_reporter"
       relative: true
     source: path
     version: "0.1.0"
