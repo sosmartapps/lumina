@@ -60,8 +60,9 @@ dependencies:
   http: ^1.2.0
   flutter_dotenv: ^5.2.1
 
-  # Battery Monitoring
+  # Battery & Sensor Monitoring
   battery_plus: ^6.0.0
+  sensors_plus: ^6.1.0
 
   # Screenshot (for bug reporter)
   screenshot: ^3.0.0

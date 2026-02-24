@@ -15,6 +15,7 @@ import '../services/subscription_service.dart';
 import '../services/prescription_scan_service.dart';
 import '../services/pill_photo_service.dart';
 import '../services/medical_records_service.dart';
+import '../services/device_motion_service.dart';
 import 'subscription_provider.dart';
 import '../../features/bouncie/bouncie_service.dart';
 
@@ -84,3 +85,10 @@ final pillPhotoServiceProvider = Provider((ref) => PillPhotoService());
 // Medical records export
 final medicalRecordsServiceProvider =
     Provider((ref) => MedicalRecordsService());
+
+// Device motion / pickup detection
+final deviceMotionServiceProvider = Provider((ref) {
+  final service = DeviceMotionService();
+  ref.onDispose(() => service.dispose());
+  return service;
+});

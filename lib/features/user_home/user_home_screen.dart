@@ -15,6 +15,7 @@ import '../../core/models/app_user.dart';
 import '../../core/models/reminder.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/sundown_service.dart';
+import '../../core/services/device_motion_service.dart';
 import '../navigation/navigation_screen.dart';
 import '../contacts/contacts_screen.dart';
 import '../reminders/reminders_screen.dart';
@@ -40,6 +41,7 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen>
   final List<Reminder> _deferredReminders = []; // Home-only reminders waiting for arrival
   bool _wasAtHome = false; // Track home arrival
   final List<_PendingAlert> _alertQueue = []; // Queued alerts to prevent stacking
+  StreamSubscription<DateTime>? _motionSubscription;
 
   @override
   void initState() {
@@ -49,6 +51,7 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen>
     _listenForSundownAlerts();
     _listenForUserSettingsChanges();
     _setupReminderSystem();
+    _startMotionDetection();
   }
 
   @override
@@ -112,7 +115,7 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen>
       MaterialPageRoute(
         fullscreenDialog: true,
         builder: (context) => SundownAlertPopup(
-          userName: user.name,
+          userName: user.displayName,
           checkResult: result,
           homeLocation: user.homeLocation!,
           homeAddress: user.homeAddress,
@@ -147,7 +150,7 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen>
     final userProvider = ref.read(userNotifierProvider);
     if (userProvider.user != null) {
       final reminderService = ref.read(reminderServiceProvider);
-      reminderService.scheduleAllNotifications(userId, userProvider.user!.name);
+      reminderService.scheduleAllNotifications(userId, userProvider.user!.displayName);
     }
 
     // Subscribe to today's reminders for auto-trigger
@@ -251,9 +254,9 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen>
       MaterialPageRoute(
         fullscreenDialog: true,
         builder: (context) => ReminderPopup(
-          userName: user.name,
+          userName: user.displayName,
           title: reminder.title,
-          message: reminder.getSpokenMessage(user.name),
+          message: reminder.getSpokenMessage(user.displayName),
           reminderType: reminder.type,
           requiresPhoto: reminder.requiresPhoto,
           onDismiss: () {
@@ -305,14 +308,39 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen>
     });
   }
 
+  /// Start accelerometer-based pickup detection if enabled.
+  void _startMotionDetection() {
+    final userProvider = ref.read(userNotifierProvider);
+    final user = userProvider.user;
+    if (user == null || !user.settings.motionDetectionEnabled) return;
+
+    final appState = ref.read(appStateNotifierProvider);
+    final userId = appState.currentUserId;
+    if (userId == null) return;
+
+    final motionService = ref.read(deviceMotionServiceProvider);
+    motionService.start(userId);
+
+    _motionSubscription = motionService.onPickup.listen((pickupTime) {
+      if (!mounted) return;
+      // If within the morning window, check for pending medications
+      if (DeviceMotionService.isInMorningWindow(user.settings)) {
+        _checkDueReminders();
+      }
+    });
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _reminderCheckTimer?.cancel();
     _reminderSubscription?.cancel();
     _userSettingsSubscription?.cancel();
+    _motionSubscription?.cancel();
     final sundownService = ref.read(sundownServiceProvider);
     sundownService.alertNotifier.removeListener(_onSundownAlert);
+    // Stop motion detection
+    ref.read(deviceMotionServiceProvider).stop();
     super.dispose();
   }
 
@@ -326,7 +354,7 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen>
     if (userProvider.user != null &&
         userProvider.user!.settings.voicePromptsEnabled) {
       await tts.speak(
-        'Hello ${userProvider.user!.name}. Tap any button to get help.',
+        'Hello ${userProvider.user!.displayName}. Tap any button to get help.',
       );
     }
   }
@@ -483,7 +511,7 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Hello, ${user.name.split(' ').first}!',
+                    'Hello, ${user.displayName}!',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 28,

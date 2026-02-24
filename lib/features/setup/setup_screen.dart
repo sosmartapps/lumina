@@ -32,6 +32,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
 
   // User info
   final _userNameController = TextEditingController();
+  final _userPreferredNameController = TextEditingController();
   final _userPhoneController = TextEditingController();
   final _homeAddressController = TextEditingController();
 
@@ -79,6 +80,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
     _nameController.dispose();
     _phoneController.dispose();
     _userNameController.dispose();
+    _userPreferredNameController.dispose();
     _userPhoneController.dispose();
     _homeAddressController.dispose();
     _contactNameController.dispose();
@@ -475,9 +477,20 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
           TextField(
             controller: _userNameController,
             decoration: const InputDecoration(
-              labelText: 'User\'s Name *',
+              labelText: 'User\'s Full Name *',
               prefixIcon: Icon(Icons.person),
-              hintText: 'e.g., Jack',
+              hintText: 'e.g., Robert Smith',
+            ),
+            textCapitalization: TextCapitalization.words,
+          ),
+          const SizedBox(height: 16),
+
+          TextField(
+            controller: _userPreferredNameController,
+            decoration: const InputDecoration(
+              labelText: 'Preferred Name',
+              prefixIcon: Icon(Icons.favorite_border),
+              hintText: 'What should the app call them? e.g., Bobby',
             ),
             textCapitalization: TextCapitalization.words,
           ),
@@ -1379,8 +1392,10 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
       }
 
       // Create user
+      final preferredName = _userPreferredNameController.text.trim();
       final user = await authService.createUser(
         name: _userNameController.text.trim(),
+        preferredName: preferredName.isEmpty ? null : preferredName,
         phoneNumber: _userPhoneController.text.trim(),
         primaryCaregiverId: _caregiverId!,
       );

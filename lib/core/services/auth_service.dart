@@ -199,6 +199,7 @@ class AuthService {
   /// Create new user (patient) - called during initial setup
   Future<AppUser> createUser({
     required String name,
+    String? preferredName,
     String? phoneNumber,
     required String primaryCaregiverId,
   }) async {
@@ -207,6 +208,7 @@ class AuthService {
     final user = AppUser(
       id: docRef.id,
       name: name,
+      preferredName: preferredName,
       phoneNumber: phoneNumber,
       caregiverIds: [primaryCaregiverId],
       primaryCaregiverId: primaryCaregiverId,

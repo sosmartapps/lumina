@@ -416,23 +416,51 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
                     ),
                   ),
                 const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.circle, color: Colors.green, size: 10),
-                      SizedBox(width: 4),
-                      Text(
-                        'Active',
-                        style: TextStyle(color: Colors.white, fontSize: 12),
+                StreamBuilder<DocumentSnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user.id)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    String label = 'Active';
+                    Color dotColor = Colors.green;
+                    if (snapshot.hasData && snapshot.data!.exists) {
+                      final data = snapshot.data!.data() as Map<String, dynamic>?;
+                      final lastActive = (data?['lastActiveAt'] as Timestamp?)?.toDate();
+                      if (lastActive != null) {
+                        final diff = DateTime.now().difference(lastActive);
+                        if (diff.inMinutes < 5) {
+                          label = 'Active now';
+                        } else if (diff.inHours < 1) {
+                          label = 'Active ${diff.inMinutes}m ago';
+                        } else if (diff.inHours < 24) {
+                          label = 'Active ${diff.inHours}h ago';
+                          dotColor = Colors.orange;
+                        } else {
+                          label = 'Last active ${DateFormat.MMMd().format(lastActive)}';
+                          dotColor = Colors.grey;
+                        }
+                      }
+                    }
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ],
-                  ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.circle, color: dotColor, size: 10),
+                          const SizedBox(width: 4),
+                          Text(
+                            label,
+                            style: const TextStyle(color: Colors.white, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ],
             ),

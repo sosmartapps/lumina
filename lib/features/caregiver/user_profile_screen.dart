@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
@@ -301,6 +302,17 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       );
 
       await UserProfileService.saveUserProfile(widget.userId, updatedProfile);
+
+      // Sync preferred name to AppUser so TTS/notifications use it
+      final newPreferred = _preferredNameController.text.trim();
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.userId)
+          .update({
+        'preferredName': newPreferred.isEmpty ? null : newPreferred,
+        'updatedAt': Timestamp.fromDate(DateTime.now()),
+      });
+
       setState(() {
         _profile = updatedProfile;
         _isSaving = false;

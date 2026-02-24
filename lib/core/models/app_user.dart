@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class AppUser {
   final String id;
   final String name;
+  final String? preferredName;
   final String? photoUrl;
   final String? phoneNumber;
   final List<String> caregiverIds;
@@ -19,9 +20,13 @@ class AppUser {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  /// The name the app uses to address the patient (preferred name or first name).
+  String get displayName => preferredName ?? name.split(' ').first;
+
   AppUser({
     required this.id,
     required this.name,
+    this.preferredName,
     this.photoUrl,
     this.phoneNumber,
     this.caregiverIds = const [],
@@ -45,6 +50,7 @@ class AppUser {
     return AppUser(
       id: doc.id,
       name: data['name'] ?? '',
+      preferredName: data['preferredName'],
       photoUrl: data['photoUrl'],
       phoneNumber: data['phoneNumber'],
       caregiverIds: List<String>.from(data['caregiverIds'] ?? []),
@@ -71,6 +77,7 @@ class AppUser {
   Map<String, dynamic> toFirestore() {
     return {
       'name': name,
+      'preferredName': preferredName,
       'photoUrl': photoUrl,
       'phoneNumber': phoneNumber,
       'caregiverIds': caregiverIds,
@@ -92,6 +99,7 @@ class AppUser {
 
   AppUser copyWith({
     String? name,
+    String? preferredName,
     String? photoUrl,
     String? phoneNumber,
     List<String>? caregiverIds,
@@ -108,6 +116,7 @@ class AppUser {
     return AppUser(
       id: id,
       name: name ?? this.name,
+      preferredName: preferredName ?? this.preferredName,
       photoUrl: photoUrl ?? this.photoUrl,
       phoneNumber: phoneNumber ?? this.phoneNumber,
       caregiverIds: caregiverIds ?? this.caregiverIds,
@@ -227,6 +236,9 @@ class UserSettings {
   final String voiceLanguage;
   final bool sundownAlertEnabled;
   final int sundownBufferMinutes; // minutes before sunset to alert
+  final bool motionDetectionEnabled;
+  final int morningWindowStart; // hour (0-23), default 5
+  final int morningWindowEnd; // hour (0-23), default 10
 
   UserSettings({
     this.highContrastMode = false,
@@ -238,6 +250,9 @@ class UserSettings {
     this.voiceLanguage = 'en-US',
     this.sundownAlertEnabled = true,
     this.sundownBufferMinutes = 30,
+    this.motionDetectionEnabled = true,
+    this.morningWindowStart = 5,
+    this.morningWindowEnd = 10,
   });
 
   factory UserSettings.fromMap(Map<String, dynamic> map) {
@@ -251,6 +266,9 @@ class UserSettings {
       voiceLanguage: map['voiceLanguage'] ?? 'en-US',
       sundownAlertEnabled: map['sundownAlertEnabled'] ?? true,
       sundownBufferMinutes: ((map['sundownBufferMinutes'] ?? 30) as int).clamp(30, 60),
+      motionDetectionEnabled: map['motionDetectionEnabled'] ?? true,
+      morningWindowStart: map['morningWindowStart'] ?? 5,
+      morningWindowEnd: map['morningWindowEnd'] ?? 10,
     );
   }
 
@@ -265,6 +283,9 @@ class UserSettings {
       'voiceLanguage': voiceLanguage,
       'sundownAlertEnabled': sundownAlertEnabled,
       'sundownBufferMinutes': sundownBufferMinutes,
+      'motionDetectionEnabled': motionDetectionEnabled,
+      'morningWindowStart': morningWindowStart,
+      'morningWindowEnd': morningWindowEnd,
     };
   }
 
@@ -278,6 +299,9 @@ class UserSettings {
     String? voiceLanguage,
     bool? sundownAlertEnabled,
     int? sundownBufferMinutes,
+    bool? motionDetectionEnabled,
+    int? morningWindowStart,
+    int? morningWindowEnd,
   }) {
     return UserSettings(
       highContrastMode: highContrastMode ?? this.highContrastMode,
@@ -289,6 +313,46 @@ class UserSettings {
       voiceLanguage: voiceLanguage ?? this.voiceLanguage,
       sundownAlertEnabled: sundownAlertEnabled ?? this.sundownAlertEnabled,
       sundownBufferMinutes: sundownBufferMinutes ?? this.sundownBufferMinutes,
+      motionDetectionEnabled: motionDetectionEnabled ?? this.motionDetectionEnabled,
+      morningWindowStart: morningWindowStart ?? this.morningWindowStart,
+      morningWindowEnd: morningWindowEnd ?? this.morningWindowEnd,
     );
+  }
+}
+
+/// Record of a device activity event (e.g., phone pickup).
+class ActivityEvent {
+  final String id;
+  final String userId;
+  final String type; // 'device_pickup', 'device_stationary', 'morning_wake'
+  final DateTime timestamp;
+  final Map<String, dynamic>? metadata;
+
+  ActivityEvent({
+    required this.id,
+    required this.userId,
+    required this.type,
+    required this.timestamp,
+    this.metadata,
+  });
+
+  factory ActivityEvent.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return ActivityEvent(
+      id: doc.id,
+      userId: data['userId'] ?? '',
+      type: data['type'] ?? '',
+      timestamp: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      metadata: data['metadata'] as Map<String, dynamic>?,
+    );
+  }
+
+  Map<String, dynamic> toFirestore() {
+    return {
+      'userId': userId,
+      'type': type,
+      'timestamp': Timestamp.fromDate(timestamp),
+      'metadata': metadata,
+    };
   }
 }
