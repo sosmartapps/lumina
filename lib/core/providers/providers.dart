@@ -14,6 +14,7 @@ import '../services/invite_service.dart';
 import '../services/subscription_service.dart';
 import '../services/prescription_scan_service.dart';
 import '../services/pill_photo_service.dart';
+import '../services/medical_records_service.dart';
 import 'subscription_provider.dart';
 import '../../features/bouncie/bouncie_service.dart';
 
@@ -79,3 +80,7 @@ final prescriptionScanServiceProvider = Provider((ref) {
   return service;
 });
 final pillPhotoServiceProvider = Provider((ref) => PillPhotoService());
+
+// Medical records export
+final medicalRecordsServiceProvider =
+    Provider((ref) => MedicalRecordsService());
