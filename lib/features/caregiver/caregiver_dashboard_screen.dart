@@ -32,6 +32,7 @@ import 'invite_caregiver_screen.dart';
 import 'manage_caregivers_screen.dart';
 import '../../features/subscription/subscription_status_card.dart';
 import '../../features/subscription/paywall_screen.dart';
+import '../medical_records/medical_records_screen.dart';
 
 /// Main dashboard for caregivers
 class CaregiverDashboardScreen extends ConsumerStatefulWidget {
@@ -705,6 +706,16 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
             () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const ManagePrescriptionsScreen()),
+            ),
+          ),
+          _buildManageItem(
+            'Medical Records',
+            'Export & share records with providers (PDF)',
+            Icons.folder_shared,
+            Colors.teal,
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const MedicalRecordsScreen()),
             ),
           ),
           _buildManageItem(
