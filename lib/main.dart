@@ -16,6 +16,7 @@ import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/background_service.dart';
+import 'core/services/deep_link_service.dart';
 import 'features/splash/splash_screen.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
@@ -64,6 +65,9 @@ void main() async {
   } catch (e) {
     debugPrint('Anonymous auth failed (enable in Firebase console): $e');
   }
+
+  // Initialize deep link handling
+  await DeepLinkService().initialize();
 
   // Log app open event
   unawaited(FirebaseAnalytics.instance.logAppOpen());

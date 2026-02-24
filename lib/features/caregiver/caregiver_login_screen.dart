@@ -173,7 +173,24 @@ class _CaregiverLoginScreenState extends ConsumerState<CaregiverLoginScreen> {
               ),
             ),
 
-            const SizedBox(height: 40),
+            const SizedBox(height: 8),
+
+            // Invite code link
+            Center(
+              child: TextButton.icon(
+                onPressed: _showInviteCodeDialog,
+                icon: const Icon(Icons.vpn_key, size: 18, color: AppTheme.primaryGreen),
+                label: const Text(
+                  'Have an invite code?',
+                  style: TextStyle(
+                    color: AppTheme.primaryGreen,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 32),
 
             // Info box
             Container(
@@ -295,6 +312,128 @@ class _CaregiverLoginScreenState extends ConsumerState<CaregiverLoginScreen> {
               child: const Text('Send'),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  void _showInviteCodeDialog() {
+    final codeController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        bool redeeming = false;
+        String? dialogError;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Enter Invite Code'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Enter the 6-character code shared by the primary caregiver.'),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: codeController,
+                    decoration: const InputDecoration(
+                      labelText: 'Invite Code',
+                      prefixIcon: Icon(Icons.vpn_key),
+                      hintText: 'e.g., ABC123',
+                    ),
+                    textCapitalization: TextCapitalization.characters,
+                    maxLength: 6,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 6,
+                    ),
+                  ),
+                  if (dialogError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      dialogError!,
+                      style: const TextStyle(color: AppTheme.primaryRed, fontSize: 13),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: redeeming
+                      ? null
+                      : () async {
+                          final code = codeController.text.trim();
+                          if (code.length != 6) {
+                            setDialogState(() => dialogError = 'Code must be 6 characters');
+                            return;
+                          }
+
+                          setDialogState(() {
+                            redeeming = true;
+                            dialogError = null;
+                          });
+
+                          try {
+                            final authService = ref.read(authServiceProvider);
+                            // Sign in first
+                            final credential = await authService.signInWithEmail(
+                              email: _emailController.text.trim(),
+                              password: _passwordController.text,
+                            );
+
+                            final inviteService = ref.read(inviteServiceProvider);
+                            final patient = await inviteService.redeemInviteCode(
+                              code: code,
+                              caregiverId: credential.user!.uid,
+                            );
+
+                            if (!mounted) return;
+
+                            final appState = ref.read(appStateNotifierProvider);
+                            await appState.setCaregiverMode(true, caregiverId: credential.user!.uid);
+
+                            final caregiverProvider = ref.read(caregiverNotifierProvider);
+                            await caregiverProvider.loadCaregiver(credential.user!.uid);
+                            caregiverProvider.listenToCaregiver(credential.user!.uid);
+
+                            if (!mounted) return;
+                            if (dialogContext.mounted) {
+                              Navigator.pop(dialogContext);
+                            }
+
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(
+                                content: Text('Joined ${patient.name}\'s care team!'),
+                                backgroundColor: AppTheme.primaryGreen,
+                              ),
+                            );
+
+                            Navigator.of(this.context).pushReplacement(
+                              MaterialPageRoute(builder: (context) => const CaregiverDashboardScreen()),
+                            );
+                          } catch (e) {
+                            setDialogState(() {
+                              redeeming = false;
+                              dialogError = e.toString();
+                            });
+                          }
+                        },
+                  child: redeeming
+                      ? const SizedBox(
+                          width: 20, height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Join'),
+                ),
+              ],
+            );
+          },
         );
       },
     );

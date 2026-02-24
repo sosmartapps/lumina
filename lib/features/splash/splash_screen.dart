@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/providers.dart';
 import '../../core/services/background_service.dart';
+import '../../core/services/deep_link_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../setup/setup_screen.dart';
 import '../user_home/user_home_screen.dart';
 import '../caregiver/caregiver_login_screen.dart';
+import '../caregiver/caregiver_dashboard_screen.dart';
 
 /// Splash screen that handles app initialization
 class SplashScreen extends ConsumerStatefulWidget {
@@ -106,6 +108,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         );
       }
 
+      // Initialize subscription status
+      try {
+        final subService = ref.read(subscriptionServiceProvider);
+        await subService.initialize(appState.currentUserId!);
+        final subProvider = ref.read(subscriptionNotifierProvider);
+        await subProvider.loadSubscription(appState.currentUserId!);
+      } catch (e) {
+        debugPrint('Subscription init failed: $e');
+      }
+
       // Start background monitoring service
       await BackgroundMonitoringService.start();
 
@@ -116,7 +128,32 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         final caregiverProv = ref.read(caregiverNotifierProvider);
         await caregiverProv.loadCaregiver(appState.currentCaregiverId!);
 
-        _navigateTo(const CaregiverLoginScreen());
+        // Restore last-viewed patient selection
+        if (appState.currentUserId != null) {
+          caregiverProv.selectUserById(appState.currentUserId!);
+        }
+
+        // Check for pending invite deep link
+        final deepLinkService = DeepLinkService();
+        if (deepLinkService.pendingInviteCode != null) {
+          try {
+            final inviteService = ref.read(inviteServiceProvider);
+            final patient = await inviteService.redeemInviteCode(
+              code: deepLinkService.pendingInviteCode!,
+              caregiverId: appState.currentCaregiverId!,
+            );
+            deepLinkService.clearPendingInviteCode();
+            await caregiverProv.loadCaregiver(appState.currentCaregiverId!);
+            caregiverProv.selectUserById(patient.id);
+            _navigateTo(const CaregiverDashboardScreen());
+          } catch (e) {
+            debugPrint('Deep link invite redeem failed: $e');
+            deepLinkService.clearPendingInviteCode();
+            _navigateTo(const CaregiverLoginScreen());
+          }
+        } else {
+          _navigateTo(const CaregiverLoginScreen());
+        }
       } else {
         // User mode
         _navigateTo(const UserHomeScreen());

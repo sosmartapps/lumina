@@ -19,6 +19,7 @@ import 'monitoring_settings_screen.dart';
 import 'manage_contacts_screen.dart';
 import 'manage_locations_screen.dart';
 import 'manage_medications_screen.dart';
+import '../medication/manage_prescriptions_screen.dart';
 import 'manage_reminders_screen.dart';
 import 'manage_zones_screen.dart';
 import 'app_protection_screen.dart';
@@ -26,6 +27,11 @@ import 'sundown_settings_screen.dart';
 import 'user_settings_screen.dart';
 import 'medical_profile_screen.dart';
 import 'user_profile_screen.dart';
+import 'add_patient_screen.dart';
+import 'invite_caregiver_screen.dart';
+import 'manage_caregivers_screen.dart';
+import '../../features/subscription/subscription_status_card.dart';
+import '../../features/subscription/paywall_screen.dart';
 
 /// Main dashboard for caregivers
 class CaregiverDashboardScreen extends ConsumerStatefulWidget {
@@ -80,7 +86,7 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
       backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(
         backgroundColor: AppTheme.primaryPurple,
-        title: const Text('Caregiver Dashboard'),
+        title: _buildPatientSwitcher(),
         actions: [
           IconButton(
             icon: const Icon(Icons.exit_to_app),
@@ -139,6 +145,79 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
             selectedIcon: Icon(Icons.history),
             label: 'History',
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPatientSwitcher() {
+    final caregiverProvider = ref.read(caregiverNotifierProvider);
+    final users = caregiverProvider.managedUsers;
+    final selected = caregiverProvider.selectedUser;
+
+    if (users.length <= 1) {
+      return Text(selected?.name ?? 'Caregiver Dashboard');
+    }
+
+    return PopupMenuButton<String>(
+      onSelected: (value) {
+        if (value == '_add_patient') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AddPatientScreen()),
+          );
+        } else {
+          caregiverProvider.selectUserById(value);
+          ref.read(appStateNotifierProvider).setCurrentUserId(value);
+        }
+      },
+      itemBuilder: (context) => [
+        ...users.map((u) => PopupMenuItem<String>(
+              value: u.id,
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundColor: AppTheme.primaryPurple.withValues(alpha: 0.2),
+                    child: Text(
+                      u.name.isNotEmpty ? u.name[0].toUpperCase() : '?',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.primaryPurple,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(u.name)),
+                  if (u.id == selected?.id)
+                    const Icon(Icons.check, color: AppTheme.primaryGreen, size: 20),
+                ],
+              ),
+            )),
+        const PopupMenuDivider(),
+        const PopupMenuItem<String>(
+          value: '_add_patient',
+          child: Row(
+            children: [
+              Icon(Icons.person_add, color: AppTheme.primaryBlue),
+              SizedBox(width: 12),
+              Text('Add Patient', style: TextStyle(color: AppTheme.primaryBlue)),
+            ],
+          ),
+        ),
+      ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              selected?.name ?? 'Dashboard',
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 20),
+            ),
+          ),
+          const SizedBox(width: 4),
+          const Icon(Icons.arrow_drop_down, size: 24),
         ],
       ),
     );
@@ -208,6 +287,10 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
 
           // Phone battery
           const BatteryStatusCard(),
+          const SizedBox(height: 12),
+
+          // Subscription status
+          const SubscriptionStatusCard(),
           const SizedBox(height: 12),
 
           // Medication status
@@ -615,6 +698,16 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
             ),
           ),
           _buildManageItem(
+            'Prescriptions',
+            'Scan labels, track RX numbers & refills',
+            Icons.receipt_long,
+            Colors.deepPurple,
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const ManagePrescriptionsScreen()),
+            ),
+          ),
+          _buildManageItem(
             'Reminders',
             'Create daily tasks and reminders',
             Icons.notifications,
@@ -682,6 +775,36 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
             () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const UserSettingsScreen()),
+            ),
+          ),
+          _buildManageItem(
+            'Caregivers',
+            'View and manage linked caregivers',
+            Icons.group,
+            Colors.deepOrange,
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const ManageCaregiversScreen()),
+            ),
+          ),
+          _buildManageItem(
+            'Invite Caregiver',
+            'Share access with family or healthcare',
+            Icons.person_add,
+            AppTheme.primaryTeal,
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const InviteCaregiverScreen()),
+            ),
+          ),
+          _buildManageItem(
+            'Subscription',
+            'View plan, upgrade, or restore purchases',
+            Icons.star,
+            Colors.amber,
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const PaywallScreen()),
             ),
           ),
         ],

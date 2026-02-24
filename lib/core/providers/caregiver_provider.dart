@@ -188,6 +188,13 @@ class CaregiverProvider with ChangeNotifier {
     await updateManagedUser(updatedUser);
   }
 
+  /// Add a newly created patient and auto-select them
+  void addManagedUser(AppUser user) {
+    _managedUsers.add(user);
+    _selectedUser = user;
+    notifyListeners();
+  }
+
   /// Clear provider data
   void clear() {
     _caregiver = null;

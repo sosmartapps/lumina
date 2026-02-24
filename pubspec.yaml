@@ -39,6 +39,7 @@ dependencies:
 
   # Camera & Image
   image_picker: ^1.0.7
+  google_mlkit_text_recognition: ^0.14.0
 
   # Text to Speech & Audio
   flutter_tts: ^4.2.5
@@ -64,6 +65,12 @@ dependencies:
 
   # Screenshot (for bug reporter)
   screenshot: ^3.0.0
+
+  # In-App Purchases / Subscriptions
+  purchases_flutter: ^8.0.0
+
+  # Deep Links
+  app_links: ^6.0.0
 
   # Utilities
   intl: ^0.20.2

@@ -13,6 +13,9 @@ class AppUser {
   final List<SavedLocation> savedLocations;
   final List<EmergencyContact> emergencyContacts;
   final UserSettings settings;
+  final String subscriptionTier;
+  final DateTime? subscriptionExpiresAt;
+  final String? revenueCatCustomerId;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -28,6 +31,9 @@ class AppUser {
     this.savedLocations = const [],
     this.emergencyContacts = const [],
     UserSettings? settings,
+    this.subscriptionTier = 'free',
+    this.subscriptionExpiresAt,
+    this.revenueCatCustomerId,
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : settings = settings ?? UserSettings(),
@@ -54,6 +60,9 @@ class AppUser {
               .toList() ??
           [],
       settings: UserSettings.fromMap(data['settings'] ?? {}),
+      subscriptionTier: data['subscriptionTier'] ?? 'free',
+      subscriptionExpiresAt: (data['subscriptionExpiresAt'] as Timestamp?)?.toDate(),
+      revenueCatCustomerId: data['revenueCatCustomerId'],
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
@@ -71,6 +80,11 @@ class AppUser {
       'savedLocations': savedLocations.map((e) => e.toMap()).toList(),
       'emergencyContacts': emergencyContacts.map((e) => e.toMap()).toList(),
       'settings': settings.toMap(),
+      'subscriptionTier': subscriptionTier,
+      'subscriptionExpiresAt': subscriptionExpiresAt != null
+          ? Timestamp.fromDate(subscriptionExpiresAt!)
+          : null,
+      'revenueCatCustomerId': revenueCatCustomerId,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(DateTime.now()),
     };
@@ -87,6 +101,9 @@ class AppUser {
     List<SavedLocation>? savedLocations,
     List<EmergencyContact>? emergencyContacts,
     UserSettings? settings,
+    String? subscriptionTier,
+    DateTime? subscriptionExpiresAt,
+    String? revenueCatCustomerId,
   }) {
     return AppUser(
       id: id,
@@ -100,6 +117,9 @@ class AppUser {
       savedLocations: savedLocations ?? this.savedLocations,
       emergencyContacts: emergencyContacts ?? this.emergencyContacts,
       settings: settings ?? this.settings,
+      subscriptionTier: subscriptionTier ?? this.subscriptionTier,
+      subscriptionExpiresAt: subscriptionExpiresAt ?? this.subscriptionExpiresAt,
+      revenueCatCustomerId: revenueCatCustomerId ?? this.revenueCatCustomerId,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );

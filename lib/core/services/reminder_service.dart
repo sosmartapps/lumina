@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/reminder.dart';
 import '../models/medication.dart';
+import '../models/prescription.dart';
 import 'notification_service.dart';
 
 /// Service for managing reminders and medications
@@ -275,6 +276,99 @@ class ReminderService {
 
     times.sort();
     return times;
+  }
+
+  // Prescriptions
+
+  /// Create a new prescription
+  Future<Prescription> createPrescription(Prescription prescription) async {
+    final docRef = _firestore.collection('prescriptions').doc();
+    final now = DateTime.now();
+    final newPrescription = prescription.copyWith(
+      id: docRef.id,
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    await docRef.set(newPrescription.toFirestore());
+    return newPrescription;
+  }
+
+  /// Update a prescription
+  Future<void> updatePrescription(Prescription prescription) async {
+    final updated = prescription.copyWith(updatedAt: DateTime.now());
+    await _firestore
+        .collection('prescriptions')
+        .doc(prescription.id)
+        .update(updated.toFirestore());
+  }
+
+  /// Delete a prescription
+  Future<void> deletePrescription(String prescriptionId) async {
+    await _firestore.collection('prescriptions').doc(prescriptionId).delete();
+  }
+
+  /// Get prescriptions for a user
+  Stream<List<Prescription>> getPrescriptions(String userId) {
+    return _firestore
+        .collection('prescriptions')
+        .where('userId', isEqualTo: userId)
+        .orderBy('updatedAt', descending: true)
+        .snapshots()
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => Prescription.fromFirestore(doc)).toList());
+  }
+
+  /// Log a refill for a prescription
+  Future<void> logRefill({
+    required String prescriptionId,
+    required DateTime filledDate,
+    String? pharmacyName,
+    int? quantity,
+    double? cost,
+    String? notes,
+  }) async {
+    final docRef = _firestore
+        .collection('prescriptions')
+        .doc(prescriptionId)
+        .collection('refills')
+        .doc();
+
+    final record = RefillRecord(
+      id: docRef.id,
+      prescriptionId: prescriptionId,
+      filledDate: filledDate,
+      pharmacyName: pharmacyName,
+      quantity: quantity,
+      cost: cost,
+      notes: notes,
+    );
+
+    await docRef.set(record.toFirestore());
+
+    // Update prescription with latest fill info
+    final updates = <String, dynamic>{
+      'lastFilledDate': Timestamp.fromDate(filledDate),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    if (quantity != null) updates['remainingQuantity'] = quantity;
+
+    await _firestore
+        .collection('prescriptions')
+        .doc(prescriptionId)
+        .update(updates);
+  }
+
+  /// Get refill history for a prescription
+  Stream<List<RefillRecord>> getRefillHistory(String prescriptionId) {
+    return _firestore
+        .collection('prescriptions')
+        .doc(prescriptionId)
+        .collection('refills')
+        .orderBy('filledDate', descending: true)
+        .snapshots()
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => RefillRecord.fromFirestore(doc)).toList());
   }
 
   /// Schedule all notifications for a user

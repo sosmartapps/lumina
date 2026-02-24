@@ -9,7 +9,11 @@ class Medication {
   final String? dosage;
   final String? instructions;
   final List<MedicationSchedule> schedules;
+  final String? prescriptionId; // Link to Prescription document
   final String? pillContainerPhotoUrl; // Reference photo of full container
+  final String? organizerFilledPhotoUrl; // Reference photo of filled pill organizer
+  final String? organizerEmptyPhotoUrl; // Reference photo of empty organizer compartment
+  final String? pillCloseUpPhotoUrl; // Reference photo of the actual pills/tablets
   final String? color;
   final String? iconName;
   final bool isActive;
@@ -28,7 +32,11 @@ class Medication {
     this.dosage,
     this.instructions,
     this.schedules = const [],
+    this.prescriptionId,
     this.pillContainerPhotoUrl,
+    this.organizerFilledPhotoUrl,
+    this.organizerEmptyPhotoUrl,
+    this.pillCloseUpPhotoUrl,
     this.color,
     this.iconName,
     this.isActive = true,
@@ -53,7 +61,11 @@ class Medication {
               ?.map((e) => MedicationSchedule.fromMap(e))
               .toList() ??
           [],
+      prescriptionId: data['prescriptionId'],
       pillContainerPhotoUrl: data['pillContainerPhotoUrl'],
+      organizerFilledPhotoUrl: data['organizerFilledPhotoUrl'],
+      organizerEmptyPhotoUrl: data['organizerEmptyPhotoUrl'],
+      pillCloseUpPhotoUrl: data['pillCloseUpPhotoUrl'],
       color: data['color'],
       iconName: data['iconName'],
       isActive: data['isActive'] ?? true,
@@ -74,7 +86,11 @@ class Medication {
       'dosage': dosage,
       'instructions': instructions,
       'schedules': schedules.map((e) => e.toMap()).toList(),
+      'prescriptionId': prescriptionId,
       'pillContainerPhotoUrl': pillContainerPhotoUrl,
+      'organizerFilledPhotoUrl': organizerFilledPhotoUrl,
+      'organizerEmptyPhotoUrl': organizerEmptyPhotoUrl,
+      'pillCloseUpPhotoUrl': pillCloseUpPhotoUrl,
       'color': color,
       'iconName': iconName,
       'isActive': isActive,
@@ -93,7 +109,11 @@ class Medication {
     String? dosage,
     String? instructions,
     List<MedicationSchedule>? schedules,
+    String? prescriptionId,
     String? pillContainerPhotoUrl,
+    String? organizerFilledPhotoUrl,
+    String? organizerEmptyPhotoUrl,
+    String? pillCloseUpPhotoUrl,
     String? color,
     String? iconName,
     bool? isActive,
@@ -110,8 +130,15 @@ class Medication {
       dosage: dosage ?? this.dosage,
       instructions: instructions ?? this.instructions,
       schedules: schedules ?? this.schedules,
+      prescriptionId: prescriptionId ?? this.prescriptionId,
       pillContainerPhotoUrl:
           pillContainerPhotoUrl ?? this.pillContainerPhotoUrl,
+      organizerFilledPhotoUrl:
+          organizerFilledPhotoUrl ?? this.organizerFilledPhotoUrl,
+      organizerEmptyPhotoUrl:
+          organizerEmptyPhotoUrl ?? this.organizerEmptyPhotoUrl,
+      pillCloseUpPhotoUrl:
+          pillCloseUpPhotoUrl ?? this.pillCloseUpPhotoUrl,
       color: color ?? this.color,
       iconName: iconName ?? this.iconName,
       isActive: isActive ?? this.isActive,

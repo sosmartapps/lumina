@@ -9,6 +9,7 @@ class Caregiver {
   final String? photoUrl;
   final List<String> managedUserIds;
   final CaregiverRole role;
+  final Map<String, CaregiverRole> roleOverrides;
   final bool isVerified;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -22,6 +23,7 @@ class Caregiver {
     this.photoUrl,
     this.managedUserIds = const [],
     this.role = CaregiverRole.caregiver,
+    this.roleOverrides = const {},
     this.isVerified = false,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -29,8 +31,20 @@ class Caregiver {
   })  : createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
 
+  /// Get effective role for a specific patient
+  CaregiverRole roleForPatient(String patientId) {
+    return roleOverrides[patientId] ?? role;
+  }
+
   factory Caregiver.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
+
+    // Parse roleOverrides map
+    final rawOverrides = data['roleOverrides'] as Map<String, dynamic>? ?? {};
+    final overrides = rawOverrides.map(
+      (key, value) => MapEntry(key, CaregiverRole.fromString(value as String)),
+    );
+
     return Caregiver(
       id: doc.id,
       name: data['name'] ?? '',
@@ -39,6 +53,7 @@ class Caregiver {
       photoUrl: data['photoUrl'],
       managedUserIds: List<String>.from(data['managedUserIds'] ?? []),
       role: CaregiverRole.fromString(data['role'] ?? 'caregiver'),
+      roleOverrides: overrides,
       isVerified: data['isVerified'] ?? false,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -54,6 +69,7 @@ class Caregiver {
       'photoUrl': photoUrl,
       'managedUserIds': managedUserIds,
       'role': role.value,
+      'roleOverrides': roleOverrides.map((key, value) => MapEntry(key, value.value)),
       'isVerified': isVerified,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(DateTime.now()),
@@ -68,6 +84,7 @@ class Caregiver {
     String? photoUrl,
     List<String>? managedUserIds,
     CaregiverRole? role,
+    Map<String, CaregiverRole>? roleOverrides,
     bool? isVerified,
     DateTime? lastLoginAt,
   }) {
@@ -79,6 +96,7 @@ class Caregiver {
       photoUrl: photoUrl ?? this.photoUrl,
       managedUserIds: managedUserIds ?? this.managedUserIds,
       role: role ?? this.role,
+      roleOverrides: roleOverrides ?? this.roleOverrides,
       isVerified: isVerified ?? this.isVerified,
       createdAt: createdAt,
       updatedAt: DateTime.now(),

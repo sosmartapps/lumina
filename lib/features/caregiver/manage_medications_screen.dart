@@ -6,6 +6,9 @@ import '../../core/providers/caregiver_provider.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/models/medication.dart';
+import '../medication/scan_prescription_screen.dart';
+import '../medication/manage_prescriptions_screen.dart';
+import '../medication/pill_verification_screen.dart';
 
 /// Screen for caregivers to manage medications
 class ManageMedicationsScreen extends ConsumerStatefulWidget {
@@ -22,6 +25,24 @@ class _ManageMedicationsScreenState extends ConsumerState<ManageMedicationsScree
       appBar: AppBar(
         backgroundColor: AppTheme.primaryOrange,
         title: const Text('Medications'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.document_scanner),
+            tooltip: 'Scan Prescription',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ScanPrescriptionScreen()),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.receipt_long),
+            tooltip: 'Prescriptions',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ManagePrescriptionsScreen()),
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddMedicationDialog(context),
@@ -147,6 +168,16 @@ class _ManageMedicationsScreenState extends ConsumerState<ManageMedicationsScree
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    TextButton.icon(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => PillVerificationScreen(medication: medication),
+                        ),
+                      ),
+                      icon: const Icon(Icons.camera_alt, color: AppTheme.primaryTeal),
+                      label: const Text('Photos', style: TextStyle(color: AppTheme.primaryTeal)),
+                    ),
                     TextButton.icon(
                       onPressed: () => _showEditMedicationDialog(medication, provider),
                       icon: const Icon(Icons.edit),

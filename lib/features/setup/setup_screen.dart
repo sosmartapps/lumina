@@ -8,7 +8,9 @@ import '../../core/models/app_user.dart';
 import '../../core/models/reminder.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/services/deep_link_service.dart';
 import '../user_home/user_home_screen.dart';
+import '../caregiver/caregiver_dashboard_screen.dart';
 
 /// Initial setup screen for new users
 class SetupScreen extends ConsumerStatefulWidget {
@@ -36,7 +38,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   bool _isLoading = false;
   String? _errorMessage;
   String? _caregiverId;
-  bool _isNewCaregiver = true;
+  int _authMode = 0; // 0=new, 1=signIn, 2=invite
+  final _inviteCodeController = TextEditingController();
+  bool _joinedViaInvite = false;
 
   // Emergency contact fields
   final _contactNameController = TextEditingController();
@@ -56,6 +60,18 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   static const _totalPages = 7;
 
   @override
+  void initState() {
+    super.initState();
+    // Check if app was opened via an invite deep link
+    final deepLinkService = DeepLinkService();
+    if (deepLinkService.pendingInviteCode != null) {
+      _authMode = 2;
+      _inviteCodeController.text = deepLinkService.pendingInviteCode!;
+      deepLinkService.clearPendingInviteCode();
+    }
+  }
+
+  @override
   void dispose() {
     _pageController.dispose();
     _emailController.dispose();
@@ -67,6 +83,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
     _homeAddressController.dispose();
     _contactNameController.dispose();
     _contactPhoneController.dispose();
+    _inviteCodeController.dispose();
     _reminderTitleController.dispose();
     super.dispose();
   }
@@ -218,6 +235,34 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
     );
   }
 
+  Widget _buildAuthToggle(String label, int mode) {
+    final isSelected = _authMode == mode;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() {
+          _authMode = mode;
+          _errorMessage = null;
+        }),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isSelected ? AppTheme.primaryBlue : Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: isSelected ? Colors.white : Colors.black87,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFeatureRow(IconData icon, String text) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -262,7 +307,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Create or sign in to your caregiver account',
+            _authMode == 2
+                ? 'Enter your invite code and create an account'
+                : 'Create or sign in to your caregiver account',
             style: TextStyle(
               fontSize: 18,
               color: Colors.grey.shade600,
@@ -273,59 +320,37 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
           // Toggle buttons
           Row(
             children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => setState(() => _isNewCaregiver = true),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: _isNewCaregiver
-                          ? AppTheme.primaryBlue
-                          : Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'New Account',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: _isNewCaregiver ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => setState(() => _isNewCaregiver = false),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: !_isNewCaregiver
-                          ? AppTheme.primaryBlue
-                          : Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'Sign In',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: !_isNewCaregiver ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              _buildAuthToggle('New', 0),
+              const SizedBox(width: 8),
+              _buildAuthToggle('Sign In', 1),
+              const SizedBox(width: 8),
+              _buildAuthToggle('Have a Code', 2),
             ],
           ),
           const SizedBox(height: 24),
 
+          // Invite code field
+          if (_authMode == 2) ...[
+            TextField(
+              controller: _inviteCodeController,
+              decoration: const InputDecoration(
+                labelText: 'Invite Code',
+                prefixIcon: Icon(Icons.vpn_key),
+                hintText: 'Enter 6-character code',
+              ),
+              textCapitalization: TextCapitalization.characters,
+              maxLength: 6,
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 8,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+
           // Form fields
-          if (_isNewCaregiver) ...[
+          if (_authMode == 0 || _authMode == 2) ...[
             TextField(
               controller: _nameController,
               decoration: const InputDecoration(
@@ -404,7 +429,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
               child: _isLoading
                   ? const CircularProgressIndicator(color: Colors.white)
                   : Text(
-                      _isNewCaregiver ? 'CREATE ACCOUNT' : 'SIGN IN',
+                      _authMode == 2 ? 'JOIN' : (_authMode == 0 ? 'CREATE ACCOUNT' : 'SIGN IN'),
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -1258,8 +1283,13 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
       return;
     }
 
-    if (_isNewCaregiver && _nameController.text.isEmpty) {
+    if ((_authMode == 0 || _authMode == 2) && _nameController.text.isEmpty) {
       setState(() => _errorMessage = 'Please enter your name');
+      return;
+    }
+
+    if (_authMode == 2 && _inviteCodeController.text.trim().length != 6) {
+      setState(() => _errorMessage = 'Please enter a valid 6-character invite code');
       return;
     }
 
@@ -1271,7 +1301,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
     try {
       final authService = ref.read(authServiceProvider);
 
-      if (_isNewCaregiver) {
+      if (_authMode == 0 || _authMode == 2) {
         final credential = await authService.registerWithEmail(
           email: _emailController.text.trim(),
           password: _passwordController.text,
@@ -1285,6 +1315,33 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
           password: _passwordController.text,
         );
         _caregiverId = credential.user!.uid;
+      }
+
+      // If invite mode, redeem code and skip patient creation
+      if (_authMode == 2) {
+        final inviteService = ref.read(inviteServiceProvider);
+        final patient = await inviteService.redeemInviteCode(
+          code: _inviteCodeController.text.trim(),
+          caregiverId: _caregiverId!,
+        );
+
+        if (!mounted) return;
+
+        final appState = ref.read(appStateNotifierProvider);
+        await appState.setSetupComplete(
+          userId: patient.id,
+          caregiverId: _caregiverId,
+        );
+
+        final userProvider = ref.read(userNotifierProvider);
+        await userProvider.loadUser(patient.id);
+
+        final caregiverProvider = ref.read(caregiverNotifierProvider);
+        await caregiverProvider.loadCaregiver(_caregiverId!);
+
+        _joinedViaInvite = true;
+        _pageController.jumpToPage(_totalPages - 1);
+        return;
       }
 
       _nextPage();
@@ -1358,14 +1415,20 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   }
 
   void _completeSetup() async {
-    // Request background location permission for safety monitoring
-    final locationService = ref.read(locationServiceProvider);
-    await locationService.requestBackgroundPermission();
+    if (!_joinedViaInvite) {
+      // Request background location permission for safety monitoring
+      final locationService = ref.read(locationServiceProvider);
+      await locationService.requestBackgroundPermission();
+    }
 
     if (!mounted) return;
 
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => const UserHomeScreen()),
+      MaterialPageRoute(
+        builder: (context) => _joinedViaInvite
+            ? const CaregiverDashboardScreen()
+            : const UserHomeScreen(),
+      ),
     );
   }
 }

@@ -727,3 +727,111 @@ export const cleanupOldFeedback = functions.pubsub
     console.log(`Cleaned up ${feedbackDeletes.length} feedback items and ${errorDeletes.length} errors`);
     return null;
   });
+
+// ============================================================================
+// REVENUECAT WEBHOOK
+// ============================================================================
+
+/**
+ * RevenueCat webhook — receives subscription events and updates user docs.
+ * Set the webhook URL in RevenueCat dashboard to:
+ *   https://<region>-<project>.cloudfunctions.net/revenuecatWebhook
+ * Set REVENUECAT_WEBHOOK_TOKEN in Firebase Functions config:
+ *   firebase functions:config:set revenuecat.webhook_token="your-token"
+ */
+export const revenuecatWebhook = functions.https.onRequest(async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  // Validate bearer token
+  const authHeader = req.headers.authorization;
+  const expectedToken = functions.config().revenuecat?.webhook_token;
+  if (expectedToken && (!authHeader || authHeader !== `Bearer ${expectedToken}`)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  try {
+    const event = req.body;
+    const eventType = event.event?.type;
+    const appUserId = event.event?.app_user_id; // This is the patientId
+
+    if (!appUserId) {
+      res.status(400).json({ error: 'Missing app_user_id' });
+      return;
+    }
+
+    console.log(`RevenueCat event: ${eventType} for ${appUserId}`);
+
+    const userRef = admin.firestore().collection('users').doc(appUserId);
+
+    switch (eventType) {
+      case 'INITIAL_PURCHASE':
+      case 'RENEWAL':
+      case 'PRODUCT_CHANGE':
+      case 'UNCANCELLATION': {
+        const expiresDate = event.event?.expiration_at_ms
+          ? new Date(event.event.expiration_at_ms)
+          : null;
+        await userRef.update({
+          subscriptionTier: 'premium',
+          subscriptionExpiresAt: expiresDate
+            ? admin.firestore.Timestamp.fromDate(expiresDate)
+            : null,
+          revenueCatCustomerId: event.event?.original_app_user_id || appUserId,
+        });
+        break;
+      }
+      case 'CANCELLATION':
+      case 'EXPIRATION':
+      case 'BILLING_ISSUE': {
+        await userRef.update({
+          subscriptionTier: 'free',
+          subscriptionExpiresAt: null,
+        });
+        break;
+      }
+      default:
+        console.log(`Unhandled RevenueCat event type: ${eventType}`);
+    }
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('RevenueCat webhook error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// INVITE CODE CLEANUP
+// ============================================================================
+
+/**
+ * Clean up expired and unused invite codes every 6 hours
+ */
+export const cleanupExpiredInvites = functions.pubsub
+  .schedule('every 6 hours')
+  .onRun(async () => {
+    const now = admin.firestore.Timestamp.now();
+
+    const expiredQuery = admin.firestore()
+      .collection('invite_codes')
+      .where('isUsed', '==', false)
+      .where('expiresAt', '<', now);
+
+    const snapshot = await expiredQuery.get();
+
+    if (snapshot.empty) {
+      console.log('No expired invite codes to clean up');
+      return null;
+    }
+
+    const batch = admin.firestore().batch();
+    snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+
+    console.log(`Cleaned up ${snapshot.size} expired invite codes`);
+    return null;
+  });

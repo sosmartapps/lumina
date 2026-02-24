@@ -10,6 +10,11 @@ import '../services/tts_service.dart';
 import '../services/reminder_service.dart';
 import '../services/geofence_service.dart';
 import '../services/sundown_service.dart';
+import '../services/invite_service.dart';
+import '../services/subscription_service.dart';
+import '../services/prescription_scan_service.dart';
+import '../services/pill_photo_service.dart';
+import 'subscription_provider.dart';
 import '../../features/bouncie/bouncie_service.dart';
 
 // ChangeNotifier providers — use ref.read() to get instance,
@@ -56,3 +61,21 @@ final bouncieServiceProvider = Provider((ref) {
 final bouncieVehicleImeiProvider = Provider((ref) {
   return dotenv.env['BOUNCIE_VEHICLE_IMEI']!;
 });
+
+// Invite service
+final inviteServiceProvider = Provider((ref) => InviteService());
+
+// Subscription / billing
+final subscriptionServiceProvider = Provider((ref) => SubscriptionService());
+final subscriptionNotifierProvider = Provider((ref) {
+  final service = ref.read(subscriptionServiceProvider);
+  return SubscriptionProvider(service);
+});
+
+// Prescription scanning & pill photos
+final prescriptionScanServiceProvider = Provider((ref) {
+  final service = PrescriptionScanService();
+  ref.onDispose(() => service.dispose());
+  return service;
+});
+final pillPhotoServiceProvider = Provider((ref) => PillPhotoService());
