@@ -59,3 +59,11 @@
 - Install: `flutter pub get` | Run: `flutter run`
 - Build: `flutter build apk --release` | `flutter build ios --release`
 - Deploy: `firebase deploy --only functions` | `firebase deploy --only firestore:rules`
+
+## Dev Task Tracking
+- **All dev tasks tracked in Firebase Dev Tracker** (https://ssa-dev-tracker.web.app), NOT Notion.
+- Firestore: `dev_tasks` collection in project `ssa-bug-dashboard`.
+- No Firebase auth needed — scripts call the Cloud Functions HTTP API directly.
+- Mark done: `node ../dev-tracker/mark-done.js --app "Lumina" --title "keyword"`
+- List tasks: `node ../dev-tracker/mark-done.js --list`
+- After completing work, always mark the relevant task done.
