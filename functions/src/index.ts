@@ -11,6 +11,7 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import * as nodemailer from 'nodemailer';
+import * as https from 'https';
 
 admin.initializeApp();
 
@@ -833,5 +834,152 @@ export const cleanupExpiredInvites = functions.pubsub
     await batch.commit();
 
     console.log(`Cleaned up ${snapshot.size} expired invite codes`);
+    return null;
+  });
+
+// ─── Cross-App Publisher ────────────────────────────────────
+
+const APEX_LIFE_URL =
+  'https://us-central1-apex-life-sosmartapps.cloudfunctions.net/publishCrossAppData';
+
+/**
+ * Runs daily at 11:50 PM Phoenix time.
+ * Summarizes caregiving activity and publishes to Apex Life.
+ *
+ * Reads from:
+ *   users/{userId} - Care recipients and caregivers
+ *   care_tasks (or repair_tasks) - Tasks completed today
+ *   medications - Medication adherence
+ */
+export const publishToApexLife = functions.pubsub
+  .schedule('50 23 * * *')
+  .timeZone('America/Phoenix')
+  .onRun(async () => {
+    const db = admin.firestore();
+    const apiKey = functions.config().crossapp?.apex_life_key;
+
+    if (!apiKey) {
+      console.warn('crossapp.apex_life_key not set — skipping cross-app publish');
+      return null;
+    }
+
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const startOfDay = new Date(`${today}T00:00:00`);
+    const endOfDay = new Date(`${today}T23:59:59`);
+
+    // Get user email
+    let email = '';
+    try {
+      const usersSnap = await admin.auth().listUsers(1);
+      if (usersSnap.users.length > 0) {
+        email = usersSnap.users[0].email || '';
+      }
+    } catch {
+      console.warn('Could not get user email from Firebase Auth');
+    }
+
+    if (!email) {
+      console.warn('No user email found — cannot publish to Apex Life');
+      return null;
+    }
+
+    // Count care recipients (users collection)
+    const usersSnap = await db.collection('users').get();
+    const careRecipientCount = usersSnap.size;
+
+    // Count tasks completed today
+    let tasksCompleted = 0;
+    let tasksScheduled = 0;
+
+    // Check repair_tasks (which is what Cloud Functions use)
+    const tasksSnap = await db.collection('repair_tasks')
+      .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(startOfDay))
+      .where('createdAt', '<=', admin.firestore.Timestamp.fromDate(endOfDay))
+      .get();
+
+    tasksScheduled = tasksSnap.size;
+    for (const doc of tasksSnap.docs) {
+      const task = doc.data();
+      if (task.status === 'completed' || task.status === 'done') {
+        tasksCompleted++;
+      }
+    }
+
+    // Count medication adherence
+    const medsSnap = await db.collection('medications')
+      .where('isActive', '==', true)
+      .get();
+
+    let totalMeds = medsSnap.size;
+    let takenMeds = 0;
+
+    for (const doc of medsSnap.docs) {
+      const med = doc.data();
+      // Check if today's dose was taken
+      if (med.lastTaken) {
+        const lastTaken = med.lastTaken.toDate
+          ? med.lastTaken.toDate()
+          : new Date(med.lastTaken);
+        if (lastTaken >= startOfDay && lastTaken <= endOfDay) {
+          takenMeds++;
+        }
+      }
+    }
+
+    // Prevent divide by zero
+    if (totalMeds === 0) totalMeds = 1;
+    const medicationAdherence = Math.round((takenMeds / totalMeds) * 100);
+
+    const payload = {
+      careRecipientCount,
+      tasksCompleted,
+      tasksScheduled,
+      medicationAdherence,
+      moodRating: undefined, // Set by the app UI, not available server-side
+      incidentsToday: 0,
+      caregiverStressLevel: undefined, // Set by the app UI
+    };
+
+    const body = JSON.stringify({
+      appId: 'lumina',
+      email,
+      date: today,
+      payload,
+      apiKey,
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      const url = new URL(APEX_LIFE_URL);
+      const req = https.request(
+        {
+          hostname: url.hostname,
+          port: 443,
+          path: url.pathname,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(body),
+          },
+        },
+        (res) => {
+          let data = '';
+          res.on('data', (chunk: string) => (data += chunk));
+          res.on('end', () => {
+            if (res.statusCode && res.statusCode >= 400) {
+              console.error(`Lumina → Apex Life publish failed (${res.statusCode}): ${data}`);
+              reject(new Error(`HTTP ${res.statusCode}: ${data}`));
+            } else {
+              console.log(`Lumina → Apex Life published: ${data}`);
+              resolve();
+            }
+          });
+        },
+      );
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
+
     return null;
   });

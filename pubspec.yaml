@@ -25,7 +25,7 @@ dependencies:
   flutter_riverpod: ^3.2.1
 
   # Location & Maps
-  google_maps_flutter: ^2.5.3
+  google_maps_flutter: ^2.15.0
   geolocator: ^14.0.2
   geocoding: ^4.0.0
   flutter_polyline_points: ^3.1.0
@@ -46,7 +46,7 @@ dependencies:
   audioplayers: ^6.5.1
 
   # Notifications
-  flutter_local_notifications: ^21.0.0-dev.1
+  flutter_local_notifications: ^21.0.0
 
   # UI Components
   cupertino_icons: ^1.0.6
