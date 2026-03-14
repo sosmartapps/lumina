@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "/Users/leonherbert/development/lumina/lumina_app/caregiver_app"
+    ],
+    "allow": [
+      "Bash(flutter pub get:*)"
+    ]
+  }
+}
