@@ -33,6 +33,7 @@ import 'manage_caregivers_screen.dart';
 import '../../features/subscription/subscription_status_card.dart';
 import '../../features/subscription/paywall_screen.dart';
 import '../medical_records/medical_records_screen.dart';
+import '../quadtrack/quadtrack_dashboard_screen.dart';
 
 /// Main dashboard for caregivers
 class CaregiverDashboardScreen extends ConsumerStatefulWidget {
@@ -695,6 +696,25 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
                 builder: (context) => UserProfileScreen(userId: user.id),
               ),
             ),
+          ),
+          _buildManageItem(
+            'QuadTrack Devices',
+            'GPS trackers for patient safety',
+            Icons.track_changes,
+            AppTheme.primaryTeal,
+            () {
+              final caregiverId = ref.read(caregiverNotifierProvider).caregiver?.id ??
+                  ref.read(appStateNotifierProvider).currentCaregiverId ??
+                  '';
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => QuadTrackDashboardScreen(
+                    caregiverId: caregiverId,
+                  ),
+                ),
+              );
+            },
           ),
           _buildManageItem(
             'Saved Locations',
