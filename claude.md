@@ -67,3 +67,4 @@
 - Mark done: `node ../dev-tracker/mark-done.js --app "Lumina" --title "keyword"`
 - List tasks: `node ../dev-tracker/mark-done.js --list`
 - After completing work, always mark the relevant task done.
+- **IMPORTANT — Mirror all tasks to SSA Dev Planner**: Any new tasks/todos MUST also be added to `dev_tasks` via Firestore REST API. POST to `https://firestore.googleapis.com/v1/projects/ssa-bug-dashboard/databases/(default)/documents/dev_tasks` with fields: title, appName, type, priority, status, description. This is Leon's primary task board.

@@ -43,6 +43,16 @@ class UserProfile {
   final String? medicareNumber;
   final String? medicaidNumber;
 
+  // Vehicle Information
+  final String? vehicleMake;       // e.g., "Toyota"
+  final String? vehicleModel;      // e.g., "Camry"
+  final int? vehicleYear;          // e.g., 2020
+  final String? vehicleColor;      // e.g., "Silver"
+  final String? vehicleLicensePlate; // e.g., "ABC1234"
+  final String? vehicleLicenseState; // e.g., "AZ"
+  final String? vehicleVin;        // VIN number
+  final String? vehicleNotes;      // e.g., "Has dent on rear bumper, Lumina sticker on rear window"
+
   // Medical Alert Info (for lost person reports)
   final String? primaryDiagnosis;
   final String? cognitiveStatus; // e.g., "May not know name, non-verbal"
@@ -100,6 +110,14 @@ class UserProfile {
     this.passportNumber,
     this.medicareNumber,
     this.medicaidNumber,
+    this.vehicleMake,
+    this.vehicleModel,
+    this.vehicleYear,
+    this.vehicleColor,
+    this.vehicleLicensePlate,
+    this.vehicleLicenseState,
+    this.vehicleVin,
+    this.vehicleNotes,
     this.primaryDiagnosis,
     this.cognitiveStatus,
     this.wanderingHistory,
@@ -206,6 +224,14 @@ class UserProfile {
       passportNumber: data['passportNumber'],
       medicareNumber: data['medicareNumber'],
       medicaidNumber: data['medicaidNumber'],
+      vehicleMake: data['vehicleMake'],
+      vehicleModel: data['vehicleModel'],
+      vehicleYear: data['vehicleYear'],
+      vehicleColor: data['vehicleColor'],
+      vehicleLicensePlate: data['vehicleLicensePlate'],
+      vehicleLicenseState: data['vehicleLicenseState'],
+      vehicleVin: data['vehicleVin'],
+      vehicleNotes: data['vehicleNotes'],
       primaryDiagnosis: data['primaryDiagnosis'],
       cognitiveStatus: data['cognitiveStatus'],
       wanderingHistory: data['wanderingHistory'],
@@ -265,6 +291,14 @@ class UserProfile {
       'passportNumber': passportNumber,
       'medicareNumber': medicareNumber,
       'medicaidNumber': medicaidNumber,
+      'vehicleMake': vehicleMake,
+      'vehicleModel': vehicleModel,
+      'vehicleYear': vehicleYear,
+      'vehicleColor': vehicleColor,
+      'vehicleLicensePlate': vehicleLicensePlate,
+      'vehicleLicenseState': vehicleLicenseState,
+      'vehicleVin': vehicleVin,
+      'vehicleNotes': vehicleNotes,
       'primaryDiagnosis': primaryDiagnosis,
       'cognitiveStatus': cognitiveStatus,
       'wanderingHistory': wanderingHistory,
@@ -315,6 +349,14 @@ class UserProfile {
     String? passportNumber,
     String? medicareNumber,
     String? medicaidNumber,
+    String? vehicleMake,
+    String? vehicleModel,
+    int? vehicleYear,
+    String? vehicleColor,
+    String? vehicleLicensePlate,
+    String? vehicleLicenseState,
+    String? vehicleVin,
+    String? vehicleNotes,
     String? primaryDiagnosis,
     String? cognitiveStatus,
     String? wanderingHistory,
@@ -364,6 +406,14 @@ class UserProfile {
       passportNumber: passportNumber ?? this.passportNumber,
       medicareNumber: medicareNumber ?? this.medicareNumber,
       medicaidNumber: medicaidNumber ?? this.medicaidNumber,
+      vehicleMake: vehicleMake ?? this.vehicleMake,
+      vehicleModel: vehicleModel ?? this.vehicleModel,
+      vehicleYear: vehicleYear ?? this.vehicleYear,
+      vehicleColor: vehicleColor ?? this.vehicleColor,
+      vehicleLicensePlate: vehicleLicensePlate ?? this.vehicleLicensePlate,
+      vehicleLicenseState: vehicleLicenseState ?? this.vehicleLicenseState,
+      vehicleVin: vehicleVin ?? this.vehicleVin,
+      vehicleNotes: vehicleNotes ?? this.vehicleNotes,
       primaryDiagnosis: primaryDiagnosis ?? this.primaryDiagnosis,
       cognitiveStatus: cognitiveStatus ?? this.cognitiveStatus,
       wanderingHistory: wanderingHistory ?? this.wanderingHistory,

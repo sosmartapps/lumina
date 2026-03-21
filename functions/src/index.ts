@@ -931,6 +931,20 @@ export const publishToApexLife = functions.pubsub
     if (totalMeds === 0) totalMeds = 1;
     const medicationAdherence = Math.round((takenMeds / totalMeds) * 100);
 
+    // Count QuadTrack devices
+    const quadtrackDevicesSnap = await db.collection('quadtrack_devices').get();
+    let activeQuadTrackCount = 0;
+    const offlineQuadTrackDevices: string[] = [];
+
+    for (const doc of quadtrackDevicesSnap.docs) {
+      const device = doc.data();
+      if (device.status !== 'offline') {
+        activeQuadTrackCount++;
+      } else {
+        offlineQuadTrackDevices.push(device.name || device.deviceId);
+      }
+    }
+
     const payload = {
       careRecipientCount,
       tasksCompleted,
@@ -939,6 +953,8 @@ export const publishToApexLife = functions.pubsub
       moodRating: undefined, // Set by the app UI, not available server-side
       incidentsToday: 0,
       caregiverStressLevel: undefined, // Set by the app UI
+      activeQuadTrackDevices: activeQuadTrackCount,
+      offlineQuadTrackDevices: offlineQuadTrackDevices.length > 0 ? offlineQuadTrackDevices : undefined,
     };
 
     const body = JSON.stringify({
@@ -983,3 +999,586 @@ export const publishToApexLife = functions.pubsub
 
     return null;
   });
+
+// ============================================================================
+// QUADTRACK LOCATION TRACKING
+// ============================================================================
+
+/**
+ * Ingest location pings from QuadTrack hardware via LTE-M/MQTT bridge
+ * Validates device key, stores ping, updates device status, and handles low/dead battery alerts
+ */
+export const ingestQuadTrackPing = functions.https.onRequest(async (req, res) => {
+  // CORS handling
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, X-Device-Key');
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  try {
+    const deviceKey = req.headers['x-device-key'] as string;
+    if (!deviceKey) {
+      res.status(400).json({ error: 'Missing X-Device-Key header' });
+      return;
+    }
+
+    const { lat, lng, accuracy, altitude, battery, phoneBattery, chargingState, source } = req.body;
+
+    // Validate required fields
+    if (typeof lat !== 'number' || typeof lng !== 'number' || typeof battery !== 'number') {
+      res.status(400).json({ error: 'Invalid payload: lat, lng, battery are required numbers' });
+      return;
+    }
+
+    const db = admin.firestore();
+
+    // Verify device exists
+    const deviceQuery = await db
+      .collection('quadtrack_devices')
+      .where('deviceId', '==', deviceKey)
+      .limit(1)
+      .get();
+
+    if (deviceQuery.empty) {
+      res.status(401).json({ error: 'Device not registered' });
+      return;
+    }
+
+    const deviceDoc = deviceQuery.docs[0];
+    const deviceData = deviceDoc.data();
+    const deviceRef = deviceDoc.ref;
+
+    // Store ping
+    const pingRef = db.collection('quadtrack_pings').doc();
+    await pingRef.set({
+      deviceId: deviceKey,
+      lat,
+      lng,
+      accuracy: accuracy || null,
+      altitude: altitude || null,
+      battery,
+      phoneBattery: phoneBattery || null,
+      chargingState: chargingState || 'on_battery',
+      source: source || 'gps',
+      receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // Update device doc
+    const updateData: Record<string, any> = {
+      lastLocation: new admin.firestore.GeoPoint(lat, lng),
+      lastSeenAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastAccuracy: accuracy || null,
+      trackerBatteryLevel: battery,
+      chargingState: chargingState || 'on_battery',
+      status: 'online',
+    };
+
+    if (typeof phoneBattery === 'number') {
+      updateData.phoneBatteryLevel = phoneBattery;
+    }
+
+    await deviceRef.update(updateData);
+
+    let nextPingSeconds = 60; // default
+
+    // Determine next ping interval based on tracking mode
+    if (deviceData.trackingMode === 'emergency') {
+      nextPingSeconds = 10;
+    } else if (deviceData.trackingMode === 'active') {
+      nextPingSeconds = 30;
+    } else if (deviceData.trackingMode === 'idle') {
+      nextPingSeconds = 300;
+    }
+
+    // Handle low battery alert
+    if (battery < 20) {
+      await deviceRef.update({ status: 'low_battery' });
+
+      // Notify caregivers
+      if (deviceData.caregiverIds && deviceData.caregiverIds.length > 0) {
+        const caregiverDocs = await Promise.all(
+          deviceData.caregiverIds.map((id: string) =>
+            db.collection('caregivers').doc(id).get()
+          )
+        );
+
+        const tokens: string[] = [];
+        caregiverDocs.forEach(doc => {
+          const caregiverData = doc.data();
+          if (caregiverData?.fcmToken) {
+            tokens.push(caregiverData.fcmToken);
+          }
+        });
+
+        if (tokens.length > 0) {
+          const message = {
+            notification: {
+              title: '🔋 QuadTrack Low Battery',
+              body: `${deviceData.name || 'QuadTrack'} battery is below 20%`,
+            },
+            data: {
+              type: 'quadtrack_low_battery',
+              deviceId: deviceKey,
+              batteryLevel: battery.toString(),
+            },
+            tokens,
+          };
+
+          await admin.messaging().sendEachForMulticast(message);
+        }
+      }
+    }
+
+    // Handle phone dead (was charging or on battery, now 0)
+    const prevPhoneBattery = deviceData.phoneBatteryLevel ?? -1;
+    if (typeof phoneBattery === 'number' && phoneBattery === 0 && prevPhoneBattery > 0) {
+      await deviceRef.update({
+        status: 'phone_dead',
+        trackingMode: 'emergency',
+      });
+
+      // Send URGENT notification to caregivers
+      if (deviceData.caregiverIds && deviceData.caregiverIds.length > 0) {
+        const caregiverDocs = await Promise.all(
+          deviceData.caregiverIds.map((id: string) =>
+            db.collection('caregivers').doc(id).get()
+          )
+        );
+
+        const tokens: string[] = [];
+        caregiverDocs.forEach(doc => {
+          const caregiverData = doc.data();
+          if (caregiverData?.fcmToken) {
+            tokens.push(caregiverData.fcmToken);
+          }
+        });
+
+        if (tokens.length > 0) {
+          const message = {
+            notification: {
+              title: '🚨 URGENT: Phone Dead',
+              body: `${deviceData.name || 'Patient'}'s phone battery is dead. Tracking mode switched to emergency.`,
+            },
+            data: {
+              type: 'quadtrack_phone_dead',
+              deviceId: deviceKey,
+              timestamp: new Date().toISOString(),
+            },
+            tokens,
+          };
+
+          await admin.messaging().sendEachForMulticast(message);
+        }
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      nextPingSeconds,
+    });
+  } catch (error) {
+    console.error('Error ingesting QuadTrack ping:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * Evaluate geofences for QuadTrack devices
+ * Triggers on new quadtrack_pings — checks if device is inside danger zones or outside safe zones
+ */
+export const evaluateQuadTrackGeofences = functions.firestore
+  .document('quadtrack_pings/{pingId}')
+  .onCreate(async (snap, context) => {
+    const ping = snap.data();
+    const db = admin.firestore();
+
+    try {
+      // Get device
+      const deviceQuery = await db
+        .collection('quadtrack_devices')
+        .where('deviceId', '==', ping.deviceId)
+        .limit(1)
+        .get();
+
+      if (deviceQuery.empty) {
+        console.log('Device not found for ping');
+        return null;
+      }
+
+      const deviceDoc = deviceQuery.docs[0];
+      const deviceData = deviceDoc.data();
+
+      if (!deviceData.patientId) {
+        return null;
+      }
+
+      // Get all active geo zones for this patient
+      const zonesSnap = await db
+        .collection('users')
+        .doc(deviceData.patientId)
+        .collection('geo_zones')
+        .where('isActive', '==', true)
+        .get();
+
+      if (zonesSnap.empty) {
+        return null;
+      }
+
+      const pingLat = ping.lat;
+      const pingLng = ping.lng;
+
+      // Haversine distance calculation
+      const haversineDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+        const R = 6371; // Earth radius in km
+        const dLat = ((lat2 - lat1) * Math.PI) / 180;
+        const dLng = ((lng2 - lng1) * Math.PI) / 180;
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos((lat1 * Math.PI) / 180) *
+            Math.cos((lat2 * Math.PI) / 180) *
+            Math.sin(dLng / 2) *
+            Math.sin(dLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+      };
+
+      // Check each zone
+      for (const zoneDoc of zonesSnap.docs) {
+        const zone = zoneDoc.data();
+        const distance = haversineDistance(pingLat, pingLng, zone.lat, zone.lng);
+        const isInside = distance <= (zone.radiusKm || 0.5);
+
+        // Determine if we should trigger an event
+        let eventType: string | null = null;
+
+        if (zone.type === 'safe' || zone.type === 'home') {
+          // Outside safe/home zone = alert
+          if (!isInside) {
+            eventType = 'left_safe_zone';
+          }
+        } else if (zone.type === 'danger') {
+          // Inside danger zone = alert
+          if (isInside) {
+            eventType = 'entered_danger_zone';
+          }
+        }
+
+        if (eventType) {
+          // Write to geo_zone_events
+          const eventRef = db.collection('geo_zone_events').doc();
+          await eventRef.set({
+            deviceId: ping.deviceId,
+            patientId: deviceData.patientId,
+            zoneId: zoneDoc.id,
+            zoneName: zone.name,
+            zoneType: zone.type,
+            eventType,
+            lat: pingLat,
+            lng: pingLng,
+            distance,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          // Send notifications to caregivers
+          if (deviceData.caregiverIds && deviceData.caregiverIds.length > 0) {
+            const caregiverDocs = await Promise.all(
+              deviceData.caregiverIds.map((id: string) =>
+                db.collection('caregivers').doc(id).get()
+              )
+            );
+
+            const tokens: string[] = [];
+            caregiverDocs.forEach(doc => {
+              const caregiverData = doc.data();
+              if (caregiverData?.fcmToken) {
+                tokens.push(caregiverData.fcmToken);
+              }
+            });
+
+            if (tokens.length > 0) {
+              const title =
+                eventType === 'left_safe_zone'
+                  ? '⚠️ Left Safe Zone'
+                  : '🚨 Entered Danger Zone';
+              const body =
+                eventType === 'left_safe_zone'
+                  ? `${deviceData.name || 'Patient'} has left ${zone.name}`
+                  : `${deviceData.name || 'Patient'} has entered ${zone.name}`;
+
+              const message = {
+                notification: { title, body },
+                data: {
+                  type: 'geofence_alert',
+                  deviceId: ping.deviceId,
+                  eventType,
+                  zoneName: zone.name,
+                  distance: distance.toString(),
+                },
+                tokens,
+              };
+
+              await admin.messaging().sendEachForMulticast(message);
+            }
+          }
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error evaluating QuadTrack geofences:', error);
+      throw error;
+    }
+  });
+
+/**
+ * Health check — marks devices as offline if they haven't pinged recently
+ * Runs every 15 minutes
+ */
+export const quadTrackHealthCheck = functions.pubsub
+  .schedule('every 15 minutes')
+  .onRun(async () => {
+    const db = admin.firestore();
+
+    try {
+      // Get all active devices
+      const devicesSnap = await db
+        .collection('quadtrack_devices')
+        .where('status', '!=', 'offline')
+        .get();
+
+      if (devicesSnap.empty) {
+        console.log('No active QuadTrack devices to check');
+        return null;
+      }
+
+      const now = new Date();
+
+      for (const deviceDoc of devicesSnap.docs) {
+        const device = deviceDoc.data();
+
+        if (!device.lastSeenAt) {
+          continue;
+        }
+
+        const lastSeen = device.lastSeenAt.toDate
+          ? device.lastSeenAt.toDate()
+          : new Date(device.lastSeenAt);
+        const secondsAgo = (now.getTime() - lastSeen.getTime()) / 1000;
+
+        // Determine expected interval based on tracking mode
+        let expectedIntervalSeconds = 60;
+        if (device.trackingMode === 'emergency') {
+          expectedIntervalSeconds = 10;
+        } else if (device.trackingMode === 'active') {
+          expectedIntervalSeconds = 30;
+        } else if (device.trackingMode === 'idle') {
+          expectedIntervalSeconds = 300;
+        }
+
+        const timeoutThreshold = expectedIntervalSeconds * 2;
+
+        // If exceeded 2x expected interval, mark offline
+        if (secondsAgo > timeoutThreshold) {
+          await deviceDoc.ref.update({ status: 'offline' });
+
+          // Notify caregivers
+          if (device.caregiverIds && device.caregiverIds.length > 0) {
+            const caregiverDocs = await Promise.all(
+              device.caregiverIds.map((id: string) =>
+                db.collection('caregivers').doc(id).get()
+              )
+            );
+
+            const tokens: string[] = [];
+            caregiverDocs.forEach(doc => {
+              const caregiverData = doc.data();
+              if (caregiverData?.fcmToken) {
+                tokens.push(caregiverData.fcmToken);
+              }
+            });
+
+            if (tokens.length > 0) {
+              const message = {
+                notification: {
+                  title: '📡 Device Offline',
+                  body: `QuadTrack for ${device.name || 'Patient'} has gone offline`,
+                },
+                data: {
+                  type: 'quadtrack_offline',
+                  deviceId: device.deviceId,
+                  timestamp: now.toISOString(),
+                },
+                tokens,
+              };
+
+              await admin.messaging().sendEachForMulticast(message);
+            }
+          }
+        }
+      }
+
+      console.log(`QuadTrack health check completed for ${devicesSnap.size} devices`);
+      return null;
+    } catch (error) {
+      console.error('Error in QuadTrack health check:', error);
+      throw error;
+    }
+  });
+
+/**
+ * Retrieve pending commands for QuadTrack devices
+ * Device polls this endpoint to fetch commands and execute them
+ */
+export const quadTrackCommand = functions.https.onRequest(async (req, res) => {
+  // CORS handling
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+
+  if (req.method !== 'GET') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  try {
+    const deviceId = req.query.deviceId as string;
+    if (!deviceId) {
+      res.status(400).json({ error: 'Missing deviceId query parameter' });
+      return;
+    }
+
+    const db = admin.firestore();
+
+    // Check for pending commands
+    const commandRef = db.collection('quadtrack_commands').doc(deviceId);
+    const commandDoc = await commandRef.get();
+
+    if (!commandDoc.exists) {
+      res.status(200).json({ command: null });
+      return;
+    }
+
+    const command = commandDoc.data();
+
+    // Delete command after retrieval
+    await commandRef.delete();
+
+    res.status(200).json({ command });
+  } catch (error) {
+    console.error('Error fetching QuadTrack command:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * Receive and process Bouncie vehicle tracking alerts
+ * Called from geofence_service when vehicle location sync issues are detected
+ * Stores alert events and notifies caregivers
+ */
+export const bouncieWebhook = functions.https.onRequest(async (req, res) => {
+  // CORS handling
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  try {
+    const {
+      deviceId,
+      userId,
+      alertType,
+      title,
+      body,
+      distanceMeters,
+      vehicleLat,
+      vehicleLng,
+      phoneLat,
+      phoneLng,
+    } = req.body;
+
+    if (!userId || !alertType) {
+      res.status(400).json({ error: 'Missing required fields' });
+      return;
+    }
+
+    const db = admin.firestore();
+
+    // Store alert event
+    const alertRef = db.collection('bouncie_alerts').doc();
+    await alertRef.set({
+      deviceId: deviceId || null,
+      userId,
+      alertType,
+      title,
+      body,
+      distanceMeters: distanceMeters || null,
+      vehicleLocation: vehicleLat && vehicleLng
+        ? new admin.firestore.GeoPoint(vehicleLat, vehicleLng)
+        : null,
+      phoneLocation: phoneLat && phoneLng
+        ? new admin.firestore.GeoPoint(phoneLat, phoneLng)
+        : null,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      processed: false,
+    });
+
+    // Notify caregivers
+    try {
+      const userRef = db.collection('users').doc(userId);
+      const userDoc = await userRef.get();
+
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        const caregiverIds = userData?.caregiverIds || [];
+
+        for (const caregiverId of caregiverIds) {
+          const notifRef = db.collection('notifications').doc();
+          await notifRef.set({
+            caregiverId,
+            userId,
+            title: title || 'Vehicle Tracking Alert',
+            body: body || `Bouncie alert: ${alertType}`,
+            data: {
+              type: 'bouncie_alert',
+              alertType,
+              distanceMeters: distanceMeters || null,
+            },
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            delivered: false,
+          });
+        }
+      }
+    } catch (notifyError) {
+      console.warn('Error notifying caregivers of Bouncie alert:', notifyError);
+      // Don't fail the request if notification fails
+    }
+
+    res.status(200).json({ success: true, alertId: alertRef.id });
+  } catch (error) {
+    console.error('Error processing Bouncie webhook:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});

@@ -260,27 +260,31 @@ class AuthService {
     await _auth.signOut();
   }
 
-  /// Handle Firebase auth exceptions
-  String _handleAuthException(FirebaseAuthException e) {
-    switch (e.code) {
-      case 'weak-password':
-        return 'The password provided is too weak.';
-      case 'email-already-in-use':
-        return 'An account already exists for this email.';
-      case 'user-not-found':
-        return 'No account found for this email.';
-      case 'wrong-password':
-        return 'Incorrect password.';
-      case 'invalid-email':
-        return 'Please enter a valid email address.';
-      case 'user-disabled':
-        return 'This account has been disabled.';
-      case 'too-many-requests':
-        return 'Too many attempts. Please try again later.';
-      case 'invalid-verification-code':
-        return 'Invalid verification code.';
-      default:
-        return e.message ?? 'An error occurred. Please try again.';
-    }
+  /// Handle Firebase auth exceptions by wrapping in a typed Exception
+  /// so callers can `catch (AuthException e)` cleanly.
+  AuthException _handleAuthException(FirebaseAuthException e) {
+    final message = switch (e.code) {
+      'weak-password' => 'The password provided is too weak.',
+      'email-already-in-use' => 'An account already exists for this email.',
+      'user-not-found' => 'No account found for this email.',
+      'wrong-password' => 'Incorrect password.',
+      'invalid-email' => 'Please enter a valid email address.',
+      'user-disabled' => 'This account has been disabled.',
+      'too-many-requests' => 'Too many attempts. Please try again later.',
+      'invalid-verification-code' => 'Invalid verification code.',
+      _ => e.message ?? 'An error occurred. Please try again.',
+    };
+    return AuthException(message, code: e.code);
   }
+}
+
+/// Typed exception for authentication errors
+class AuthException implements Exception {
+  final String message;
+  final String code;
+
+  const AuthException(this.message, {required this.code});
+
+  @override
+  String toString() => 'AuthException($code): $message';
 }

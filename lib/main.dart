@@ -95,6 +95,9 @@ class CaregiverApp extends StatelessWidget {
       navigatorKey: navigatorKey,
       title: 'Lumina',
       debugShowCheckedModeBanner: false,
+      builder: (context, child) {
+        return BugReportOverlay(child: child ?? const SizedBox.shrink());
+      },
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.light, // Default to light for better visibility

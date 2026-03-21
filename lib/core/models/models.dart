@@ -7,3 +7,4 @@ export 'geo_zone.dart';
 export 'invite_code.dart';
 export 'prescription.dart';
 export 'subscription.dart';
+export 'quadtrack_device.dart';

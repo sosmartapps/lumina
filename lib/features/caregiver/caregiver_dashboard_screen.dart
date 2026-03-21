@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 
 import '../../core/providers/providers.dart';
 import '../../core/providers/caregiver_provider.dart';
+import '../../core/providers/quadtrack_provider.dart';
+import '../../core/models/quadtrack_device.dart' show QuadTrackDevice, DeviceStatus;
 import '../../core/theme/app_theme.dart';
 import '../../core/models/app_user.dart';
 import '../../core/models/medication.dart';
@@ -291,6 +293,10 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
           const BatteryStatusCard(),
           const SizedBox(height: 12),
 
+          // QuadTrack devices
+          _buildQuadTrackCard(),
+          const SizedBox(height: 12),
+
           // Subscription status
           const SubscriptionStatusCard(),
           const SizedBox(height: 12),
@@ -506,6 +512,133 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildQuadTrackCard() {
+    final caregiverId = ref.read(caregiverNotifierProvider).caregiver?.id ??
+        ref.read(appStateNotifierProvider).currentCaregiverId ??
+        '';
+
+    if (caregiverId.isEmpty) return const SizedBox.shrink();
+
+    final devicesAsync = ref.watch(caregiverDevicesProvider(caregiverId));
+
+    return devicesAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (devices) {
+        final online =
+            devices.where((d) => d.status == DeviceStatus.online).length;
+        final alerts = devices
+            .where((d) =>
+                d.status == DeviceStatus.lowBattery ||
+                d.status == DeviceStatus.phoneDead ||
+                d.status == DeviceStatus.offline)
+            .length;
+
+        return GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => QuadTrackDashboardScreen(
+                  caregiverId: caregiverId,
+                ),
+              ),
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryTeal.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.track_changes,
+                    color: AppTheme.primaryTeal,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'QuadTrack Devices',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      if (devices.isEmpty)
+                        Text(
+                          'No devices registered',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                          ),
+                        )
+                      else
+                        Row(
+                          children: [
+                            Icon(Icons.circle,
+                                color: AppTheme.primaryGreen, size: 10),
+                            const SizedBox(width: 4),
+                            Text(
+                              '$online online',
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                            if (alerts > 0) ...[
+                              const SizedBox(width: 12),
+                              Icon(Icons.warning_amber_rounded,
+                                  color: AppTheme.primaryOrange, size: 16),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$alerts alert${alerts > 1 ? 's' : ''}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: AppTheme.primaryOrange,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(width: 12),
+                            Text(
+                              '${devices.length} total',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: Colors.grey),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

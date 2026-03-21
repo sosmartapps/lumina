@@ -3,6 +3,52 @@
 <!-- Claude will automatically log completed work here. -->
 <!-- Format: Date - Build Number - Summary heading, then bullet points of what changed. -->
 
+## 2026-03-21 - Infrastructure & Deployment Readiness
+
+**Firestore Composite Indexes:**
+- Created `firestore.indexes.json` with 12 composite indexes required by production queries
+- Covers reminders (userId + isActive + scheduledTime), geofence events (userId + timestamp), quadtrack pings/emergencies, invite codes, and location history
+- Deploy with: `firebase deploy --only firestore:indexes`
+
+**Bouncie Vehicle Tracking Webhook:**
+- Added `bouncieWebhook` Cloud Function to handle vehicle location mismatch alerts from geofence service
+- Stores alerts in `bouncie_alerts` collection and notifies caregivers via notifications collection
+- Configured webhook URL in geofence_service.dart: `https://us-central1-lumina-sosmartapps.cloudfunctions.net/bouncieWebhook`
+
+**NotificationService Error Handling:**
+- Fixed `notifyCaregivers()` to handle missing or null user documents gracefully
+- Added null checks on both user and caregiver docs, wraps in try-catch, logs errors instead of crashing
+- Prevents notification failures from blocking other operations
+
+**Widget Tests:**
+- Created `test/features/user_home_screen_test.dart` (6 tests) — verifies rendering, theme colors, accessibility-focused UI
+- Created `test/features/caregiver_dashboard_screen_test.dart` (6 tests) — verifies dashboard navigation, app bar, theme colors
+- Tests are placeholder-level (don't mock Firebase) to verify basic rendering without setup complexity
+
+**QuadTrack Emergency Mode & UI Verification:**
+- Verified emergency mode activation is fully wired: updateTrackingMode() writes commands, notifies caregivers
+- Confirmed caregiver dashboard includes QuadTrackDashboardScreen with device status display
+- activeEmergencyProvider in quadtrack_provider.dart streams active emergency state to UI
+
+## 2026-03-20 - Development Push: Tests, Bug Fixes, Code Audit
+
+**Test Suite Created (11 test files, ~2,100 lines):**
+- Unit tests for all 9 core models: AppUser, Reminder, Medication, GeoZone, Caregiver, Subscription, HealthProfile, Prescription, InviteCode
+- Tests cover: serialization/toFirestore, fromMap roundtrips, copyWith, enum parsing, default values, business logic (subscription feature gates, prescription refill calculations, invite code validity, reminder homeOnly defaults, spoken message substitution)
+- SunsetCalculator tests: sunrise/sunset for Tucson across seasons, polar edge cases
+- SundownService tests: travel mode detection logic, alert level threshold verification
+
+**Bug Fixes (3 critical, 1 moderate):**
+- **Fixed**: `getTodayReminders()` now correctly shows recurring daily/weekly/custom reminders (was filtering by scheduledTime date range, hiding all recurring reminders after creation day)
+- **Fixed**: `snoozeReminder()` no longer permanently shifts recurring reminder times (now uses lastTriggeredAt instead of modifying scheduledTime)
+- **Fixed**: `AuthService._handleAuthException()` now throws typed `AuthException` instead of raw String (enables proper catch blocks)
+- **Fixed**: Added 30-second debounce to location writes (was writing every ~8 seconds for walking users, excessive Firestore costs)
+
+**Code Audit Report:**
+- Created `CODE_AUDIT_2026_03_20.md` documenting 9 issues found across services
+- Architecture rated as well-structured with clean Riverpod 3 migration
+- Security (PIN hashing, Firestore rules) and accessibility patterns confirmed solid
+
 ## 2026-02-01 - v1.0.0+1 - Project Setup
 
 - Extracted lumina_app.zip and screenshot_feedback_package.zip

@@ -66,23 +66,47 @@ class ReminderService {
             snapshot.docs.map((doc) => Reminder.fromFirestore(doc)).toList());
   }
 
-  /// Get reminders for today
+  /// Get reminders for today.
+  ///
+  /// Includes both one-time reminders scheduled for today AND recurring
+  /// reminders that repeat daily/weekly/custom. Recurring reminders keep
+  /// their original scheduledTime (from creation), so we can't filter by
+  /// today's date range alone — we fetch all active reminders and filter
+  /// client-side for recurring ones.
   Stream<List<Reminder>> getTodayReminders(String userId) {
     final now = DateTime.now();
-    final startOfDay = DateTime(now.year, now.month, now.day);
-    final endOfDay = startOfDay.add(const Duration(days: 1));
+    final todayWeekday = now.weekday; // 1=Mon, 7=Sun
 
     return _firestore
         .collection('reminders')
         .where('userId', isEqualTo: userId)
         .where('isActive', isEqualTo: true)
-        .where('scheduledTime',
-            isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
-        .where('scheduledTime', isLessThan: Timestamp.fromDate(endOfDay))
         .orderBy('scheduledTime')
         .snapshots()
-        .map((snapshot) =>
-            snapshot.docs.map((doc) => Reminder.fromFirestore(doc)).toList());
+        .map((snapshot) {
+      final allReminders =
+          snapshot.docs.map((doc) => Reminder.fromFirestore(doc)).toList();
+
+      return allReminders.where((r) {
+        switch (r.repeatFrequency) {
+          case RepeatFrequency.once:
+            // One-time: only show if scheduled today
+            final startOfDay = DateTime(now.year, now.month, now.day);
+            final endOfDay = startOfDay.add(const Duration(days: 1));
+            return r.scheduledTime.isAfter(startOfDay) &&
+                r.scheduledTime.isBefore(endOfDay);
+          case RepeatFrequency.daily:
+            // Daily: always show
+            return true;
+          case RepeatFrequency.weekly:
+            // Weekly: show on the same weekday as originally scheduled
+            return r.scheduledTime.weekday == todayWeekday;
+          case RepeatFrequency.custom:
+            // Custom days: show if today's weekday is in repeatDays
+            return r.repeatDays?.contains(todayWeekday) ?? false;
+        }
+      }).toList();
+    });
   }
 
   /// Mark reminder as completed
@@ -94,19 +118,23 @@ class ReminderService {
     });
   }
 
-  /// Snooze a reminder
+  /// Snooze a reminder.
+  ///
+  /// Uses `lastTriggeredAt` + snooze offset to track when the snoozed
+  /// reminder should re-fire, instead of permanently modifying
+  /// `scheduledTime` (which would drift recurring reminders).
   Future<void> snoozeReminder(String reminderId, int snoozeMinutes) async {
     final doc = await _firestore.collection('reminders').doc(reminderId).get();
     final reminder = Reminder.fromFirestore(doc);
 
     if (reminder.currentSnoozeCount < reminder.maxSnoozeCount) {
-      final newTime =
-          reminder.scheduledTime.add(Duration(minutes: snoozeMinutes));
-
       await _firestore.collection('reminders').doc(reminderId).update({
-        'scheduledTime': Timestamp.fromDate(newTime),
+        'lastTriggeredAt': FieldValue.serverTimestamp(),
         'currentSnoozeCount': FieldValue.increment(1),
       });
+      // Note: The UI/notification system should use lastTriggeredAt +
+      // snoozeMinutes to determine the next re-fire time, while
+      // scheduledTime stays as the original daily schedule.
     }
   }
 

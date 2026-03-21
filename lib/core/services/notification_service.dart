@@ -344,25 +344,50 @@ class NotificationService {
     required String body,
     Map<String, dynamic>? data,
   }) async {
-    // Get user's caregivers
-    final userDoc = await _firestore.collection('users').doc(userId).get();
-    final caregiverIds = List<String>.from(userDoc.data()?['caregiverIds'] ?? []);
-
-    for (final caregiverId in caregiverIds) {
-      final caregiverDoc =
-          await _firestore.collection('caregivers').doc(caregiverId).get();
-      final tokens = List<String>.from(caregiverDoc.data()?['fcmTokens'] ?? []);
-
-      // Store notification in Firestore to trigger Cloud Function
-      for (final token in tokens) {
-        await _firestore.collection('notifications').add({
-          'token': token,
-          'title': title,
-          'body': body,
-          'data': data ?? {},
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+    try {
+      // Get user's caregivers
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      if (!userDoc.exists) {
+        debugPrint('User doc not found for userId: $userId');
+        return;
       }
+
+      final userData = userDoc.data();
+      if (userData == null) {
+        debugPrint('User data is null for userId: $userId');
+        return;
+      }
+
+      final caregiverIds = List<String>.from(userData['caregiverIds'] ?? []);
+
+      for (final caregiverId in caregiverIds) {
+        try {
+          final caregiverDoc =
+              await _firestore.collection('caregivers').doc(caregiverId).get();
+          if (!caregiverDoc.exists) {
+            debugPrint('Caregiver doc not found for caregiverId: $caregiverId');
+            continue;
+          }
+
+          final tokens = List<String>.from(caregiverDoc.data()?['fcmTokens'] ?? []);
+
+          // Store notification in Firestore to trigger Cloud Function
+          for (final token in tokens) {
+            await _firestore.collection('notifications').add({
+              'token': token,
+              'title': title,
+              'body': body,
+              'data': data ?? {},
+              'createdAt': FieldValue.serverTimestamp(),
+            });
+          }
+        } catch (e) {
+          debugPrint('Error notifying caregiver $caregiverId: $e');
+          continue;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error notifying caregivers: $e');
     }
   }
 

@@ -160,7 +160,7 @@ class GeofenceServiceWrapper {
       await _alertManager.handleSyncResult(
         result,
         caregiverName: 'Caregiver',
-        caregiverWebhookUrl: '', // No webhook configured yet
+        caregiverWebhookUrl: 'https://us-central1-lumina-sosmartapps.cloudfunctions.net/bouncieWebhook',
       );
 
       if (!result.inSync) {

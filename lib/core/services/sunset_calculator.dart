@@ -96,9 +96,17 @@ class SunsetCalculator {
     // 8. Local mean time
     final localMeanTime = hHours + ra - (0.06571 * t) - 6.622;
 
-    // 9. Adjust to UTC
+    // 9. Adjust to UTC, tracking day overflow
     var utHours = localMeanTime - lngHour;
-    utHours = _normalize(utHours, 24);
+    int dayOffset = 0;
+    while (utHours < 0) {
+      utHours += 24;
+      dayOffset--;
+    }
+    while (utHours >= 24) {
+      utHours -= 24;
+      dayOffset++;
+    }
 
     // Convert to DateTime
     final hours = utHours.floor();
@@ -109,7 +117,7 @@ class SunsetCalculator {
     final utcTime = DateTime.utc(
       date.year,
       date.month,
-      date.day,
+      date.day + dayOffset,
       hours,
       minutes,
       seconds,

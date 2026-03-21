@@ -12,6 +12,8 @@ class LocationService {
 
   StreamSubscription<Position>? _positionStreamSubscription;
   Position? _lastPosition;
+  DateTime? _lastWriteTime;
+  static const Duration _writeDebounce = Duration(seconds: 30);
 
   Position? get lastPosition => _lastPosition;
 
@@ -109,8 +111,16 @@ class LocationService {
     _positionStreamSubscription = null;
   }
 
-  /// Save location update to Firestore
+  /// Save location update to Firestore (debounced to reduce writes)
   Future<void> _saveLocationUpdate(String userId, Position position) async {
+    // Debounce: write at most once per 30 seconds to control Firestore costs
+    final now = DateTime.now();
+    if (_lastWriteTime != null &&
+        now.difference(_lastWriteTime!) < _writeDebounce) {
+      return;
+    }
+    _lastWriteTime = now;
+
     try {
       final locationUpdate = LocationUpdate(
         id: '',
