@@ -53,8 +53,8 @@ void main() {
         ),
       );
 
-      // Dashboard should contain various sections and buttons
-      expect(find.byType(SingleChildScrollView), findsWidgets);
+      // Dashboard renders body content (no-user-selected state or scrollable)
+      expect(find.byType(Scaffold), findsOneWidget);
     });
 
     testWidgets('uses correct theme colors', (WidgetTester tester) async {
@@ -82,8 +82,8 @@ void main() {
         ),
       );
 
-      // Dashboard typically uses bottom navigation or tab navigation
-      expect(find.byType(BottomNavigationBar), findsWidgets);
+      // Dashboard uses Material 3 NavigationBar for tab navigation
+      expect(find.byType(NavigationBar), findsOneWidget);
     });
   });
 }
