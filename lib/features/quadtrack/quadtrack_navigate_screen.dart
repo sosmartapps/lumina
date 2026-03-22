@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -129,16 +131,14 @@ class _QuadTrackNavigateScreenState
         );
 
         // Center map to show both positions
+        final bounds = _calculateBounds(
+          LatLng(_caregiverPosition!.latitude,
+              _caregiverPosition!.longitude),
+          LatLng(device.lastLocation!.latitude,
+              device.lastLocation!.longitude),
+        );
         _mapController.animateCamera(
-          CameraUpdateOptions(
-            bounds: _calculateBounds(
-              LatLng(_caregiverPosition!.latitude,
-                  _caregiverPosition!.longitude),
-              LatLng(device.lastLocation!.latitude,
-                  device.lastLocation!.longitude),
-            ),
-            padding: const EdgeInsets.all(100),
-          ),
+          CameraUpdate.newLatLngBounds(bounds, 100),
         );
 
         setState(() {
@@ -149,20 +149,17 @@ class _QuadTrackNavigateScreenState
     });
   }
 
-  CameraUpdateOptions _calculateBounds(LatLng p1, LatLng p2) {
+  LatLngBounds _calculateBounds(LatLng p1, LatLng p2) {
     final sw = LatLng(
-      (p1.latitude < p2.latitude) ? p1.latitude : p2.latitude,
-      (p1.longitude < p2.longitude) ? p1.longitude : p2.longitude,
+      math.min(p1.latitude, p2.latitude),
+      math.min(p1.longitude, p2.longitude),
     );
     final ne = LatLng(
-      (p1.latitude > p2.latitude) ? p1.latitude : p2.latitude,
-      (p1.longitude > p2.longitude) ? p1.longitude : p2.longitude,
+      math.max(p1.latitude, p2.latitude),
+      math.max(p1.longitude, p2.longitude),
     );
 
-    return CameraUpdateOptions(
-      bounds: LatLngBounds(southwest: sw, northeast: ne),
-      padding: const EdgeInsets.all(100),
-    );
+    return LatLngBounds(southwest: sw, northeast: ne);
   }
 
   double _calculateDistance(LatLng from, LatLng to) {
@@ -170,19 +167,19 @@ class _QuadTrackNavigateScreenState
     final dLat = _toRad(to.latitude - from.latitude);
     final dLng = _toRad(to.longitude - from.longitude);
 
-    final a = (dLat / 2).sin() * (dLat / 2).sin() +
-        _toRad(from.latitude).cos() *
-            _toRad(to.latitude).cos() *
-            (dLng / 2).sin() *
-            (dLng / 2).sin();
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_toRad(from.latitude)) *
+            math.cos(_toRad(to.latitude)) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
 
-    final c = 2 * a.asin().clamp(-1.0, 1.0).asin();
+    final c = 2 * math.asin(math.sqrt(a).clamp(0.0, 1.0));
 
     return earthRadius * c;
   }
 
   double _toRad(double degree) {
-    return degree * (3.141592653589793 / 180.0);
+    return degree * (math.pi / 180.0);
   }
 
   String _getETA(double distanceKm) {
@@ -298,7 +295,7 @@ class _QuadTrackNavigateScreenState
                   color: AppTheme.surfaceLight,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
+                      color: Colors.black.withValues(alpha: 0.1),
                       blurRadius: 8,
                       offset: const Offset(0, -2),
                     ),

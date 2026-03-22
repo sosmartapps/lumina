@@ -366,7 +366,7 @@ class _QuadTrackDetailScreenState extends ConsumerState<QuadTrackDetailScreen> {
                                         QuadTrackShareScreen(
                                       deviceId: widget.deviceId,
                                       caregiverId: widget.caregiverId,
-                                      patientName: device.name,
+                                      patientId: device.patientId,
                                     ),
                                   ),
                                 );
