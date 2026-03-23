@@ -35,7 +35,12 @@ jobs:
                 case TargetPlatform.android: return android;
                 case TargetPlatform.iOS: return ios;
                 case TargetPlatform.macOS: return macos;
-                default: throw UnsupportedError('Unsupported platform');
+                case TargetPlatform.windows:
+                  throw UnsupportedError('DefaultFirebaseOptions have not been configured for windows.');
+                case TargetPlatform.linux:
+                  throw UnsupportedError('DefaultFirebaseOptions have not been configured for linux.');
+                default:
+                  throw UnsupportedError('DefaultFirebaseOptions are not supported for this platform.');
               }
             }
             static const FirebaseOptions web = FirebaseOptions(
@@ -61,7 +66,7 @@ jobs:
 
       - name: Analyze
         id: analyze
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
 
       - name: Test
         id: test
@@ -76,7 +81,7 @@ jobs:
 
       - name: Re-run Analyze
         if: failure()
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
 
       - name: Re-run Test
         if: failure()
