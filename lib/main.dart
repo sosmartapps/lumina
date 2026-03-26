@@ -10,7 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:bug_reporter/bug_reporter.dart';
-import 'package:screenshot/screenshot.dart';
+import 'package:screenshot/screenshot.dart' as screenshot_lib;
 
 import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
@@ -74,7 +74,7 @@ void main() async {
 
   runApp(
     ProviderScope(
-      child: Screenshot(
+      child: screenshot_lib.Screenshot(
         controller: ScreenshotService.controller,
         child: CaregiverApp(
           navigatorKey: BugReporterInitializer.navigatorKey,
