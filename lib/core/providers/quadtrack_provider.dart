@@ -9,9 +9,13 @@ final quadTrackServiceProvider = Provider<QuadTrackService>((ref) {
 });
 
 /// Provider for currently selected device ID
-final selectedDeviceProvider = StateProvider<String?>((ref) {
-  return null;
-});
+class _SelectedDeviceNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+}
+
+final selectedDeviceProvider =
+    NotifierProvider<_SelectedDeviceNotifier, String?>(_SelectedDeviceNotifier.new);
 
 /// Stream provider for caregiver's devices
 final caregiverDevicesProvider =

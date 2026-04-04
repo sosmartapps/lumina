@@ -633,23 +633,23 @@ class _QuadTrackProfileSetupScreenState
           const SizedBox(height: 12),
           TextField(
             controller: _marksController,
+            maxLines: 2,
             decoration: InputDecoration(
               labelText: 'Distinguishing Marks (scars, tattoos, birthmarks)',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
-              maxLines: 2,
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _clothingController,
+            maxLines: 2,
             decoration: InputDecoration(
               labelText: 'Usually Wears (clothing preferences)',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
-              maxLines: 2,
             ),
           ),
           const SizedBox(height: 12),
@@ -698,12 +698,12 @@ class _QuadTrackProfileSetupScreenState
           const SizedBox(height: 24),
           TextField(
             controller: _diagnosisController,
+            maxLines: 2,
             decoration: InputDecoration(
               labelText: 'Primary Diagnosis (e.g., Alzheimer\'s, Autism)',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
-              maxLines: 2,
             ),
           ),
           const SizedBox(height: 12),
@@ -723,56 +723,56 @@ class _QuadTrackProfileSetupScreenState
           const SizedBox(height: 12),
           TextField(
             controller: _medicalAlertController,
+            maxLines: 2,
             decoration: InputDecoration(
               labelText: 'Medical Alert (critical info for first responders)',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
-              maxLines: 2,
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _behaviorController,
+            maxLines: 2,
             decoration: InputDecoration(
               labelText: 'Behavior When Lost',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
-              maxLines: 2,
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _communicationController,
+            maxLines: 2,
             decoration: InputDecoration(
               labelText: 'Communication Ability',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
-              maxLines: 2,
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _calmingController,
+            maxLines: 2,
             decoration: InputDecoration(
               labelText: 'Calming Techniques (what helps them relax)',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
-              maxLines: 2,
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _triggersController,
+            maxLines: 2,
             decoration: InputDecoration(
               labelText: 'Triggers to Avoid (what upsets them)',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
-              maxLines: 2,
             ),
           ),
         ],
@@ -876,12 +876,12 @@ class _QuadTrackProfileSetupScreenState
             const SizedBox(height: 12),
             TextField(
               controller: _vehicleNotesController,
+              maxLines: 2,
               decoration: InputDecoration(
                 labelText: 'Vehicle Notes (damages, stickers, etc.)',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
-                maxLines: 2,
               ),
             ),
           ],

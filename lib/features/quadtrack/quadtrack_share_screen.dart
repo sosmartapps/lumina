@@ -34,9 +34,7 @@ class QuadTrackShareScreen extends ConsumerStatefulWidget {
 
 class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
   final _phoneController = TextEditingController();
-  bool _isLoading = false;
   String? _addressCache;
-  List<QuadTrackPing> _recentPings = [];
   UserProfile? _userProfile;
   HealthProfile? _healthProfile;
   AppUser? _appUser;
@@ -132,19 +130,8 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
     String address,
     List<QuadTrackPing> recentPings,
   ) {
-    final lat = device.lastLocation!.latitude;
-    final lng = device.lastLocation!.longitude;
     final timestamp = DateFormat('hh:mm a').format(device.lastSeenAt!);
     final date = DateFormat('MMM dd, yyyy').format(device.lastSeenAt!);
-
-    final emergencyTime = device.emergencyActivatedAt != null
-        ? DateFormat('hh:mm a').format(device.emergencyActivatedAt!)
-        : 'N/A';
-
-    final recentMovement = recentPings.take(5).map((ping) {
-      final time = DateFormat('hh:mm a').format(ping.timestamp);
-      return '  $time: ${ping.location.latitude.toStringAsFixed(4)}, ${ping.location.longitude.toStringAsFixed(4)}';
-    }).join('\n');
 
     // Build comprehensive missing person alert
     final sb = StringBuffer();

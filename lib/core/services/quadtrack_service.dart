@@ -367,7 +367,6 @@ class QuadTrackService {
       final data = deviceDoc.data() as Map<String, dynamic>;
       final trackerBattery = data['trackerBatteryLevel'] as int? ?? 100;
       final smartInterval = _calculateSmartInterval(trackerBattery);
-      final now = DateTime.now();
 
       // Create emergency record
       final emergencyRef = _firestore

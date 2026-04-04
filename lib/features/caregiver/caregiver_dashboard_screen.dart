@@ -8,7 +8,7 @@ import 'package:intl/intl.dart';
 import '../../core/providers/providers.dart';
 import '../../core/providers/caregiver_provider.dart';
 import '../../core/providers/quadtrack_provider.dart';
-import '../../core/models/quadtrack_device.dart' show QuadTrackDevice, DeviceStatus;
+import '../../core/models/quadtrack_device.dart' show DeviceStatus;
 import '../../core/theme/app_theme.dart';
 import '../../core/models/app_user.dart';
 import '../../core/models/medication.dart';
