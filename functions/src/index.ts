@@ -1233,8 +1233,8 @@ export const evaluateQuadTrackGeofences = functions.firestore
         return null;
       }
 
-      const pingLat = ping.lat;
-      const pingLng = ping.lng;
+      const pingLat = ping.location?.latitude || ping.lat;
+      const pingLng = ping.location?.longitude || ping.lng;
 
       // Haversine distance calculation
       const haversineDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
@@ -1254,7 +1254,9 @@ export const evaluateQuadTrackGeofences = functions.firestore
       // Check each zone
       for (const zoneDoc of zonesSnap.docs) {
         const zone = zoneDoc.data();
-        const distance = haversineDistance(pingLat, pingLng, zone.lat, zone.lng);
+        const zoneLat = zone.center?.latitude || zone.lat;
+        const zoneLng = zone.center?.longitude || zone.lng;
+        const distance = haversineDistance(pingLat, pingLng, zoneLat, zoneLng);
         const isInside = distance <= (zone.radiusKm || 0.5);
 
         // Determine if we should trigger an event

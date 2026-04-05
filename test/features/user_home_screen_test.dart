@@ -33,8 +33,8 @@ void main() {
     });
 
     testWidgets('renders in portrait orientation', (WidgetTester tester) async {
+      addTearDown(tester.binding.window.clearPhysicalSizeTestValue);
       tester.binding.window.physicalSizeTestValue = const Size(400, 800);
-      addTearDown(tester.binding.removePhysicalSizeTestValue);
 
       await tester.pumpWidget(
         const ProviderScope(

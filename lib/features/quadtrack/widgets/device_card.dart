@@ -206,7 +206,6 @@ class DeviceCard extends StatelessWidget {
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                     ),
-                compact: true,
               ),
 
               // Phone dead banner (if applicable)
