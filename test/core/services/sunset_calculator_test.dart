@@ -123,10 +123,8 @@ void main() {
         expect(sunrise, isNotNull);
         expect(sunset, isNotNull);
 
-        // Compare time-of-day (hour:minute) since both are returned in local time
-        final sunriseMinutes = sunrise!.hour * 60 + sunrise.minute;
-        final sunsetMinutes = sunset!.hour * 60 + sunset.minute;
-        expect(sunriseMinutes, lessThan(sunsetMinutes));
+        // Compare times directly - sunrise should be before sunset on same day
+        expect(sunrise!.isBefore(sunset!), isTrue);
       });
 
       test('summer sunrise is earlier than winter sunrise', () {

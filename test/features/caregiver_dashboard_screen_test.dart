@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:lumina/features/caregiver/caregiver_dashboard_screen.dart';
-
 void main() {
   group('CaregiverDashboardScreen Tests', () {
     testWidgets('renders without crashing', (WidgetTester tester) async {
