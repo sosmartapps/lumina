@@ -28,21 +28,6 @@ class DeviceCard extends StatelessWidget {
     }
   }
 
-  String _getStatusLabel() {
-    switch (device.status) {
-      case DeviceStatus.online:
-        return 'Online';
-      case DeviceStatus.offline:
-        return 'Offline';
-      case DeviceStatus.sleeping:
-        return 'Sleeping';
-      case DeviceStatus.lowBattery:
-        return 'Low Battery';
-      case DeviceStatus.phoneDead:
-        return 'Phone Dead';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final statusColor = _getStatusColor();
