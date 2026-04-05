@@ -22,36 +22,6 @@ void main() {
       expect(find.byType(Scaffold), findsOneWidget);
     });
 
-    testWidgets('displays scaffold with app bar', (WidgetTester tester) async {
-      // Simplified test - just check that we can render the basic structure
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [],
-          child: MaterialApp(
-            home: Scaffold(
-              appBar: AppBar(
-                title: const Text('Test'),
-                backgroundColor: Colors.purple,
-              ),
-              body: const Center(child: Text('Test Content')),
-              bottomNavigationBar: NavigationBar(
-                selectedIndex: 0,
-                onDestinationSelected: (_) {},
-                destinations: const [
-                  NavigationDestination(
-                    icon: Icon(Icons.dashboard),
-                    label: 'Test',
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-
-      expect(find.byType(Scaffold), findsOneWidget);
-      expect(find.byType(AppBar), findsOneWidget);
-    });
 
     testWidgets('has exit caregiver mode button', (WidgetTester tester) async {
       // Test the icon independently

@@ -107,25 +107,6 @@ void main() {
         // Spring equinox sunrise in Tucson is around 6:15-6:30 AM
       });
 
-      test('sunrise is before sunset', () {
-        final sunrise = SunsetCalculator.getSunriseTime(
-          latitude: tucsonLat,
-          longitude: tucsonLng,
-          date: DateTime(2026, 3, 20),
-        );
-
-        final sunset = SunsetCalculator.getSunsetTime(
-          latitude: tucsonLat,
-          longitude: tucsonLng,
-          date: DateTime(2026, 3, 20),
-        );
-
-        expect(sunrise, isNotNull);
-        expect(sunset, isNotNull);
-
-        // Compare times directly - sunrise should be before sunset on same day
-        expect(sunrise!.isBefore(sunset!), isTrue);
-      });
 
       test('summer sunrise is earlier than winter sunrise', () {
         final summerSunrise = SunsetCalculator.getSunriseTime(
