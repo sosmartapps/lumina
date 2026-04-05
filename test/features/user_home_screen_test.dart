@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:lumina/core/theme/app_theme.dart';
 import 'package:lumina/features/user_home/user_home_screen.dart';
 
 void main() {

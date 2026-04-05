@@ -46,7 +46,6 @@ class DeviceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statusColor = _getStatusColor();
-    final statusLabel = _getStatusLabel();
     final isPhoneDead = device.isPhoneDead;
 
     return Card(

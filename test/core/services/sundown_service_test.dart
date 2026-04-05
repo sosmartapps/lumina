@@ -84,7 +84,6 @@ void main() {
       const distance = 10000.0; // 10km
       const walkingSpeed = 1.25; // m/s
       const routingFactor = 1.4;
-      const bufferMinutes = 30;
 
       final travelSeconds = (distance * routingFactor) / walkingSpeed;
       final travelMinutes = travelSeconds / 60; // ~186 minutes
@@ -98,10 +97,8 @@ void main() {
       const distance = 5000.0; // 5km
       const drivingSpeed = 11.11; // m/s
       const routingFactor = 1.4;
-      const bufferMinutes = 30;
 
       final travelSeconds = (distance * routingFactor) / drivingSpeed;
-      final travelMinutes = travelSeconds / 60; // ~10.5 minutes
 
       final sunsetSeconds = 45 * 60;
 
