@@ -129,6 +129,8 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
     QuadTrackDevice device,
     String address,
     List<QuadTrackPing> recentPings,
+    double lat,
+    double lng,
   ) {
     final timestamp = DateFormat('hh:mm a').format(device.lastSeenAt!);
     final date = DateFormat('MMM dd, yyyy').format(device.lastSeenAt!);
@@ -350,7 +352,13 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
 
     if (device.lastLocation == null) return;
 
-    final message = _buildShareMessage(device, address, pings);
+    final message = _buildShareMessage(
+      device,
+      address,
+      pings,
+      device.lastLocation!.latitude,
+      device.lastLocation!.longitude,
+    );
 
     // Check message length and warn if too long for SMS
     if (message.length > 160) {
@@ -427,7 +435,13 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
   ) async {
     if (device.lastLocation == null) return;
 
-    final message = _buildShareMessage(device, address, pings);
+    final message = _buildShareMessage(
+      device,
+      address,
+      pings,
+      device.lastLocation!.latitude,
+      device.lastLocation!.longitude,
+    );
 
     await Clipboard.setData(ClipboardData(text: message));
 
@@ -448,7 +462,13 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
   ) async {
     if (device.lastLocation == null) return;
 
-    final message = _buildShareMessage(device, address, pings);
+    final message = _buildShareMessage(
+      device,
+      address,
+      pings,
+      device.lastLocation!.latitude,
+      device.lastLocation!.longitude,
+    );
     final patientName = _userProfile?.fullLegalName ?? 'Missing Person';
 
     final result = await Share.share(
