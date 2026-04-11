@@ -30,6 +30,15 @@ class BugReportSheet extends StatefulWidget {
   }) async {
     final screenshot = await ScreenshotService.capture(context);
     if (!context.mounted) return;
+
+    // Guard against missing Navigator (e.g. when called from
+    // PlatformDispatcher.onError before the widget tree is ready).
+    final navigator = Navigator.maybeOf(context);
+    if (navigator == null) {
+      debugPrint('BugReportSheet.show: no Navigator found — skipping.');
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
