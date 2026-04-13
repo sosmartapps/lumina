@@ -102,9 +102,17 @@
 					<string>flutter</string>
 					<key>UISceneStoryboardFile</key>
 					<string>Main</string>
-				</dict>
+					<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+</dict>
 			</array>
-		</dict>
-	</dict>
+			<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+</dict>
+		<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+</dict>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>
