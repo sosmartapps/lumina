@@ -42,11 +42,9 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
-
 	<!-- Google Maps API Key (from Secrets.xcconfig) -->
 	<key>GMS_API_KEY</key>
 	<string>$(GMS_API_KEY)</string>
-
 	<!-- Location permissions -->
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Lumina needs your location to help you navigate to saved places and find your way home.</string>
@@ -60,21 +58,17 @@
 		<string>fetch</string>
 		<string>remote-notification</string>
 	</array>
-
 	<!-- Camera permission for medication verification -->
 	<key>NSCameraUsageDescription</key>
 	<string>Lumina needs camera access to take photos for medication verification.</string>
-
 	<!-- Microphone permission for voice features -->
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Lumina needs microphone access for voice features and reminders.</string>
-
 	<!-- Photo library permissions for screenshot feedback -->
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Lumina needs access to your photo library to attach screenshots when you send feedback about the app.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Lumina needs permission to save screenshots for feedback purposes.</string>
-
 	<!-- Phone call permission -->
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
@@ -102,17 +96,11 @@
 					<string>flutter</string>
 					<key>UISceneStoryboardFile</key>
 					<string>Main</string>
-					<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
 </dict>
 			</array>
-			<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
 </dict>
-		<key>ITSAppUsesNonExemptEncryption</key>
+</dict>	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
-</dict>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
+
 </dict>
 </plist>
