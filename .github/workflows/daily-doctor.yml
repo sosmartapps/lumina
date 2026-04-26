@@ -100,9 +100,21 @@ jobs:
           name: daily-doctor-patch
           path: patch.diff
 
-      # Email summary
-      - name: Send email summary
+      # Only email on STATUS TRANSITIONS, not every run.
+      # Prevents inbox flooding when a build keeps failing for days.
+      - name: Check previous run conclusion
+        id: prev_run
         if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PREV=$(gh api "repos/${{ github.repository }}/actions/workflows/daily-doctor.yml/runs?branch=${{ github.ref_name }}&per_page=2&exclude_pull_requests=true" --jq '.workflow_runs[1].conclusion // "none"' 2>/dev/null || echo "none")
+          echo "previous=${PREV}" >> "$GITHUB_OUTPUT"
+          echo "Previous run on ${{ github.ref_name }}: ${PREV}"
+          echo "Current job.status: ${{ job.status }}"
+
+      - name: Send email summary
+        if: always() && ((job.status == 'failure' && steps.prev_run.outputs.previous != 'failure') || (job.status == 'success' && steps.prev_run.outputs.previous == 'failure'))
         continue-on-error: true
         uses: dawidd6/action-send-mail@v3
         with:
