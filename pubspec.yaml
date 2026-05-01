@@ -29,8 +29,8 @@ dependencies:
   geolocator: ^14.0.2
   geocoding: ^4.0.0
   flutter_polyline_points: ^3.1.0
-  latlong2: ^0.9.0
-  map_launcher: ^3.3.0
+  latlong2: ^0.10.1
+  map_launcher: ^4.5.0
 
   # Phone & Communication
   url_launcher: ^6.2.2
@@ -58,7 +58,7 @@ dependencies:
 
   # Bouncie / Vehicle Tracking
   http: ^1.2.0
-  flutter_dotenv: ^5.2.1
+  flutter_dotenv: ^6.0.1
 
   # Battery & Sensor Monitoring
   battery_plus: ^7.0.0
@@ -68,7 +68,7 @@ dependencies:
   screenshot: ^3.0.0
 
   # In-App Purchases / Subscriptions
-  purchases_flutter: ^8.0.0
+  purchases_flutter: ^10.0.1
 
   # Deep Links
   app_links: ^7.0.0
