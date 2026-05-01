@@ -39,7 +39,7 @@ dependencies:
 
   # Camera & Image
   image_picker: ^1.0.7
-  google_mlkit_text_recognition: ^0.14.0
+  google_mlkit_text_recognition: ^0.15.1
 
   # Text to Speech & Audio
   flutter_tts: ^4.2.5
@@ -61,7 +61,7 @@ dependencies:
   flutter_dotenv: ^5.2.1
 
   # Battery & Sensor Monitoring
-  battery_plus: ^6.0.0
+  battery_plus: ^7.0.0
   sensors_plus: ^6.1.0
 
   # Screenshot (for bug reporter)
@@ -71,7 +71,7 @@ dependencies:
   purchases_flutter: ^8.0.0
 
   # Deep Links
-  app_links: ^6.0.0
+  app_links: ^7.0.0
 
   # PDF Generation & Sharing
   pdf: ^3.11.0
