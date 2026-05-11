@@ -98,6 +98,9 @@ class CaregiverApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.light, // Default to light for better visibility
+      builder: (context, child) {
+        return BugReportFab(child: child ?? const SizedBox.shrink());
+      },
       home: const SplashScreen(),
     );
   }
