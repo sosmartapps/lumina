@@ -119,6 +119,28 @@ service cloud.firestore {
         resource.data.createdBy == request.auth.uid;
     }
 
+    // Expenses collection — caregiver out-of-pocket reimbursement tracking
+    match /expenses/{expenseId} {
+      // Patient and their caregivers can read
+      allow read: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid ||
+         isCaregiverFor(resource.data.userId));
+
+      // Only a caregiver of the patient can submit, and only as themselves
+      allow create: if isAuthenticated() &&
+        request.resource.data.submittedBy == request.auth.uid &&
+        isCaregiverFor(request.resource.data.userId);
+
+      // Submitter can edit/delete their own; any caregiver of the patient
+      // can update (approve/reject/reimburse — role gating is client-side,
+      // consistent with other collections)
+      allow update: if isAuthenticated() &&
+        (resource.data.submittedBy == request.auth.uid ||
+         isCaregiverFor(resource.data.userId));
+      allow delete: if isAuthenticated() &&
+        resource.data.submittedBy == request.auth.uid;
+    }
+
     // Feedback collection (screenshot feedback feature)
     match /feedback/{feedbackId} {
       // Anyone authenticated can create feedback

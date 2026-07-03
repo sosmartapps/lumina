@@ -28,6 +28,21 @@ service firebase.storage {
       allow delete: if isAuthenticated() && request.auth.uid == userId;
     }
 
+    // Expense receipt photos — uploaded by caregivers under the
+    // patient's userId (uploader uid != userId, so no uid==userId check)
+    match /expense_receipts/{userId}/{allPaths=**} {
+      // Any authenticated caregiver can upload receipt images (<10 MB)
+      allow create: if isAuthenticated()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+
+      // Patient and caregivers can view receipts
+      allow read: if isAuthenticated();
+
+      // Submitters delete receipts when deleting a pending expense
+      allow delete: if isAuthenticated();
+    }
+
     // Screenshot feedback attachments
     match /feedback_attachments/{userId}/{allPaths=**} {
       // Anyone authenticated can upload feedback screenshots

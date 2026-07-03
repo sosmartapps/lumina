@@ -15,14 +15,14 @@ dependencies:
     path: packages/bug_reporter
 
   # Firebase
-  firebase_core: ^4.7.0
-  firebase_auth: ^6.4.0
-  cloud_firestore: ^6.3.0
-  firebase_storage: ^13.3.0
-  firebase_messaging: ^16.2.0
+  firebase_core: ^4.8.0
+  firebase_auth: ^6.5.0
+  cloud_firestore: ^6.4.0
+  firebase_storage: ^13.4.0
+  firebase_messaging: ^16.2.1
 
   # State Management
-  flutter_riverpod: ^3.2.1
+  flutter_riverpod: ^3.3.1
 
   # Location & Maps
   google_maps_flutter: ^2.16.0
@@ -35,7 +35,7 @@ dependencies:
   # Phone & Communication
   url_launcher: ^6.2.2
   flutter_phone_direct_caller: ^2.1.1
-  share_plus: ^12.0.1
+  share_plus: ^12.0.2
 
   # Camera & Image
   image_picker: ^1.0.7
@@ -62,7 +62,7 @@ dependencies:
 
   # Battery & Sensor Monitoring
   battery_plus: ^7.0.0
-  sensors_plus: ^6.1.0
+  sensors_plus: ^6.1.2  # pinned for shake compatibility (bug_reporter→shake 3.0)
 
   # Screenshot (for bug reporter)
   screenshot: ^3.0.0
@@ -92,8 +92,8 @@ dependencies:
   flutter_background_service: ^5.0.5
 
   # Firebase Monitoring
-  firebase_crashlytics: ^5.2.0
-  firebase_analytics: ^12.3.0
+  firebase_crashlytics: ^5.2.1
+  firebase_analytics: ^12.4.0
 
 dev_dependencies:
   flutter_test:

@@ -3,6 +3,19 @@
 <!-- Claude will automatically log completed work here. -->
 <!-- Format: Date - Build Number - Summary heading, then bullet points of what changed. -->
 
+## 2026-07-03 - Expense & Reimbursement Tracking (NEEDS DEVICE TEST)
+
+**New feature: family caregiver expense reimbursement**
+- `lib/core/models/expense.dart` — Expense model with lifecycle submitted → approved/rejected → reimbursed; categories, receipt URLs, full approval + payment audit trail (who/when/method/note)
+- `CaregiverRole.financeManager` added to caregiver.dart (assignable per-patient via roleOverrides); approval rights = financeManager OR primary caregiver fallback (`ExpenseService.canManageFinances`)
+- `lib/core/services/expense_service.dart` — CRUD, status transitions, receipt upload to Storage `expense_receipts/{patientId}/`, owed-balance helpers
+- `lib/core/services/receipt_scan_service.dart` — on-device ML Kit OCR (same stack as prescription scan) pre-fills amount/merchant/date from receipt photo; manual edit always available
+- Screens: `manage_expenses_screen.dart` (list, status filters, pending/owed summary), `add_expense_screen.dart` (photo → OCR → form), `expense_detail_screen.dart` (role-gated approve/reject/mark-reimbursed, receipt viewer)
+- Wired into caregiver dashboard Manage tab; providers registered in providers.dart
+- Firebase surfaces (pre-flight done): firestore.rules `expenses` block, storage.rules `expense_receipts` block, 2 composite indexes in firestore.indexes.json
+- Deploy: `firebase deploy --only firestore,storage`
+- **Not verified on device** — OCR parsing, photo upload, and approve/reimburse flow need device test on Leon's iPhone
+
 ## 2026-03-21 - Infrastructure & Deployment Readiness
 
 **Firestore Composite Indexes:**

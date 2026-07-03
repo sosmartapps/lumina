@@ -109,7 +109,8 @@ enum CaregiverRole {
   primaryCaregiver('primary_caregiver'),
   caregiver('caregiver'),
   familyMember('family_member'),
-  healthcare('healthcare');
+  healthcare('healthcare'),
+  financeManager('finance_manager');
 
   final String value;
   const CaregiverRole(this.value);
@@ -131,6 +132,8 @@ enum CaregiverRole {
         return 'Family Member';
       case CaregiverRole.healthcare:
         return 'Healthcare Provider';
+      case CaregiverRole.financeManager:
+        return 'Finance Manager';
     }
   }
 }

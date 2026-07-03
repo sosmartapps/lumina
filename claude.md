@@ -15,7 +15,7 @@
 - **History**: See [CHANGELOG.md](CHANGELOG.md)
 
 ## Active Issues
-<!-- None currently tracked -->
+- Expense/reimbursement feature (2026-07-03) built but NOT device-tested — test add/scan/approve/reimburse flow, then deploy `firebase deploy --only firestore,storage`
 
 ## Remaining Work
 - Configure Firebase project
@@ -68,3 +68,7 @@
 - List tasks: `node ../dev-tracker/mark-done.js --list`
 - After completing work, always mark the relevant task done.
 - **IMPORTANT — Mirror all tasks to SSA Dev Planner**: Any new tasks/todos MUST also be added to `dev_tasks` via Firestore REST API. POST to `https://firestore.googleapis.com/v1/projects/ssa-bug-dashboard/databases/(default)/documents/dev_tasks` with fields: title, appName, type, priority, status, description. This is Leon's primary task board.
+## Crash reporting
+- Firebase project: `lumina-sosmartapps` · bundle `com.carecompanion.lumina`
+- Live crashes (open in browser to read stack traces): https://console.firebase.google.com/project/lumina-sosmartapps/crashlytics/app/ios:com.carecompanion.lumina/issues
+- Status: wired 06-22 (build to activate). Fleet registry: `memory/crash-reporting-registry.md` · rollout: `memory/workflows/crash-reporting-rollout.md`

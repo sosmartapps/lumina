@@ -23,6 +23,7 @@ import 'manage_locations_screen.dart';
 import 'manage_medications_screen.dart';
 import '../medication/manage_prescriptions_screen.dart';
 import 'manage_reminders_screen.dart';
+import 'manage_expenses_screen.dart';
 import 'manage_zones_screen.dart';
 import 'app_protection_screen.dart';
 import 'sundown_settings_screen.dart';
@@ -897,6 +898,16 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
             () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const MedicalRecordsScreen()),
+            ),
+          ),
+          _buildManageItem(
+            'Expenses & Reimbursements',
+            'Track receipts and family repayments',
+            Icons.attach_money,
+            AppTheme.primaryGreen,
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const ManageExpensesScreen()),
             ),
           ),
           _buildManageItem(

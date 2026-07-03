@@ -16,6 +16,8 @@ import '../services/prescription_scan_service.dart';
 import '../services/pill_photo_service.dart';
 import '../services/medical_records_service.dart';
 import '../services/device_motion_service.dart';
+import '../services/expense_service.dart';
+import '../services/receipt_scan_service.dart';
 import 'subscription_provider.dart';
 import '../../features/bouncie/bouncie_service.dart';
 
@@ -85,6 +87,14 @@ final pillPhotoServiceProvider = Provider((ref) => PillPhotoService());
 // Medical records export
 final medicalRecordsServiceProvider =
     Provider((ref) => MedicalRecordsService());
+
+// Expense tracking & reimbursement
+final expenseServiceProvider = Provider((ref) => ExpenseService());
+final receiptScanServiceProvider = Provider((ref) {
+  final service = ReceiptScanService();
+  ref.onDispose(() => service.dispose());
+  return service;
+});
 
 // QuadTrack device tracking — canonical provider is in quadtrack_provider.dart
 // (removed duplicate quadTrackServiceProvider to avoid compile error)
