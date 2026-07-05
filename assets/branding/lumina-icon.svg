@@ -1,0 +1,39 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1565C0"/>
+      <stop offset="1" stop-color="#0D47A1"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.46" r="0.52">
+      <stop offset="0" stop-color="#F2B137" stop-opacity="0.60"/>
+      <stop offset="0.5" stop-color="#F2B137" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#F2B137" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="light" cx="0.5" cy="0.42" r="0.75">
+      <stop offset="0" stop-color="#FFF3D6"/>
+      <stop offset="0.38" stop-color="#FFD97A"/>
+      <stop offset="1" stop-color="#F2B137"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+
+  <!-- Soft halo -->
+  <circle cx="512" cy="471" r="440" fill="url(#halo)"/>
+
+  <!-- Guiding ring, open at the base so the light reaches the ground -->
+  <path d="M 343.4 711.8
+           A 294 294 0 1 1 680.6 711.8"
+        fill="none" stroke="#FFFFFF" stroke-width="34"
+        stroke-opacity="0.92" stroke-linecap="round"/>
+
+  <!-- Inner whisper ring -->
+  <circle cx="512" cy="471" r="224" fill="none" stroke="#FFFFFF" stroke-opacity="0.15" stroke-width="10"/>
+
+  <!-- The light -->
+  <circle cx="512" cy="471" r="175" fill="url(#light)"/>
+
+  <!-- Grounding base: care beneath the light -->
+  <path d="M 352 812 q 160 68 320 0 q -12 52 -58 69 q -102 37 -204 0 q -46 -17 -58 -69 z"
+        fill="#FFFFFF" fill-opacity="0.92"/>
+</svg>

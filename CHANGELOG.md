@@ -3,6 +3,19 @@
 <!-- Claude will automatically log completed work here. -->
 <!-- Format: Date - Build Number - Summary heading, then bullet points of what changed. -->
 
+## 2026-07-03 - Fixed Black Screen at Launch (root cause)
+
+- **Root cause:** `ios/Runner/SceneDelegate.swift` existed on disk but was never added to `project.pbxproj` (missed during the 2025-12 UIScene migration). iOS couldn't resolve `UISceneDelegateClassName: Runner.SceneDelegate`, created the scene with no delegate → no window → solid black screen while the Dart VM ran invisibly. Diagnosed by confirming the class was absent from the built `Runner.debug.dylib` (`strings` showed ScreenshotDetector but no SceneDelegate).
+- **Fix:** added SceneDelegate.swift to pbxproj (BuildFile + FileReference + group + Sources phase).
+- **Hardening:** restructured `main()` — only dotenv + Firebase.initializeApp + crash-handler wiring run before `runApp()`; bug reporter, notifications, background service, anonymous auth, deep links now run post-first-frame, each try/caught and 15s-timeboxed with `BOOT:` logs. A hung plugin can never black-screen boot again. SplashScreen awaits `bootReady` so Firestore reads don't race anonymous auth.
+
+## 2026-07-03 - App Icon Created
+
+- Replaced default Flutter icon with Lumina brand icon (guiding-light lantern per claude-design-system.md: Lumina Blue bg #1565C0→#0D47A1, warm glow #F2B137/#FFD97A, white ring + base)
+- Master SVG + 1024 PNG: `assets/branding/lumina-icon{.svg,-1024.png}`
+- Generated all 15 iOS appiconset sizes (RGB, no alpha — App Store safe) + 5 Android mipmap ic_launcher sizes
+- Verified visually at 1024px and 120px
+
 ## 2026-07-03 - Expense & Reimbursement Tracking (NEEDS DEVICE TEST)
 
 **New feature: family caregiver expense reimbursement**

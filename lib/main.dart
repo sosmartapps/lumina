@@ -23,62 +23,27 @@ import 'features/splash/splash_screen.dart';
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
+/// Completes when post-boot initialization (auth, notifications, background
+/// service, deep links) has finished. SplashScreen awaits this before it
+/// starts loading data, so Firestore reads never race anonymous auth.
+final Completer<void> _bootCompleter = Completer<void>();
+Future<void> get bootReady => _bootCompleter.future;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables
+  // Only the essentials before the first frame: env + Firebase (both local
+  // and fast) and crash handler wiring. EVERYTHING else runs after runApp()
+  // so a hung plugin or network call can never black-screen the app.
   await dotenv.load(fileName: '.env');
-
-  // Initialize Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  // --- Crash reporting (auto-wired 2026-06-22). Debug enabled so dev crashes surface too. ---
-  await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
   WidgetsBinding.instance.platformDispatcher.onError = (error, stack) {
     FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
     return true;
   };
-
-  // Initialize Bug Reporter (replaces manual Crashlytics + screenshot feedback)
-  await BugReporterInitializer.init(
-    reportEndpoint: 'https://us-central1-ssa-bug-dashboard.cloudfunctions.net/api/reports',
-    shakeToReport: true,
-  );
-
-  // Lock to portrait mode for easier use
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
-
-  // Initialize notifications
-  await NotificationService.initialize();
-
-  // Initialize background monitoring service
-  try {
-    await BackgroundMonitoringService.initialize();
-  } catch (e) {
-    debugPrint('Background service init failed: $e');
-  }
-
-  // Ensure the device always has a Firebase Auth context.
-  // Patients don't log in, so we use anonymous auth to satisfy
-  // Firestore security rules that require isAuthenticated().
-  try {
-    if (FirebaseAuth.instance.currentUser == null) {
-      await FirebaseAuth.instance.signInAnonymously();
-    }
-  } catch (e) {
-    debugPrint('Anonymous auth failed (enable in Firebase console): $e');
-  }
-
-  // Initialize deep link handling
-  await DeepLinkService().initialize();
-
-  // Log app open event
-  unawaited(FirebaseAnalytics.instance.logAppOpen());
 
   runApp(
     ProviderScope(
@@ -90,6 +55,60 @@ void main() async {
       ),
     ),
   );
+
+  unawaited(_postBootInit());
+}
+
+/// Runs the remaining init steps after the first frame is scheduled.
+/// Every step is individually try/caught and hard-timeboxed so one bad
+/// plugin degrades gracefully instead of hanging boot (root cause of the
+/// 2026-07-03 black-screen: an await in main() before runApp never
+/// completed, so the first frame never rendered).
+Future<void> _postBootInit() async {
+  Future<void> step(
+    String name,
+    Future<void> Function() task, {
+    int timeoutSeconds = 15,
+  }) async {
+    debugPrint('BOOT: $name…');
+    try {
+      await task().timeout(Duration(seconds: timeoutSeconds));
+      debugPrint('BOOT: $name OK');
+    } catch (e) {
+      debugPrint('BOOT: $name FAILED: $e');
+    }
+  }
+
+  await step('crashlytics collection', () =>
+      FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true));
+
+  await step('bug reporter', () => BugReporterInitializer.init(
+        reportEndpoint:
+            'https://us-central1-ssa-bug-dashboard.cloudfunctions.net/api/reports',
+        shakeToReport: true,
+      ));
+
+  await step('orientation lock', () => SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+      ]));
+
+  await step('notifications', () => NotificationService.initialize());
+
+  await step('background service', () => BackgroundMonitoringService.initialize());
+
+  // Anonymous auth so Firestore rules (isAuthenticated) pass for patients.
+  await step('anonymous auth', () async {
+    if (FirebaseAuth.instance.currentUser == null) {
+      await FirebaseAuth.instance.signInAnonymously();
+    }
+  });
+
+  await step('deep links', () => DeepLinkService().initialize());
+
+  unawaited(FirebaseAnalytics.instance.logAppOpen());
+  debugPrint('BOOT: complete');
+  _bootCompleter.complete();
 }
 
 class CaregiverApp extends StatelessWidget {

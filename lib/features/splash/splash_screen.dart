@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../main.dart' show bootReady;
 import '../../core/providers/providers.dart';
 import '../../core/services/background_service.dart';
 import '../../core/services/deep_link_service.dart';
@@ -60,6 +61,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   Future<void> _initializeApp() async {
     // Add a slight delay for splash visibility
     await Future.delayed(const Duration(milliseconds: 1000));
+
+    // Wait for post-boot init (anonymous auth etc.) so Firestore reads
+    // below don't race it. Every boot step is timeboxed, so this always
+    // completes.
+    await bootReady;
 
     if (!mounted) return;
 
