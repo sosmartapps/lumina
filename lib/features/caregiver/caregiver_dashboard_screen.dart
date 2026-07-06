@@ -527,7 +527,7 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
 
     return devicesAsync.when(
       loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
       data: (devices) {
         final online =
             devices.where((d) => d.status == DeviceStatus.online).length;

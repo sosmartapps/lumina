@@ -289,7 +289,7 @@ class _QuadTrackDetailScreenState extends ConsumerState<QuadTrackDetailScreen> {
 
           return pingsAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (_, __) => const Center(child: Text('Error loading pings')),
+            error: (_, _) => const Center(child: Text('Error loading pings')),
             data: (pings) {
               _updateMapContent(device, pings);
 
@@ -566,7 +566,7 @@ class _QuadTrackDetailScreenState extends ConsumerState<QuadTrackDetailScreen> {
                                           const NeverScrollableScrollPhysics(),
                                       itemCount:
                                           pings.length.clamp(0, 10), // Show last 10
-                                      separatorBuilder: (_, __) =>
+                                      separatorBuilder: (_, _) =>
                                           const Divider(),
                                       itemBuilder: (context, index) {
                                         final ping = pings[index];

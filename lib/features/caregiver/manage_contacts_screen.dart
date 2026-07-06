@@ -41,7 +41,9 @@ class ManageContactsScreen extends ConsumerWidget {
           return ReorderableListView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: contacts.length,
-            onReorder: (oldIndex, newIndex) =>
+            // onReorderItem delivers newIndex already adjusted for the
+            // removed item (unlike the deprecated onReorder).
+            onReorderItem: (oldIndex, newIndex) =>
                 _reorderContacts(context, provider, user, oldIndex, newIndex),
             itemBuilder: (context, index) {
               final contact = contacts[index];
@@ -325,8 +327,7 @@ class ManageContactsScreen extends ConsumerWidget {
     int newIndex,
   ) {
     final contacts = List<EmergencyContact>.from(user.emergencyContacts);
-    if (newIndex > oldIndex) newIndex--;
-
+    // newIndex arrives pre-adjusted via onReorderItem.
     final item = contacts.removeAt(oldIndex);
     contacts.insert(newIndex, item);
 

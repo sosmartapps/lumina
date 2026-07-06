@@ -58,7 +58,7 @@ class SubscriptionService {
 
   /// Purchase a package for the given patient.
   Future<PatientSubscription> purchase(Package package, String patientId) async {
-    final result = await Purchases.purchasePackage(package);
+    final result = await Purchases.purchase(PurchaseParams.package(package));
     final customerInfo = result.customerInfo;
     final sub = _toSubscription(patientId, customerInfo);
     await _syncToFirestore(patientId, customerInfo);

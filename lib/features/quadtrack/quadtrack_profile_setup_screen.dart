@@ -173,6 +173,7 @@ class _QuadTrackProfileSetupScreenState
         });
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error picking photo: $e')),
       );
@@ -312,9 +313,11 @@ class _QuadTrackProfileSetupScreenState
         Navigator.pop(context);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error saving profile: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving profile: $e')),
+        );
+      }
     } finally {
       setState(() => _isLoading = false);
     }
@@ -533,7 +536,7 @@ class _QuadTrackProfileSetupScreenState
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _gender,
+            initialValue: _gender,
             decoration: InputDecoration(
               labelText: 'Gender',
               border: OutlineInputBorder(
@@ -584,7 +587,7 @@ class _QuadTrackProfileSetupScreenState
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _hairColor,
+            initialValue: _hairColor,
             decoration: InputDecoration(
               labelText: 'Hair Color',
               border: OutlineInputBorder(
@@ -596,7 +599,7 @@ class _QuadTrackProfileSetupScreenState
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _eyeColor,
+            initialValue: _eyeColor,
             decoration: InputDecoration(
               labelText: 'Eye Color',
               border: OutlineInputBorder(
@@ -608,7 +611,7 @@ class _QuadTrackProfileSetupScreenState
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _race,
+            initialValue: _race,
             decoration: InputDecoration(
               labelText: 'Race/Ethnicity',
               border: OutlineInputBorder(
@@ -620,7 +623,7 @@ class _QuadTrackProfileSetupScreenState
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _buildType,
+            initialValue: _buildType,
             decoration: InputDecoration(
               labelText: 'Build Type',
               border: OutlineInputBorder(
@@ -654,7 +657,7 @@ class _QuadTrackProfileSetupScreenState
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _glasses,
+            initialValue: _glasses,
             decoration: InputDecoration(
               labelText: 'Glasses',
               border: OutlineInputBorder(
@@ -666,7 +669,7 @@ class _QuadTrackProfileSetupScreenState
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _mobilityAids,
+            initialValue: _mobilityAids,
             decoration: InputDecoration(
               labelText: 'Mobility Aids',
               border: OutlineInputBorder(
@@ -708,7 +711,7 @@ class _QuadTrackProfileSetupScreenState
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _cognitiveStatus,
+            initialValue: _cognitiveStatus,
             decoration: InputDecoration(
               labelText: 'Cognitive Status',
               border: OutlineInputBorder(
@@ -853,7 +856,7 @@ class _QuadTrackProfileSetupScreenState
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _vehicleState,
+              initialValue: _vehicleState,
               decoration: InputDecoration(
                 labelText: 'License Plate State',
                 border: OutlineInputBorder(

@@ -102,7 +102,8 @@ class _BatteryGaugeState extends State<BatteryGauge>
                     value: 1.0,
                     strokeWidth: 8,
                     valueColor:
-                        AlwaysStoppedAnimation(Colors.grey.withOpacity(0.3)),
+                        AlwaysStoppedAnimation(
+                            Colors.grey.withValues(alpha: 0.3)),
                   ),
                   // Animated circular progress indicator
                   CircularProgressIndicator(

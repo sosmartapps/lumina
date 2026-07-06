@@ -69,6 +69,18 @@
 	<string>Lumina needs access to your photo library to attach screenshots when you send feedback about the app.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Lumina needs permission to save screenshots for feedback purposes.</string>
+	<!-- Google Sign-In callback URL scheme (REVERSED_CLIENT_ID) -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.213849135698-b8qcp74me40canrb382d07gplvsmh2qi</string>
+			</array>
+		</dict>
+	</array>
 	<!-- Phone call permission -->
 	<key>LSApplicationQueriesSchemes</key>
 	<array>

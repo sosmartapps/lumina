@@ -422,6 +422,7 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
         }
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error sending SMS: $e')),
       );
@@ -471,10 +472,10 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
     );
     final patientName = _userProfile?.fullLegalName ?? 'Missing Person';
 
-    final result = await Share.share(
-      message,
+    final result = await SharePlus.instance.share(ShareParams(
+      text: message,
       subject: 'Missing Person Alert - $patientName',
-    );
+    ));
 
     if (result.status == ShareResultStatus.success) {
       // Log share to Firestore
@@ -538,7 +539,7 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
 
           return pingsAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (_, __) => const Center(child: Text('Error loading pings')),
+            error: (_, _) => const Center(child: Text('Error loading pings')),
             data: (pings) {
               return FutureBuilder<String>(
                 future: _getAddress(
@@ -735,7 +736,7 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
 
                         // Google Maps link
                         Card(
-                          color: AppTheme.primaryBlue.withOpacity(0.1),
+                          color: AppTheme.primaryBlue.withValues(alpha: 0.1),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
                             child: Row(

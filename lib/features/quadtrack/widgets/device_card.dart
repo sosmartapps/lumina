@@ -203,7 +203,7 @@ class DeviceCard extends StatelessWidget {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: AppTheme.primaryRed.withOpacity(0.15),
+                      color: AppTheme.primaryRed.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         color: AppTheme.primaryRed,

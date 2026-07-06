@@ -196,7 +196,7 @@ class _QuadTrackRegisterScreenState
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppTheme.primaryRed.withOpacity(0.1),
+                      color: AppTheme.primaryRed.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: AppTheme.primaryRed),
                     ),
@@ -397,7 +397,7 @@ class _QuadTrackRegisterScreenState
         ),
         const SizedBox(height: 24),
         DropdownButtonFormField<String>(
-          value: _selectedPatientId,
+          initialValue: _selectedPatientId,
           decoration: InputDecoration(
             labelText: 'Patient',
             border: OutlineInputBorder(
@@ -464,7 +464,7 @@ class _QuadTrackRegisterScreenState
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: AppTheme.primaryGreen.withOpacity(0.1),
+            color: AppTheme.primaryGreen.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: AppTheme.primaryGreen),
           ),
