@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart' show UserCredential;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:uuid/uuid.dart';
@@ -440,7 +441,84 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                     ),
             ),
           ),
+
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(child: Divider(color: Colors.grey.shade400)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(
+                  'or continue with',
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+              ),
+              Expanded(child: Divider(color: Colors.grey.shade400)),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          _buildOAuthButton(
+            label: 'Continue with Apple',
+            icon: Icons.apple,
+            background: Colors.black,
+            foreground: Colors.white,
+            onPressed: _isLoading
+                ? null
+                : () => _handleOAuthAuth(() => ref
+                    .read(authServiceProvider)
+                    .signInWithApple(fallbackName: _nameController.text)),
+          ),
+          const SizedBox(height: 12),
+          _buildOAuthButton(
+            label: 'Continue with Google',
+            icon: Icons.g_mobiledata,
+            background: Colors.white,
+            foreground: Colors.black87,
+            outlined: true,
+            onPressed: _isLoading
+                ? null
+                : () => _handleOAuthAuth(() => ref
+                    .read(authServiceProvider)
+                    .signInWithGoogle(fallbackName: _nameController.text)),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildOAuthButton({
+    required String label,
+    required IconData icon,
+    required Color background,
+    required Color foreground,
+    bool outlined = false,
+    VoidCallback? onPressed,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: background,
+          foregroundColor: foreground,
+          elevation: 0,
+          side: outlined
+              ? BorderSide(color: Colors.grey.shade400)
+              : BorderSide.none,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        icon: Icon(icon, size: 28),
+        label: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
     );
   }
@@ -1330,39 +1408,77 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
         _caregiverId = credential.user!.uid;
       }
 
-      // If invite mode, redeem code and skip patient creation
-      if (_authMode == 2) {
-        final inviteService = ref.read(inviteServiceProvider);
-        final patient = await inviteService.redeemInviteCode(
-          code: _inviteCodeController.text.trim(),
-          caregiverId: _caregiverId!,
-        );
-
-        if (!mounted) return;
-
-        final appState = ref.read(appStateNotifierProvider);
-        await appState.setSetupComplete(
-          userId: patient.id,
-          caregiverId: _caregiverId,
-        );
-
-        final userProvider = ref.read(userNotifierProvider);
-        await userProvider.loadUser(patient.id);
-
-        final caregiverProvider = ref.read(caregiverNotifierProvider);
-        await caregiverProvider.loadCaregiver(_caregiverId!);
-
-        _joinedViaInvite = true;
-        _pageController.jumpToPage(_totalPages - 1);
-        return;
-      }
-
-      _nextPage();
+      await _afterCaregiverAuthed();
     } catch (e) {
       setState(() => _errorMessage = e.toString());
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  /// Sign in / sign up with Apple or Google. Works in all three modes:
+  /// New (account created from the provider profile), Sign In, and
+  /// Have a Code (code redeemed after the OAuth sign-in).
+  Future<void> _handleOAuthAuth(
+    Future<UserCredential> Function() signIn,
+  ) async {
+    if (_authMode == 2 && _inviteCodeController.text.trim().length != 6) {
+      setState(() =>
+          _errorMessage = 'Please enter a valid 6-character invite code');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final credential = await signIn();
+      _caregiverId = credential.user!.uid;
+      await _afterCaregiverAuthed();
+    } catch (e) {
+      // Don't show an error when the user simply dismissed the sheet.
+      final msg = e.toString().toLowerCase();
+      if (!msg.contains('cancel')) {
+        setState(() => _errorMessage = e.toString());
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// Shared continuation after a caregiver account is authenticated
+  /// (email, Apple, or Google).
+  Future<void> _afterCaregiverAuthed() async {
+    // If invite mode, redeem code and skip patient creation
+    if (_authMode == 2) {
+      final inviteService = ref.read(inviteServiceProvider);
+      final patient = await inviteService.redeemInviteCode(
+        code: _inviteCodeController.text.trim(),
+        caregiverId: _caregiverId!,
+      );
+
+      if (!mounted) return;
+
+      final appState = ref.read(appStateNotifierProvider);
+      await appState.setSetupComplete(
+        userId: patient.id,
+        caregiverId: _caregiverId,
+      );
+
+      final userProvider = ref.read(userNotifierProvider);
+      await userProvider.loadUser(patient.id);
+
+      final caregiverProvider = ref.read(caregiverNotifierProvider);
+      await caregiverProvider.loadCaregiver(_caregiverId!);
+
+      _joinedViaInvite = true;
+      _pageController.jumpToPage(_totalPages - 1);
+      return;
+    }
+
+    _nextPage();
   }
 
   Future<void> _handleCreateUser() async {

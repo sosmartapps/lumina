@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ssa_auth/ssa_auth.dart' show SSAAuthService, SignInResult;
 
 import '../models/caregiver.dart';
 import '../models/app_user.dart';
@@ -9,6 +10,9 @@ import '../models/app_user.dart';
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  /// Shared SSA auth (Apple + Google flows, correct nonce handling).
+  final SSAAuthService _ssaAuth = SSAAuthService();
 
   // Current Firebase user
   User? get currentUser => _auth.currentUser;
@@ -75,6 +79,65 @@ class AuthService {
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
     }
+  }
+
+  /// Sign in (or sign up) with Apple. Creates the caregiver profile on
+  /// first sign-in. Works for both the "New" and "Sign In" flows.
+  Future<UserCredential> signInWithApple({String? fallbackName}) async {
+    final result = await _ssaAuth.signInWithApple();
+    return _finishOAuthSignIn(result, fallbackName: fallbackName);
+  }
+
+  /// Sign in (or sign up) with Google. Creates the caregiver profile on
+  /// first sign-in. Works for both the "New" and "Sign In" flows.
+  Future<UserCredential> signInWithGoogle({String? fallbackName}) async {
+    final result = await _ssaAuth.signInWithGoogle();
+    return _finishOAuthSignIn(result, fallbackName: fallbackName);
+  }
+
+  Future<UserCredential> _finishOAuthSignIn(
+    SignInResult result, {
+    String? fallbackName,
+  }) async {
+    if (result.requiresMfa || result.credential == null) {
+      throw const AuthException(
+        'Sign-in could not be completed. Please try again.',
+        code: 'oauth-incomplete',
+      );
+    }
+    final user = result.credential!.user!;
+    await _ensureCaregiverProfile(user, fallbackName: fallbackName);
+    return result.credential!;
+  }
+
+  /// Create the caregiver Firestore doc on first OAuth sign-in, or bump
+  /// lastLoginAt on subsequent ones.
+  Future<void> _ensureCaregiverProfile(
+    User user, {
+    String? fallbackName,
+  }) async {
+    final docRef = _firestore.collection('caregivers').doc(user.uid);
+    final doc = await docRef.get();
+
+    if (doc.exists) {
+      await docRef.update({'lastLoginAt': FieldValue.serverTimestamp()});
+      return;
+    }
+
+    // Apple only shares the name on the very first authorization; ssa_auth
+    // applies it to displayName when available.
+    final name = user.displayName?.trim();
+    final caregiver = Caregiver(
+      id: user.uid,
+      name: (name != null && name.isNotEmpty)
+          ? name
+          : (fallbackName?.trim().isNotEmpty == true
+              ? fallbackName!.trim()
+              : 'Caregiver'),
+      email: user.email ?? '',
+      phoneNumber: user.phoneNumber,
+    );
+    await docRef.set(caregiver.toFirestore());
   }
 
   /// Sign in with phone number (for caregivers)

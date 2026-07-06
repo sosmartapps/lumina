@@ -10,6 +10,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:bug_reporter/bug_reporter.dart';
 import 'package:screenshot/screenshot.dart' as screenshot_lib;
 
@@ -105,6 +106,11 @@ Future<void> _postBootInit() async {
   });
 
   await step('deep links', () => DeepLinkService().initialize());
+
+  // Google Sign-In (v7 requires explicit initialize before authenticate).
+  // iOS reads CLIENT_ID from GoogleService-Info.plist — requires the Google
+  // provider to be enabled in Firebase console and a re-downloaded plist.
+  await step('google sign-in', () => GoogleSignIn.instance.initialize());
 
   unawaited(FirebaseAnalytics.instance.logAppOpen());
   debugPrint('BOOT: complete');

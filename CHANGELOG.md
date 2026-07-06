@@ -3,6 +3,14 @@
 <!-- Claude will automatically log completed work here. -->
 <!-- Format: Date - Build Number - Summary heading, then bullet points of what changed. -->
 
+## 2026-07-03 - Apple + Google Sign-In for Caregivers (NEEDS CONSOLE CONFIG + DEVICE TEST)
+
+- Wired shared `ssa_auth` package (../packages/ssa_auth) into AuthService: `signInWithApple()` / `signInWithGoogle()` with `_ensureCaregiverProfile` (creates caregivers doc on first OAuth sign-in from provider displayName/email, else bumps lastLoginAt)
+- "Continue with Apple/Google" buttons on setup_screen (all 3 auth modes — invite code redeemed after OAuth too; refactored shared post-auth into `_afterCaregiverAuthed`) and caregiver_login_screen (`_completeLogin` extracted); user-cancel doesn't show error banner
+- `GoogleSignIn.instance.initialize()` added to post-boot steps (v7 requirement); Apple entitlement added to Runner.entitlements + CODE_SIGN_ENTITLEMENTS wired into all 3 Runner build configs (was only on ShareFeedbackExtension)
+- Auth-verify harness installed (integration_test/auth_verify_test.dart) — run `bash scripts/verify-auth.sh lumina`
+- **Remaining config:** enable Apple + Google providers in Firebase console (lumina-sosmartapps); re-download GoogleService-Info.plist (currently has NO CLIENT_ID/REVERSED_CLIENT_ID) + google-services.json; add REVERSED_CLIENT_ID URL scheme to Info.plist; Android needs serverClientId in GoogleSignIn.initialize
+
 ## 2026-07-03 - Fixed Black Screen at Launch (root cause)
 
 - **Root cause:** `ios/Runner/SceneDelegate.swift` existed on disk but was never added to `project.pbxproj` (missed during the 2025-12 UIScene migration). iOS couldn't resolve `UISceneDelegateClassName: Runner.SceneDelegate`, created the scene with no delegate → no window → solid black screen while the Dart VM ran invisibly. Diagnosed by confirming the class was absent from the built `Runner.debug.dylib` (`strings` showed ScreenshotDetector but no SceneDelegate).

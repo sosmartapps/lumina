@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart' show UserCredential;
 
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
@@ -157,6 +158,71 @@ class _CaregiverLoginScreenState extends ConsumerState<CaregiverLoginScreen> {
               ),
             ),
 
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(child: Divider(color: Colors.grey.shade400)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    'or continue with',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                ),
+                Expanded(child: Divider(color: Colors.grey.shade400)),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton.icon(
+                onPressed: _isLoading
+                    ? null
+                    : () => _handleOAuthLogin(
+                        () => ref.read(authServiceProvider).signInWithApple()),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: const Icon(Icons.apple, size: 28),
+                label: const Text(
+                  'Continue with Apple',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton.icon(
+                onPressed: _isLoading
+                    ? null
+                    : () => _handleOAuthLogin(
+                        () => ref.read(authServiceProvider).signInWithGoogle()),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black87,
+                  elevation: 0,
+                  side: BorderSide(color: Colors.grey.shade400),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: const Icon(Icons.g_mobiledata, size: 28),
+                label: const Text(
+                  'Continue with Google',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+
             const SizedBox(height: 16),
 
             // Forgot password
@@ -240,30 +306,56 @@ class _CaregiverLoginScreenState extends ConsumerState<CaregiverLoginScreen> {
         password: _passwordController.text,
       );
 
-      if (!mounted) return;
-
-      // Set caregiver mode
-      final appState = ref.read(appStateNotifierProvider);
-      await appState.setCaregiverMode(true, caregiverId: credential.user!.uid);
-
-      if (!mounted) return;
-
-      // Load caregiver data
-      final caregiverProvider =
-          ref.read(caregiverNotifierProvider);
-      await caregiverProvider.loadCaregiver(credential.user!.uid);
-      caregiverProvider.listenToCaregiver(credential.user!.uid);
-
-      if (!mounted) return;
-
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const CaregiverDashboardScreen()),
-      );
+      await _completeLogin(credential.user!.uid);
     } catch (e) {
       setState(() => _errorMessage = e.toString());
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// Sign in with Apple or Google, then continue like an email login.
+  Future<void> _handleOAuthLogin(
+    Future<UserCredential> Function() signIn,
+  ) async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final credential = await signIn();
+      await _completeLogin(credential.user!.uid);
+    } catch (e) {
+      // No error banner when the user dismissed the provider sheet.
+      final msg = e.toString().toLowerCase();
+      if (!msg.contains('cancel')) {
+        setState(() => _errorMessage = e.toString());
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _completeLogin(String caregiverUid) async {
+    if (!mounted) return;
+
+    // Set caregiver mode
+    final appState = ref.read(appStateNotifierProvider);
+    await appState.setCaregiverMode(true, caregiverId: caregiverUid);
+
+    if (!mounted) return;
+
+    // Load caregiver data
+    final caregiverProvider = ref.read(caregiverNotifierProvider);
+    await caregiverProvider.loadCaregiver(caregiverUid);
+    caregiverProvider.listenToCaregiver(caregiverUid);
+
+    if (!mounted) return;
+
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (context) => const CaregiverDashboardScreen()),
+    );
   }
 
   void _showForgotPassword() {

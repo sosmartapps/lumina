@@ -16,6 +16,7 @@
 
 ## Active Issues
 - Expense/reimbursement feature (2026-07-03) built but NOT device-tested — test add/scan/approve/reimburse flow, then deploy `firebase deploy --only firestore,storage`
+- Apple/Google sign-in (2026-07-03) code complete; Apple needs provider enabled in Firebase console; Google also needs re-downloaded config files + Info.plist URL scheme (current plist has no OAuth client). Then `bash scripts/verify-auth.sh lumina`
 
 ## Remaining Work
 - Configure Firebase project
