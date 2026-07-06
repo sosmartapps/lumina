@@ -2,7 +2,7 @@
   "indexes": [
     {
       "collectionGroup": "reminders",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "userId",
@@ -20,7 +20,7 @@
     },
     {
       "collectionGroup": "reminders",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "userId",
@@ -34,7 +34,7 @@
     },
     {
       "collectionGroup": "reminders",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "userId",
@@ -52,7 +52,7 @@
     },
     {
       "collectionGroup": "geo_zone_events",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "userId",
@@ -66,7 +66,7 @@
     },
     {
       "collectionGroup": "geo_zone_events",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "userId",
@@ -84,7 +84,7 @@
     },
     {
       "collectionGroup": "geo_zone_events",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "userId",
@@ -98,7 +98,7 @@
     },
     {
       "collectionGroup": "quadtrack_pings",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "deviceId",
@@ -112,7 +112,7 @@
     },
     {
       "collectionGroup": "quadtrack_pings",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "deviceId",
@@ -126,7 +126,7 @@
     },
     {
       "collectionGroup": "quadtrack_emergencies",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "deviceId",
@@ -140,7 +140,7 @@
     },
     {
       "collectionGroup": "invite_codes",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "code",
@@ -154,7 +154,7 @@
     },
     {
       "collectionGroup": "invite_codes",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "patientId",
@@ -172,7 +172,7 @@
     },
     {
       "collectionGroup": "expenses",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "userId",
@@ -186,7 +186,7 @@
     },
     {
       "collectionGroup": "expenses",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "userId",
