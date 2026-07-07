@@ -118,6 +118,8 @@ class ContactsScreen extends ConsumerWidget {
                   children: [
                     Text(
                       contact.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 28,
@@ -128,6 +130,8 @@ class ContactsScreen extends ConsumerWidget {
                       const SizedBox(height: 4),
                       Text(
                         contact.relationship!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.9),
                           fontSize: 18,

@@ -480,9 +480,14 @@ class _MedicalRecordsScreenState extends ConsumerState<MedicalRecordsScreen> {
             ),
           ),
           if (m.schedules.isNotEmpty)
-            Text(
-              m.schedules.map((s) => s.timeString).join(', '),
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+            Flexible(
+              child: Text(
+                m.schedules.map((s) => s.timeString).join(', '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+              ),
             ),
         ],
       ),

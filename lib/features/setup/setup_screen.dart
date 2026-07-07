@@ -92,6 +92,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   }
 
   void _nextPage() {
+    // Release focus so the previous page's keyboard doesn't stay up and
+    // cover the next page's content.
+    FocusManager.instance.primaryFocus?.unfocus();
     if (_currentPage < _totalPages - 1) {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
@@ -101,6 +104,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   }
 
   void _previousPage() {
+    FocusManager.instance.primaryFocus?.unfocus();
     if (_currentPage > 0) {
       _pageController.previousPage(
         duration: const Duration(milliseconds: 300),
@@ -280,9 +284,11 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
             child: Icon(icon, color: AppTheme.primaryGreen),
           ),
           const SizedBox(width: 16),
-          Text(
-            text,
-            style: const TextStyle(fontSize: 18),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 18),
+            ),
           ),
         ],
       ),
@@ -867,7 +873,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   }
 
   Widget _buildPermissionsPage() {
-    return Padding(
+    // Scrollable (not Spacer-pinned) so CONTINUE stays reachable even if
+    // a keyboard or large text shrinks the viewport.
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -935,7 +943,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
             ),
           ),
 
-          const Spacer(),
+          const SizedBox(height: 32),
 
           SizedBox(
             width: double.infinity,
@@ -1362,7 +1370,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
         children: [
           const Icon(Icons.arrow_right, color: AppTheme.primaryBlue),
           const SizedBox(width: 8),
-          Text(text, style: const TextStyle(fontSize: 16)),
+          Expanded(
+            child: Text(text, style: const TextStyle(fontSize: 16)),
+          ),
         ],
       ),
     );

@@ -310,6 +310,8 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
                     children: [
                       Text(
                         product.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,

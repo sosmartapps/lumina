@@ -1260,7 +1260,13 @@ class _ProvidersTab extends StatelessWidget {
                         ),
                         title: Row(
                           children: [
-                            Text(provider.name),
+                            Flexible(
+                              child: Text(
+                                provider.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                             if (provider.isPrimaryCare) ...[
                               const SizedBox(width: 8),
                               Container(

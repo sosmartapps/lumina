@@ -168,25 +168,31 @@ class _ManageMedicationsScreenState extends ConsumerState<ManageMedicationsScree
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    TextButton.icon(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => PillVerificationScreen(medication: medication),
+                    Expanded(
+                      child: TextButton.icon(
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => PillVerificationScreen(medication: medication),
+                          ),
                         ),
+                        icon: const Icon(Icons.camera_alt, color: AppTheme.primaryTeal),
+                        label: const Text('Photos', style: TextStyle(color: AppTheme.primaryTeal)),
                       ),
-                      icon: const Icon(Icons.camera_alt, color: AppTheme.primaryTeal),
-                      label: const Text('Photos', style: TextStyle(color: AppTheme.primaryTeal)),
                     ),
-                    TextButton.icon(
-                      onPressed: () => _showEditMedicationDialog(medication, provider),
-                      icon: const Icon(Icons.edit),
-                      label: const Text('Edit'),
+                    Expanded(
+                      child: TextButton.icon(
+                        onPressed: () => _showEditMedicationDialog(medication, provider),
+                        icon: const Icon(Icons.edit),
+                        label: const Text('Edit'),
+                      ),
                     ),
-                    TextButton.icon(
-                      onPressed: () => _showDeleteConfirmation(medication, provider),
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      label: const Text('Delete', style: TextStyle(color: Colors.red)),
+                    Expanded(
+                      child: TextButton.icon(
+                        onPressed: () => _showDeleteConfirmation(medication, provider),
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        label: const Text('Delete', style: TextStyle(color: Colors.red)),
+                      ),
                     ),
                   ],
                 ),

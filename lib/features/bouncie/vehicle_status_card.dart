@@ -132,6 +132,8 @@ class _VehicleStatusCardState extends ConsumerState<VehicleStatusCard> {
                     children: [
                       Text(
                         nickName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -139,6 +141,8 @@ class _VehicleStatusCardState extends ConsumerState<VehicleStatusCard> {
                       ),
                       Text(
                         '${year ?? ''} $make $modelName'.trim(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
                       ),
                     ],
@@ -217,10 +221,14 @@ class _VehicleStatusCardState extends ConsumerState<VehicleStatusCard> {
                     AppTheme.primaryRed,
                   ),
                 ],
-                const Spacer(),
-                Text(
-                  'Updated $updatedTime',
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                Expanded(
+                  child: Text(
+                    'Updated $updatedTime',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                  ),
                 ),
               ],
             ),

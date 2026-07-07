@@ -99,11 +99,38 @@ class ReceiptScanService {
     return largest;
   }
 
-  /// Merchant is usually the first prominent line that isn't an address,
-  /// phone number, or date.
+  /// Generic document titles and boilerplate that are NOT merchant names
+  /// ("Statement of Account" on medical statements, "Sales Receipt", etc.).
+  static final RegExp _genericTitle = RegExp(
+    r'^(statement( of account)?|account statement|sales? receipt|receipt|'
+    r'invoice|estimate|order( confirmation)?|transaction( record)?|'
+    r'customer copy|merchant copy|billing statement|payment due|'
+    r'thank you.*|welcome.*|balance due|amount due|remit(tance)?.*)$',
+    caseSensitive: false,
+  );
+
+  /// Merchant extraction, in priority order:
+  /// 1. "make checks payable to X" (common on medical/billing statements)
+  /// 2. First prominent line that isn't a document title, address, phone,
+  ///    date, or store number.
   String? _extractMerchant(List<String> lines) {
-    for (final line in lines.take(4)) {
-      if (line.length < 3 || line.length > 40) continue;
+    // Pass 1: explicit "payable to" — the most reliable signal when present.
+    for (final line in lines) {
+      final payable = RegExp(
+        r'(?:checks?\s+)?payable\s+to:?\s+(.{3,50})',
+        caseSensitive: false,
+      ).firstMatch(line);
+      if (payable != null) {
+        final name = payable.group(1)!.replaceAll(RegExp(r'[.,]$'), '').trim();
+        if (RegExp(r'[A-Za-z]{3,}').hasMatch(name)) return _titleCase(name);
+      }
+    }
+
+    // Pass 2: top-of-receipt scan.
+    for (final line in lines.take(8)) {
+      if (line.length < 3 || line.length > 50) continue;
+      // Skip generic document titles ("Statement of Account", "Receipt"…).
+      if (_genericTitle.hasMatch(line.trim())) continue;
       // Skip addresses, phone numbers, dates, times, store numbers.
       if (RegExp(r'\d{3}[-.\s]?\d{3,4}').hasMatch(line)) continue;
       if (RegExp(r'\d{1,5}\s+\w+\s+(?:st|ave|blvd|rd|dr|ln|way|hwy)\b',
@@ -113,6 +140,9 @@ class ReceiptScanService {
       }
       if (RegExp(r'\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}').hasMatch(line)) continue;
       if (RegExp(r'store\s*#?\s*\d+', caseSensitive: false).hasMatch(line)) {
+        continue;
+      }
+      if (RegExp(r'\bp\.?o\.?\s*box\b', caseSensitive: false).hasMatch(line)) {
         continue;
       }
       // Needs at least a couple of letters to be a name.
@@ -142,7 +172,13 @@ class ReceiptScanService {
     return date;
   }
 
+  /// Title-case only ALL-CAPS or all-lowercase lines; text that already has
+  /// mixed case (e.g., "Tucson Gastroenterology Specialists, P.C.") is
+  /// preserved as-is.
   String _titleCase(String s) {
+    final isAllCaps = s == s.toUpperCase();
+    final isAllLower = s == s.toLowerCase();
+    if (!isAllCaps && !isAllLower) return s;
     return s.split(' ').map((w) {
       if (w.isEmpty) return w;
       return w[0].toUpperCase() + w.substring(1).toLowerCase();

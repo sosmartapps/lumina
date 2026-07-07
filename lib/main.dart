@@ -132,7 +132,16 @@ class CaregiverApp extends StatelessWidget {
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.light, // Default to light for better visibility
       builder: (context, child) {
-        return BugReportFab(child: child ?? const SizedBox.shrink());
+        // Lumina's type ramp is already large by design (accessibility-first
+        // sizes throughout). Unclamped system Dynamic Type multiplies on top
+        // of that and collapses layouts (buttons balloon, Expanded text
+        // wraps one character per line — 2026-07-06). Allow modest system
+        // scaling, cap the extremes.
+        return MediaQuery.withClampedTextScaling(
+          minScaleFactor: 1.0,
+          maxScaleFactor: 1.3,
+          child: BugReportFab(child: child ?? const SizedBox.shrink()),
+        );
       },
       home: const SplashScreen(),
     );

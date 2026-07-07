@@ -190,8 +190,10 @@ class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
                   children: [
                     const Icon(Icons.notifications, size: 16, color: Colors.grey),
                     const SizedBox(width: 4),
-                    Text(
-                      'Alert on: ${zone.alertOnEntry ? "Entry" : ""}${zone.alertOnEntry && zone.alertOnExit ? " & " : ""}${zone.alertOnExit ? "Exit" : ""}',
+                    Expanded(
+                      child: Text(
+                        'Alert on: ${zone.alertOnEntry ? "Entry" : ""}${zone.alertOnEntry && zone.alertOnExit ? " & " : ""}${zone.alertOnExit ? "Exit" : ""}',
+                      ),
                     ),
                   ],
                 ),
@@ -201,26 +203,32 @@ class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    TextButton.icon(
-                      onPressed: () async {
-                        await geofenceService.updateZone(
-                          zone.copyWith(isActive: !zone.isActive),
-                        );
-                      },
-                      icon: Icon(
-                        zone.isActive ? Icons.pause : Icons.play_arrow,
+                    Expanded(
+                      child: TextButton.icon(
+                        onPressed: () async {
+                          await geofenceService.updateZone(
+                            zone.copyWith(isActive: !zone.isActive),
+                          );
+                        },
+                        icon: Icon(
+                          zone.isActive ? Icons.pause : Icons.play_arrow,
+                        ),
+                        label: Text(zone.isActive ? 'Disable' : 'Enable'),
                       ),
-                      label: Text(zone.isActive ? 'Disable' : 'Enable'),
                     ),
-                    TextButton.icon(
-                      onPressed: () => _showEditZoneDialog(zone, geofenceService),
-                      icon: const Icon(Icons.edit),
-                      label: const Text('Edit'),
+                    Expanded(
+                      child: TextButton.icon(
+                        onPressed: () => _showEditZoneDialog(zone, geofenceService),
+                        icon: const Icon(Icons.edit),
+                        label: const Text('Edit'),
+                      ),
                     ),
-                    TextButton.icon(
-                      onPressed: () => _showDeleteConfirmation(zone, geofenceService),
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      label: const Text('Delete', style: TextStyle(color: Colors.red)),
+                    Expanded(
+                      child: TextButton.icon(
+                        onPressed: () => _showDeleteConfirmation(zone, geofenceService),
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        label: const Text('Delete', style: TextStyle(color: Colors.red)),
+                      ),
                     ),
                   ],
                 ),
