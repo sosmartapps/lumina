@@ -17,7 +17,7 @@
 ## Active Issues
 - Pet feeding reminders (2026-07-06) built but NOT device-tested — test add/edit/delete schedule, mark-fed, notifications fire, history; then `firebase deploy --only firestore`
 - Expense/reimbursement feature (2026-07-03) built but NOT device-tested — test add/scan/approve/reimburse flow, then deploy `firebase deploy --only firestore,storage`
-- Apple/Google sign-in (2026-07-03) code complete; Apple needs provider enabled in Firebase console; Google also needs re-downloaded config files + Info.plist URL scheme (current plist has no OAuth client). Then `bash scripts/verify-auth.sh lumina`
+- Apple sign-in VERIFIED on iPhone; Google configured both platforms (untested). Android: never run on device/emulator — needs full pass (Google sign-in, OCR w/ Play services, UI walk)
 
 ## Remaining Work
 - Configure Firebase project

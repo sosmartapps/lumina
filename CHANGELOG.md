@@ -13,6 +13,20 @@
 - Boot scheduling hooked into splash_screen + user_home_screen (after reminder scheduling, since reminderService.scheduleAllNotifications calls cancelAll first)
 - Firebase: `firestore.rules` for `pet_feedings` + `feeding_logs` (patient + caregivers r/w); 3 new indexes (pet_feedings userId+isActive; feeding_logs userId+fedAt desc; feeding_logs feedingId+fedAt desc). **Run `firebase deploy --only firestore` before shipping**
 
+## 2026-07-06 - Android Cross-OS Readiness
+
+- Audit: manifest permissions complete (bg location, notifications, foreground service), Maps key wired via local.properties, minSdk from flutter, appId com.carecompanion.app (note: differs from iOS bundle com.carecompanion.lumina — both registered in Firebase)
+- Debug SHA-1 added to Firebase console; google-services.json refreshed (now has Android OAuth client + web client)
+- `GoogleSignIn.initialize(serverClientId: <web client>)` — required for idToken on Android
+- Apple sign-in button gated to iOS/macOS (Android web flow needs a Services ID — not configured; Google-only on Android)
+- Remaining: run + visual pass on an Android device/emulator (ML Kit OCR needs Play services image)
+
+## 2026-07-06 - Lantern Brand Mark Throughout App
+
+- New on-light mark variant (blue ring/base, warm glow, transparent bg): `assets/images/lumina_mark.png`, source `assets/branding/lumina-mark-onlight.svg`
+- Replaces generic icons at brand moments: splash screen (was heart), setup welcome page (was heart), caregiver login (was admin shield)
+- Semantic icons untouched (Preferred Name heart prefix, avatars)
+
 ## 2026-07-06 - ROOT CAUSE: infinite-width button theme (vertical-text bugs)
 
 - **`ElevatedButtonTheme minimumSize: Size(double.infinity, 64)` (both light + dark themes) made every ElevatedButton inside a Row demand infinite width** → sibling Expanded text collapsed to one character per line, button labels painted off-screen (permissions "Allow" card, User Profile lost-person banner). NOT device text-size related.

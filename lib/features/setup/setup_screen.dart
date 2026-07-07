@@ -172,18 +172,11 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Logo
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: AppTheme.primaryBlue.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.favorite,
-              size: 80,
-              color: AppTheme.primaryBlue,
-            ),
+          // Lumina brand mark
+          Image.asset(
+            'assets/images/lumina_mark.png',
+            width: 160,
+            height: 160,
           ),
           const SizedBox(height: 32),
 
@@ -464,18 +457,23 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
           ),
           const SizedBox(height: 20),
 
-          _buildOAuthButton(
-            label: 'Continue with Apple',
-            icon: Icons.apple,
-            background: Colors.black,
-            foreground: Colors.white,
-            onPressed: _isLoading
-                ? null
-                : () => _handleOAuthAuth(() => ref
-                    .read(authServiceProvider)
-                    .signInWithApple(fallbackName: _nameController.text)),
-          ),
-          const SizedBox(height: 12),
+          // Apple sign-in is iOS/macOS only (Android would need the web
+          // Services-ID flow, not configured).
+          if (defaultTargetPlatform == TargetPlatform.iOS ||
+              defaultTargetPlatform == TargetPlatform.macOS) ...[
+            _buildOAuthButton(
+              label: 'Continue with Apple',
+              icon: Icons.apple,
+              background: Colors.black,
+              foreground: Colors.white,
+              onPressed: _isLoading
+                  ? null
+                  : () => _handleOAuthAuth(() => ref
+                      .read(authServiceProvider)
+                      .signInWithApple(fallbackName: _nameController.text)),
+            ),
+            const SizedBox(height: 12),
+          ],
           _buildOAuthButton(
             label: 'Continue with Google',
             icon: Icons.g_mobiledata,

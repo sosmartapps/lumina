@@ -108,9 +108,13 @@ Future<void> _postBootInit() async {
   await step('deep links', () => DeepLinkService().initialize());
 
   // Google Sign-In (v7 requires explicit initialize before authenticate).
-  // iOS reads CLIENT_ID from GoogleService-Info.plist — requires the Google
-  // provider to be enabled in Firebase console and a re-downloaded plist.
-  await step('google sign-in', () => GoogleSignIn.instance.initialize());
+  // iOS reads CLIENT_ID from GoogleService-Info.plist; serverClientId is
+  // the project's WEB OAuth client — required on Android to mint the
+  // idToken firebase_auth needs.
+  await step('google sign-in', () => GoogleSignIn.instance.initialize(
+        serverClientId:
+            '213849135698-herhnn5vgcgi0lmve7q3uf1dik0il5bd.apps.googleusercontent.com',
+      ));
 
   unawaited(FirebaseAnalytics.instance.logAppOpen());
   debugPrint('BOOT: complete');

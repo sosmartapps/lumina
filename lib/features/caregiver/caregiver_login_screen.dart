@@ -51,19 +51,12 @@ class _CaregiverLoginScreenState extends ConsumerState<CaregiverLoginScreen> {
           children: [
             const SizedBox(height: 20),
 
-            // Header
+            // Header — Lumina brand mark (on-light variant)
             Center(
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryPurple.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.admin_panel_settings,
-                  size: 60,
-                  color: AppTheme.primaryPurple,
-                ),
+              child: Image.asset(
+                'assets/images/lumina_mark.png',
+                width: 140,
+                height: 140,
               ),
             ),
             const SizedBox(height: 24),
@@ -174,30 +167,35 @@ class _CaregiverLoginScreenState extends ConsumerState<CaregiverLoginScreen> {
             ),
             const SizedBox(height: 16),
 
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton.icon(
-                onPressed: _isLoading
-                    ? null
-                    : () => _handleOAuthLogin(
-                        () => ref.read(authServiceProvider).signInWithApple()),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+            // Apple sign-in is iOS/macOS only (Android would need the web
+            // Services-ID flow, not configured).
+            if (defaultTargetPlatform == TargetPlatform.iOS ||
+                defaultTargetPlatform == TargetPlatform.macOS) ...[
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton.icon(
+                  onPressed: _isLoading
+                      ? null
+                      : () => _handleOAuthLogin(
+                          () => ref.read(authServiceProvider).signInWithApple()),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: const Icon(Icons.apple, size: 28),
+                  label: const Text(
+                    'Continue with Apple',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                   ),
                 ),
-                icon: const Icon(Icons.apple, size: 28),
-                label: const Text(
-                  'Continue with Apple',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-                ),
               ),
-            ),
-            const SizedBox(height: 12),
+              const SizedBox(height: 12),
+            ],
             SizedBox(
               width: double.infinity,
               height: 56,

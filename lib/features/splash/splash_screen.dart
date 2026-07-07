@@ -205,9 +205,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // App icon
+                    // Lumina brand mark on a white card
                     Container(
-                      padding: const EdgeInsets.all(24),
+                      padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(32),
@@ -219,10 +219,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                           ),
                         ],
                       ),
-                      child: const Icon(
-                        Icons.favorite,
-                        size: 80,
-                        color: AppTheme.primaryBlue,
+                      child: Image.asset(
+                        'assets/images/lumina_mark.png',
+                        width: 96,
+                        height: 96,
                       ),
                     ),
                     const SizedBox(height: 32),
