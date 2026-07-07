@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 import '../models/geo_zone.dart';
 
@@ -207,13 +210,80 @@ class LocationService {
   /// Convert address to GeoPoint
   Future<GeoPoint?> getLocationFromAddress(String address) async {
     try {
-      final locations = await locationFromAddress(address);
+      // Platform geocoders (esp. Android emulator) can stall — cap it.
+      final locations = await locationFromAddress(address)
+          .timeout(const Duration(seconds: 10));
 
       if (locations.isNotEmpty) {
         return GeoPoint(locations.first.latitude, locations.first.longitude);
       }
     } catch (e) {
       debugPrint('Error getting location: $e');
+    }
+    return null;
+  }
+
+  /// Resolve a free-form location query. Accepts, in priority order:
+  /// 1. what3words — `///word.word.word` or `word.word.word`
+  ///    (requires W3W_API_KEY in .env; free tier at what3words.com)
+  /// 2. Raw coordinates — `32.2226, -110.9747`
+  /// 3. Street address (geocoded)
+  Future<GeoPoint?> resolveLocationQuery(String query) async {
+    final q = query.trim();
+    if (q.isEmpty) return null;
+
+    // what3words: three words separated by dots, optional /// prefix.
+    final w3w = RegExp(
+      r'^/{0,3}([^\d\s./]+)\.([^\d\s./]+)\.([^\d\s./]+)$',
+      unicode: true,
+    ).firstMatch(q);
+    if (w3w != null) {
+      return _resolveWhat3Words(
+          '${w3w.group(1)}.${w3w.group(2)}.${w3w.group(3)}');
+    }
+
+    // Raw "lat, lng" coordinates.
+    final coords = RegExp(
+      r'^(-?\d{1,3}(?:\.\d+)?)\s*[, ]\s*(-?\d{1,3}(?:\.\d+)?)$',
+    ).firstMatch(q);
+    if (coords != null) {
+      final lat = double.tryParse(coords.group(1)!);
+      final lng = double.tryParse(coords.group(2)!);
+      if (lat != null && lng != null && lat.abs() <= 90 && lng.abs() <= 180) {
+        return GeoPoint(lat, lng);
+      }
+    }
+
+    return getLocationFromAddress(q);
+  }
+
+  /// Convert a what3words address to coordinates via the w3w API.
+  Future<GeoPoint?> _resolveWhat3Words(String words) async {
+    final apiKey = (dotenv.env['W3W_API_KEY'] ?? '').trim();
+    if (apiKey.isEmpty) {
+      debugPrint('what3words lookup skipped: W3W_API_KEY not set in .env');
+      return null;
+    }
+    try {
+      final response = await http
+          .get(Uri.https('api.what3words.com', '/v3/convert-to-coordinates', {
+            'words': words,
+            'key': apiKey,
+          }))
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final c = data['coordinates'] as Map<String, dynamic>?;
+        if (c != null) {
+          return GeoPoint(
+              (c['lat'] as num).toDouble(), (c['lng'] as num).toDouble());
+        }
+      } else {
+        debugPrint(
+            'what3words error ${response.statusCode}: ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('what3words lookup failed: $e');
     }
     return null;
   }

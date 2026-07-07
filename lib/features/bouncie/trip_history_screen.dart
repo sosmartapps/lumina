@@ -250,22 +250,21 @@ class _TripHistoryScreenState extends ConsumerState<TripHistoryScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Stats row
-            Row(
+            // Stats row — Wrap instead of Row so up to four stats flow to a
+            // second line rather than overflowing on narrow screens.
+            Wrap(
+              spacing: 16,
+              runSpacing: 4,
               children: [
                 _buildTripStat(Icons.straighten, '${distance.toStringAsFixed(1)} mi'),
-                const SizedBox(width: 16),
                 if (maxSpeed != null)
                   _buildTripStat(Icons.speed, '${maxSpeed.toStringAsFixed(0)} mph max'),
-                const Spacer(),
                 if (hardBrakes > 0)
                   _buildTripStat(Icons.warning_amber, '$hardBrakes brakes',
                       color: AppTheme.primaryOrange),
-                if (hardAccels > 0) ...[
-                  const SizedBox(width: 12),
+                if (hardAccels > 0)
                   _buildTripStat(Icons.bolt, '$hardAccels accels',
                       color: AppTheme.primaryOrange),
-                ],
               ],
             ),
           ],

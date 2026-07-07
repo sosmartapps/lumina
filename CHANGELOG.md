@@ -13,6 +13,22 @@
 - Boot scheduling hooked into splash_screen + user_home_screen (after reminder scheduling, since reminderService.scheduleAllNotifications calls cancelAll first)
 - Firebase: `firestore.rules` for `pet_feedings` + `feeding_logs` (patient + caregivers r/w); 3 new indexes (pet_feedings userId+isActive; feeding_logs userId+fedAt desc; feeding_logs feedingId+fedAt desc). **Run `firebase deploy --only firestore` before shipping**
 
+## 2026-07-07 - Zone Map Picker: tap-to-place, satellite, coords + what3words
+
+- New `zone_map_picker_screen.dart`: full-screen map, tap (or drag marker) to set zone center, live radius circle + slider, Map/Satellite/Hybrid toggle — cross-platform (google_maps_flutter)
+- Add Zone dialog: "Pick on Map" button (pin overrides typed address; reverse-geocodes label); Edit Zone dialog: "Move Center on Map"
+- `LocationService.resolveLocationQuery()`: accepts street address, raw `lat, lng`, or what3words (`///word.word.word`) — used by picker search + zone dialogs
+- what3words needs `W3W_API_KEY` in `.env` (placeholder added; free key at what3words.com/developers) — degrades gracefully without it
+- NOT device-tested — test picker on emulator/iPhone, incl. satellite toggle + coordinate entry
+
+## 2026-07-06 (overnight) - Android Splash Hang Hardening + Sweep Completion
+
+- **Android emulator boot hang**: splash stuck on spinner after `BOOT: complete` — cause in splash init chain (post-bootReady). Fix: every splash step now timeboxed + `SPLASH:` logged (same pattern as `_postBootInit`): app state 10s, location permission 60s, load user 15s, tracking/geofence/sundown/reminders/pet-feeding/subscription/background 10s each. Navigation now ALWAYS happens.
+- **`BOOT: notifications` 15s timeout root-caused**: FCM `requestPermission` blocks until the Android 13 dialog is answered — now fire-and-forget (`unawaited`) with result logged; listeners unaffected.
+- Uncaught errors now also `debugPrint` (`UNCAUGHT:`) — the Crashlytics onError previously swallowed them from the console.
+- Overflow sweep judgment items closed: trip stats row → `Wrap`; reminders + zones subtitle badges → `Flexible` + ellipsis. Code sweep now 100%; on-device visual pass remains.
+- NOT verified on device/emulator — rerun on Pixel emulator, check `SPLASH:` lines for the true hang culprit (likely `app state` or `location permission`).
+
 ## 2026-07-06 - Android Cross-OS Readiness
 
 - Audit: manifest permissions complete (bg location, notifications, foreground service), Maps key wired via local.properties, minSdk from flutter, appId com.carecompanion.app (note: differs from iOS bundle com.carecompanion.lumina — both registered in Firebase)

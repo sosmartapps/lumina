@@ -42,6 +42,9 @@ void main() async {
   );
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
   WidgetsBinding.instance.platformDispatcher.onError = (error, stack) {
+    // Surface in the console too — returning true would otherwise swallow
+    // the error entirely, which made the 2026-07-06 hangs invisible.
+    debugPrint('UNCAUGHT: $error\n$stack');
     FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
     return true;
   };

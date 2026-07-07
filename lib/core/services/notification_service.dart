@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -141,13 +142,21 @@ class NotificationService {
 
   /// Initialize Firebase Cloud Messaging
   static Future<void> _initializeFirebaseMessaging() async {
-    // Request permission
-    await _firebaseMessaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-      criticalAlert: true,
-    );
+    // Request permission WITHOUT awaiting: on Android 13+ this call blocks
+    // until the user answers the system dialog (it hung boot for 15s on
+    // 2026-07-06). The dialog resolves whenever the user responds; message
+    // listeners below work regardless of the outcome.
+    unawaited(_firebaseMessaging
+        .requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+          criticalAlert: true,
+        )
+        .then((settings) => debugPrint(
+            'FCM permission: ${settings.authorizationStatus.name}'))
+        .catchError(
+            (e) => debugPrint('FCM permission request failed: $e')));
 
     // Handle foreground messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {

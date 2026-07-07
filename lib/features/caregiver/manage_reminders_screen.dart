@@ -120,15 +120,19 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
                   style: TextStyle(color: Colors.grey.shade600),
                 ),
                 const SizedBox(width: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    reminder.repeatFrequency.displayName,
-                    style: TextStyle(fontSize: 12, color: color),
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      reminder.repeatFrequency.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12, color: color),
+                    ),
                   ),
                 ),
                 if (reminder.homeOnly) ...[

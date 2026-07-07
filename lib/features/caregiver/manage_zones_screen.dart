@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart' show GeoPoint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,6 +9,7 @@ import '../../core/providers/caregiver_provider.dart';
 import '../../core/services/geofence_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/models/geo_zone.dart';
+import 'zone_map_picker_screen.dart';
 
 /// Screen for caregivers to manage geofence zones
 class ManageZonesScreen extends ConsumerStatefulWidget {
@@ -113,7 +115,13 @@ class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
         ),
         subtitle: Row(
           children: [
-            Text(zone.type.displayName),
+            Flexible(
+              child: Text(
+                zone.type.displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -270,6 +278,17 @@ class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
     }
   }
 
+  /// Default camera target for the map picker: existing pick > patient's
+  /// home > Tucson fallback.
+  LatLng _pickerStart(GeoPoint? current) {
+    if (current != null) {
+      return LatLng(current.latitude, current.longitude);
+    }
+    final home = ref.read(caregiverNotifierProvider).selectedUser?.homeLocation;
+    if (home != null) return LatLng(home.latitude, home.longitude);
+    return const LatLng(32.2226, -110.9747); // Tucson
+  }
+
   void _showAddZoneDialog(BuildContext context) {
     final nameController = TextEditingController();
     final addressController = TextEditingController();
@@ -278,6 +297,8 @@ class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
     bool alertOnEntry = false;
     bool alertOnExit = true;
     bool isLoading = false;
+    GeoPoint? pickedCenter;
+    String? pickedLabel;
 
     showDialog(
       context: context,
@@ -301,12 +322,62 @@ class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
                 const SizedBox(height: 16),
                 TextField(
                   controller: addressController,
-                  decoration: const InputDecoration(
-                    labelText: 'Center Address *',
-                    prefixIcon: Icon(Icons.place),
-                    hintText: 'Address of zone center',
+                  decoration: InputDecoration(
+                    labelText: pickedCenter == null
+                        ? 'Zone Center *'
+                        : 'Zone Center (optional)',
+                    prefixIcon: const Icon(Icons.place),
+                    hintText: 'Address, lat,lng, or ///what.three.words',
                   ),
                   maxLines: 2,
+                ),
+                const SizedBox(height: 8),
+                // Pick directly on the map (with satellite view)
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final result = await Navigator.push<ZonePickResult>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ZoneMapPickerScreen(
+                            initialCenter: _pickerStart(pickedCenter),
+                            initialRadius: radius,
+                            zoneColor: _getZoneColor(selectedType),
+                          ),
+                        ),
+                      );
+                      if (result != null) {
+                        setState(() {
+                          pickedCenter = GeoPoint(
+                            result.center.latitude,
+                            result.center.longitude,
+                          );
+                          radius = result.radiusMeters;
+                          pickedLabel = result.address ??
+                              '${result.center.latitude.toStringAsFixed(5)}, '
+                                  '${result.center.longitude.toStringAsFixed(5)}';
+                          if (result.address != null &&
+                              addressController.text.isEmpty) {
+                            addressController.text = result.address!;
+                          }
+                        });
+                      }
+                    },
+                    icon: Icon(
+                      pickedCenter == null ? Icons.map : Icons.check_circle,
+                      color: pickedCenter == null
+                          ? null
+                          : AppTheme.primaryGreen,
+                    ),
+                    label: Text(
+                      pickedCenter == null
+                          ? 'Pick on Map'
+                          : 'Pinned: $pickedLabel',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<GeoZoneType>(
@@ -372,17 +443,24 @@ class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
               onPressed: isLoading
                   ? null
                   : () async {
+                      // A map pin OR an address is required (plus a name).
                       if (nameController.text.isEmpty ||
-                          addressController.text.isEmpty) {
+                          (pickedCenter == null &&
+                              addressController.text.isEmpty)) {
                         return;
                       }
 
                       setState(() => isLoading = true);
 
-                      final locationService =
-                          ref.read(locationServiceProvider);
-                      final center = await locationService
-                          .getLocationFromAddress(addressController.text.trim());
+                      // Map pin wins; otherwise resolve the typed query
+                      // (address, coordinates, or what3words).
+                      GeoPoint? center = pickedCenter;
+                      if (center == null) {
+                        final locationService =
+                            ref.read(locationServiceProvider);
+                        center = await locationService.resolveLocationQuery(
+                            addressController.text.trim());
+                      }
 
                       if (!context.mounted) return;
 
@@ -412,7 +490,19 @@ class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
                         createdBy: provider.caregiver!.id,
                       );
 
-                      await geofenceService.createZone(zone);
+                      try {
+                        await geofenceService.createZone(zone);
+                      } catch (e) {
+                        if (!context.mounted) return;
+                        setState(() => isLoading = false);
+                        final msg = e.toString().contains('permission-denied')
+                            ? 'Safe zones require a Premium subscription for this patient.'
+                            : 'Could not save zone: $e';
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(msg)),
+                        );
+                        return;
+                      }
                       if (!context.mounted) return;
                       Navigator.pop(context);
                     },
@@ -436,6 +526,8 @@ class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
     double radius = zone.radiusMeters;
     bool alertOnEntry = zone.alertOnEntry;
     bool alertOnExit = zone.alertOnExit;
+    GeoPoint center = zone.center;
+    bool centerMoved = false;
 
     showDialog(
       context: context,
@@ -452,6 +544,40 @@ class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
                   decoration: const InputDecoration(
                     labelText: 'Zone Name',
                     prefixIcon: Icon(Icons.label),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Move the zone center on the map (satellite available)
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final result = await Navigator.push<ZonePickResult>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ZoneMapPickerScreen(
+                            initialCenter:
+                                LatLng(center.latitude, center.longitude),
+                            initialRadius: radius,
+                            zoneColor: _getZoneColor(selectedType),
+                          ),
+                        ),
+                      );
+                      if (result != null) {
+                        setState(() {
+                          center = GeoPoint(result.center.latitude,
+                              result.center.longitude);
+                          radius = result.radiusMeters;
+                          centerMoved = true;
+                        });
+                      }
+                    },
+                    icon: Icon(
+                      centerMoved ? Icons.check_circle : Icons.map,
+                      color: centerMoved ? AppTheme.primaryGreen : null,
+                    ),
+                    label: Text(
+                        centerMoved ? 'Center moved' : 'Move Center on Map'),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -509,12 +635,21 @@ class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
                 final updatedZone = zone.copyWith(
                   name: nameController.text.trim(),
                   type: selectedType,
+                  center: center,
                   radiusMeters: radius,
                   alertOnEntry: alertOnEntry,
                   alertOnExit: alertOnExit,
                 );
 
-                await geofenceService.updateZone(updatedZone);
+                try {
+                  await geofenceService.updateZone(updatedZone);
+                } catch (e) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Could not update zone: $e')),
+                  );
+                  return;
+                }
                 if (!context.mounted) return;
                 Navigator.pop(context);
               },

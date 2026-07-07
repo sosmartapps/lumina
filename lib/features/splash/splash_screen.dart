@@ -58,6 +58,23 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     super.dispose();
   }
 
+  /// Runs one splash init step with a hard timeout so a hung plugin or
+  /// network call can never trap the user on the spinner (same pattern as
+  /// _postBootInit in main.dart; added after the 2026-07-06 Android hang).
+  Future<void> _step(
+    String name,
+    Future<void> Function() task, {
+    int timeoutSeconds = 15,
+  }) async {
+    debugPrint('SPLASH: $name…');
+    try {
+      await task().timeout(Duration(seconds: timeoutSeconds));
+      debugPrint('SPLASH: $name OK');
+    } catch (e) {
+      debugPrint('SPLASH: $name FAILED: $e');
+    }
+  }
+
   Future<void> _initializeApp() async {
     // Add a slight delay for splash visibility
     await Future.delayed(const Duration(milliseconds: 1000));
@@ -71,13 +88,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     // Initialize app state
     final appState = ref.read(appStateNotifierProvider);
-    await appState.initialize();
+    await _step('app state', () => appState.initialize(), timeoutSeconds: 10);
 
     if (!mounted) return;
 
-    // Request permissions
+    // Request permissions (a permission dialog can take as long as the
+    // user needs, but a hung platform channel must not block forever)
     final locationService = ref.read(locationServiceProvider);
-    await locationService.checkAndRequestPermission();
+    await _step(
+        'location permission', () => locationService.checkAndRequestPermission(),
+        timeoutSeconds: 60);
 
     if (!mounted) return;
 
@@ -85,52 +105,68 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     if (appState.isSetupComplete && appState.currentUserId != null) {
       // Load user data
       final userProv = ref.read(userNotifierProvider);
-      await userProv.loadUser(appState.currentUserId!);
-      userProv.listenToUser(appState.currentUserId!);
+      await _step('load user', () async {
+        await userProv.loadUser(appState.currentUserId!);
+        userProv.listenToUser(appState.currentUserId!);
+      });
 
       // Start location tracking
-      await locationService.startTracking(userId: appState.currentUserId!);
+      await _step('location tracking',
+          () => locationService.startTracking(userId: appState.currentUserId!),
+          timeoutSeconds: 10);
 
       if (!mounted) return;
 
       // Initialize geofencing
-      final geofenceService = ref.read(geofenceServiceProvider);
-      await geofenceService.initialize(appState.currentUserId!);
+      await _step(
+          'geofencing',
+          () =>
+              ref.read(geofenceServiceProvider).initialize(appState.currentUserId!),
+          timeoutSeconds: 10);
 
       if (!mounted) return;
 
       // Initialize sundown monitoring
       if (userProv.user != null) {
-        final sundownService = ref.read(sundownServiceProvider);
-        await sundownService.initialize(appState.currentUserId!, userProv.user!);
+        await _step(
+            'sundown',
+            () => ref
+                .read(sundownServiceProvider)
+                .initialize(appState.currentUserId!, userProv.user!),
+            timeoutSeconds: 10);
       }
 
       // Schedule all reminder notifications
       if (userProv.user != null) {
-        final reminderService = ref.read(reminderServiceProvider);
-        await reminderService.scheduleAllNotifications(
-          appState.currentUserId!,
-          userProv.user!.name,
-        );
+        await _step(
+            'reminder notifications',
+            () => ref.read(reminderServiceProvider).scheduleAllNotifications(
+                  appState.currentUserId!,
+                  userProv.user!.name,
+                ),
+            timeoutSeconds: 10);
 
         // Schedule pet feeding reminders
-        final petFeedingService = ref.read(petFeedingServiceProvider);
-        await petFeedingService
-            .scheduleAllFeedingNotifications(appState.currentUserId!);
+        await _step(
+            'pet feeding notifications',
+            () => ref
+                .read(petFeedingServiceProvider)
+                .scheduleAllFeedingNotifications(appState.currentUserId!),
+            timeoutSeconds: 10);
       }
 
       // Initialize subscription status
-      try {
+      await _step('subscription', () async {
         final subService = ref.read(subscriptionServiceProvider);
         await subService.initialize(appState.currentUserId!);
         final subProvider = ref.read(subscriptionNotifierProvider);
         await subProvider.loadSubscription(appState.currentUserId!);
-      } catch (e) {
-        debugPrint('Subscription init failed: $e');
-      }
+      }, timeoutSeconds: 10);
 
       // Start background monitoring service
-      await BackgroundMonitoringService.start();
+      await _step('background monitoring',
+          () => BackgroundMonitoringService.start(),
+          timeoutSeconds: 10);
 
       if (!mounted) return;
 
