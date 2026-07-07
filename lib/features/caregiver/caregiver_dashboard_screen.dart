@@ -24,6 +24,7 @@ import 'manage_medications_screen.dart';
 import '../medication/manage_prescriptions_screen.dart';
 import 'manage_reminders_screen.dart';
 import 'manage_expenses_screen.dart';
+import '../pet_feeding/manage_pet_feeding_screen.dart';
 import 'manage_zones_screen.dart';
 import 'app_protection_screen.dart';
 import 'sundown_settings_screen.dart';
@@ -461,9 +462,13 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
                         children: [
                           Icon(Icons.circle, color: dotColor, size: 10),
                           const SizedBox(width: 4),
-                          Text(
-                            label,
-                            style: const TextStyle(color: Colors.white, fontSize: 12),
+                          Flexible(
+                            child: Text(
+                              label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.white, fontSize: 12),
+                            ),
                           ),
                         ],
                       ),
@@ -622,11 +627,15 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
                               ),
                             ],
                             const SizedBox(width: 12),
-                            Text(
-                              '${devices.length} total',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey.shade600,
+                            Flexible(
+                              child: Text(
+                                '${devices.length} total',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey.shade600,
+                                ),
                               ),
                             ),
                           ],
@@ -918,6 +927,17 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
             () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const ManageRemindersScreen()),
+            ),
+          ),
+          _buildManageItem(
+            'Pet Feeding',
+            'Feeding schedules & reminders for pets',
+            Icons.pets,
+            AppTheme.primaryGreen,
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => const ManagePetFeedingScreen()),
             ),
           ),
           _buildManageItem(

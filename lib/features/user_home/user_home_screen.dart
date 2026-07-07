@@ -151,6 +151,10 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen>
     if (userProvider.user != null) {
       final reminderService = ref.read(reminderServiceProvider);
       reminderService.scheduleAllNotifications(userId, userProvider.user!.displayName);
+
+      // Schedule pet feeding reminders
+      final petFeedingService = ref.read(petFeedingServiceProvider);
+      petFeedingService.scheduleAllFeedingNotifications(userId);
     }
 
     // Subscribe to today's reminders for auto-trigger
@@ -379,68 +383,92 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen>
                 // Header
                 _buildHeader(user),
 
-                // Main grid
+                // Main grid — fixed 2×3, sized to always fit on screen with
+                // no scrolling (users with cognitive impairments should see
+                // every action at once).
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: GridView.count(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 16,
-                      crossAxisSpacing: 16,
-                      childAspectRatio: 0.9,
+                    child: Column(
                       children: [
-                        // Go Home
-                        LargeActionTile(
-                          title: 'GO HOME',
-                          icon: Icons.home,
-                          color: AppTheme.tileColors[0],
-                          onTap: () => _navigateToHome(user),
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: LargeActionTile(
+                                  title: 'GO HOME',
+                                  icon: Icons.home,
+                                  color: AppTheme.tileColors[0],
+                                  onTap: () => _navigateToHome(user),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: LargeActionTile(
+                                  title: 'CALL',
+                                  icon: Icons.phone,
+                                  color: AppTheme.tileColors[1],
+                                  onTap: () => _openContacts(),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-
-                        // Call
-                        LargeActionTile(
-                          title: 'CALL',
-                          icon: Icons.phone,
-                          color: AppTheme.tileColors[1],
-                          onTap: () => _openContacts(),
+                        const SizedBox(height: 12),
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: LargeActionTile(
+                                  title: 'HELP',
+                                  subtitle: 'Emergency',
+                                  icon: Icons.emergency,
+                                  color: AppTheme.tileColors[2],
+                                  onTap: () => _callEmergencyContact(user),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: LargeActionTile(
+                                  title: 'MEDICINE',
+                                  icon: Icons.medication,
+                                  color: AppTheme.tileColors[3],
+                                  showBadge: true,
+                                  badgeCount:
+                                      userProvider.getUpcomingMedications().length,
+                                  onTap: () => _openReminders(),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-
-                        // Emergency
-                        LargeActionTile(
-                          title: 'HELP',
-                          subtitle: 'Emergency',
-                          icon: Icons.emergency,
-                          color: AppTheme.tileColors[2],
-                          onTap: () => _callEmergencyContact(user),
-                        ),
-
-                        // Medications
-                        LargeActionTile(
-                          title: 'MEDICINE',
-                          icon: Icons.medication,
-                          color: AppTheme.tileColors[3],
-                          showBadge: true,
-                          badgeCount: userProvider.getUpcomingMedications().length,
-                          onTap: () => _openReminders(),
-                        ),
-
-                        // Places
-                        LargeActionTile(
-                          title: 'GO TO',
-                          subtitle: 'Places',
-                          icon: Icons.place,
-                          color: AppTheme.tileColors[4],
-                          onTap: () => _openNavigation(),
-                        ),
-
-                        // Reminders
-                        LargeActionTile(
-                          title: 'TASKS',
-                          icon: Icons.check_circle,
-                          color: AppTheme.tileColors[5],
-                          showBadge: true,
-                          badgeCount: userProvider.getTodayReminders().length,
-                          onTap: () => _openReminders(),
+                        const SizedBox(height: 12),
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: LargeActionTile(
+                                  title: 'GO TO',
+                                  subtitle: 'Places',
+                                  icon: Icons.place,
+                                  color: AppTheme.tileColors[4],
+                                  onTap: () => _openNavigation(),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: LargeActionTile(
+                                  title: 'TASKS',
+                                  icon: Icons.check_circle,
+                                  color: AppTheme.tileColors[5],
+                                  showBadge: true,
+                                  badgeCount:
+                                      userProvider.getTodayReminders().length,
+                                  onTap: () => _openReminders(),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -505,24 +533,36 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen>
             ),
             const SizedBox(width: 16),
 
-            // Greeting
+            // Greeting — each line scales down to fit rather than
+            // wrapping word-per-line when the clock takes its share.
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Hello, ${user.displayName}!',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Hello, ${user.displayName}!',
+                      maxLines: 1,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                  Text(
-                    _getTimeGreeting(),
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      fontSize: 18,
+                  const SizedBox(height: 2),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      _getTimeGreeting(),
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        fontSize: 18,
+                      ),
                     ),
                   ),
                 ],

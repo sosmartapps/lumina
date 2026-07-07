@@ -9,3 +9,4 @@ export 'prescription.dart';
 export 'subscription.dart';
 export 'quadtrack_device.dart';
 export 'expense.dart';
+export 'pet_feeding.dart';

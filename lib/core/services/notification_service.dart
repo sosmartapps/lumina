@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models/reminder.dart';
 import '../models/medication.dart';
+import '../models/pet_feeding.dart';
 
 /// Top-level handler required by flutter_local_notifications for background responses
 @pragma('vm:entry-point')
@@ -26,6 +27,7 @@ class NotificationService {
   // Notification channels
   static const String _reminderChannelId = 'reminder_channel';
   static const String _medicationChannelId = 'medication_channel';
+  static const String _petFeedingChannelId = 'pet_feeding_channel';
   static const String _alertChannelId = 'alert_channel';
   static const String _geofenceChannelId = 'geofence_channel';
 
@@ -109,6 +111,18 @@ class NotificationService {
           playSound: true,
           enableVibration: true,
           enableLights: true,
+        ),
+      );
+
+      // Pet feeding channel - high importance with sound
+      await androidPlugin?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          _petFeedingChannelId,
+          'Pet Feeding',
+          description: 'Pet feeding reminder notifications',
+          importance: Importance.high,
+          playSound: true,
+          enableVibration: true,
         ),
       );
 
@@ -221,6 +235,7 @@ class NotificationService {
     String? payload,
     String channelId = _reminderChannelId,
     bool repeat = false,
+    DateTimeComponents? matchComponents,
   }) async {
     final androidDetails = AndroidNotificationDetails(
       channelId,
@@ -252,8 +267,105 @@ class NotificationService {
       payload: payload,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       matchDateTimeComponents:
-          repeat ? DateTimeComponents.time : null,
+          matchComponents ?? (repeat ? DateTimeComponents.time : null),
     );
+  }
+
+  /// Schedule all notifications for one pet feeding schedule.
+  ///
+  /// For daily schedules, each feeding time repeats every day. For
+  /// specific-day schedules, each (time, weekday) pair repeats weekly on that
+  /// weekday. Notification IDs are deterministic so [cancelPetFeeding] can
+  /// remove exactly these entries when a schedule is edited or deleted.
+  static Future<void> schedulePetFeeding({required PetFeeding feeding}) async {
+    if (!feeding.isActive) return;
+
+    final title = '${feeding.petType.emoji} Feed ${feeding.petName}';
+
+    for (final time in feeding.feedingTimes) {
+      final body = _petFeedingBody(feeding, time);
+
+      if (feeding.isDaily) {
+        await scheduleNotification(
+          id: _petFeedingId(feeding.id, time.id),
+          title: title,
+          body: body,
+          scheduledTime: _nextDailyOccurrence(time.hour, time.minute),
+          payload: 'feeding:${feeding.id}',
+          channelId: _petFeedingChannelId,
+          matchComponents: DateTimeComponents.time,
+        );
+      } else {
+        for (final weekday in feeding.repeatDays!) {
+          await scheduleNotification(
+            id: _petFeedingId(feeding.id, time.id, weekday: weekday),
+            title: title,
+            body: body,
+            scheduledTime:
+                _nextWeekdayOccurrence(weekday, time.hour, time.minute),
+            payload: 'feeding:${feeding.id}',
+            channelId: _petFeedingChannelId,
+            matchComponents: DateTimeComponents.dayOfWeekAndTime,
+          );
+        }
+      }
+    }
+  }
+
+  /// Cancel every notification previously scheduled for [feeding].
+  static Future<void> cancelPetFeeding(PetFeeding feeding) async {
+    for (final time in feeding.feedingTimes) {
+      // Cancel the daily-mode id...
+      await cancelNotification(_petFeedingId(feeding.id, time.id));
+      // ...and any per-weekday ids (harmless if they were never scheduled).
+      for (var weekday = 1; weekday <= 7; weekday++) {
+        await cancelNotification(
+          _petFeedingId(feeding.id, time.id, weekday: weekday),
+        );
+      }
+    }
+  }
+
+  static int _petFeedingId(String feedingId, String timeId, {int? weekday}) {
+    final key = weekday == null
+        ? 'petfeed_${feedingId}_$timeId'
+        : 'petfeed_${feedingId}_${timeId}_$weekday';
+    return key.hashCode;
+  }
+
+  static String _petFeedingBody(PetFeeding feeding, FeedingTime time) {
+    final parts = <String>[];
+    if (time.label != null && time.label!.isNotEmpty) parts.add(time.label!);
+    if (feeding.amount != null && feeding.amount!.isNotEmpty) {
+      parts.add(feeding.amount!);
+    }
+    if (feeding.foodType != null && feeding.foodType!.isNotEmpty) {
+      parts.add('of ${feeding.foodType}');
+    }
+    if (parts.isEmpty) {
+      return 'Time to feed ${feeding.petName}';
+    }
+    return 'Time to feed ${feeding.petName} — ${parts.join(' ')}';
+  }
+
+  /// Next occurrence today (or tomorrow if already past) at [hour]:[minute].
+  static DateTime _nextDailyOccurrence(int hour, int minute) {
+    final now = DateTime.now();
+    var next = DateTime(now.year, now.month, now.day, hour, minute);
+    if (!next.isAfter(now)) {
+      next = next.add(const Duration(days: 1));
+    }
+    return next;
+  }
+
+  /// Next occurrence of [weekday] (1=Mon..7=Sun) at [hour]:[minute].
+  static DateTime _nextWeekdayOccurrence(int weekday, int hour, int minute) {
+    final now = DateTime.now();
+    var next = DateTime(now.year, now.month, now.day, hour, minute);
+    while (next.weekday != weekday || !next.isAfter(now)) {
+      next = next.add(const Duration(days: 1));
+    }
+    return next;
   }
 
   /// Schedule medication reminder
@@ -427,6 +539,8 @@ class NotificationService {
         return 'Reminders';
       case _medicationChannelId:
         return 'Medications';
+      case _petFeedingChannelId:
+        return 'Pet Feeding';
       case _alertChannelId:
         return 'Alerts';
       case _geofenceChannelId:

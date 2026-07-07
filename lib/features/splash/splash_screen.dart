@@ -112,6 +112,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
           appState.currentUserId!,
           userProv.user!.name,
         );
+
+        // Schedule pet feeding reminders
+        final petFeedingService = ref.read(petFeedingServiceProvider);
+        await petFeedingService
+            .scheduleAllFeedingNotifications(appState.currentUserId!);
       }
 
       // Initialize subscription status

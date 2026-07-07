@@ -15,6 +15,7 @@
 - **History**: See [CHANGELOG.md](CHANGELOG.md)
 
 ## Active Issues
+- Pet feeding reminders (2026-07-06) built but NOT device-tested — test add/edit/delete schedule, mark-fed, notifications fire, history; then `firebase deploy --only firestore`
 - Expense/reimbursement feature (2026-07-03) built but NOT device-tested — test add/scan/approve/reimburse flow, then deploy `firebase deploy --only firestore,storage`
 - Apple/Google sign-in (2026-07-03) code complete; Apple needs provider enabled in Firebase console; Google also needs re-downloaded config files + Info.plist URL scheme (current plist has no OAuth client). Then `bash scripts/verify-auth.sh lumina`
 
@@ -53,7 +54,7 @@
 - All secrets should be gitignored, not committed
 
 ### Firebase Collections
-- `users`, `caregivers`, `reminders`, `medications`, `geo_zones`, `feedback`, `notifications`
+- `users`, `caregivers`, `reminders`, `medications`, `geo_zones`, `feedback`, `notifications`, `pet_feedings`, `feeding_logs`
 - Location history: `users/{id}/location_updates`
 
 ### Commands

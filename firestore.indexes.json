@@ -33,24 +33,6 @@
       ]
     },
     {
-      "collectionGroup": "reminders",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "isActive",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "scheduledTime",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "geo_zone_events",
       "queryScope": "COLLECTION",
       "fields": [
@@ -195,6 +177,48 @@
         {
           "fieldPath": "status",
           "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "pet_feedings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "isActive",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "feeding_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "feeding_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "feedingId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fedAt",
+          "order": "DESCENDING"
         }
       ]
     }

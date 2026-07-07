@@ -141,6 +141,29 @@ service cloud.firestore {
         resource.data.submittedBy == request.auth.uid;
     }
 
+    // Pet feeding schedules
+    match /pet_feedings/{feedingId} {
+      allow read: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid ||
+         isCaregiverFor(resource.data.userId));
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() &&
+        (resource.data.createdBy == request.auth.uid ||
+         resource.data.userId == request.auth.uid ||
+         isCaregiverFor(resource.data.userId));
+    }
+
+    // Pet feeding history logs
+    match /feeding_logs/{logId} {
+      allow read: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid ||
+         isCaregiverFor(resource.data.userId));
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid ||
+         isCaregiverFor(resource.data.userId));
+    }
+
     // Feedback collection (screenshot feedback feature)
     match /feedback/{feedbackId} {
       // Anyone authenticated can create feedback

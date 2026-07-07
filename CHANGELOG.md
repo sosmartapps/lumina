@@ -3,6 +3,26 @@
 <!-- Claude will automatically log completed work here. -->
 <!-- Format: Date - Build Number - Summary heading, then bullet points of what changed. -->
 
+## 2026-07-06 - Pet Feeding Reminders (NEEDS DEVICE TEST + FIREBASE DEPLOY)
+
+- New self-contained feature under `lib/features/pet_feeding/`: schedule feeding times per pet with local notifications, mark-as-fed, and feeding history
+- Model `lib/core/models/pet_feeding.dart`: `PetFeeding` (petName, PetType, foodType, amount, embedded `FeedingTime` list, `repeatDays` null=daily else weekdays 1-7, `lastFedAt`), `FeedingLog`, `PetType` enum (emoji + icon). Exported from models barrel
+- Service `pet_feeding_service.dart` (+ `petFeedingServiceProvider`): CRUD on `pet_feedings`, `markFed` writes `feeding_logs` + bumps `lastFedAt`, history streams. Immediate (re)scheduling on create/update (updateFeeding cancels via *old* doc to avoid orphan notifications) + `scheduleAllFeedingNotifications` on boot
+- NotificationService: added `pet_feeding_channel`, `schedulePetFeeding` (daily → `DateTimeComponents.time`; specific days → one repeating notif per weekday via `dayOfWeekAndTime`), `cancelPetFeeding` (deterministic ids), generic `scheduleNotification` now takes optional `matchComponents`
+- UI: `ManagePetFeedingScreen` (add/edit/delete dialog with multiple feeding times + label, pet-type picker, every-day/weekday chips; per-pet card shows times, last-fed, next feeding, Mark Fed button) + `FeedingHistoryScreen` (grouped by day). Wired into caregiver dashboard Manage tab
+- Boot scheduling hooked into splash_screen + user_home_screen (after reminder scheduling, since reminderService.scheduleAllNotifications calls cancelAll first)
+- Firebase: `firestore.rules` for `pet_feedings` + `feeding_logs` (patient + caregivers r/w); 3 new indexes (pet_feedings userId+isActive; feeding_logs userId+fedAt desc; feeding_logs feedingId+fedAt desc). **Run `firebase deploy --only firestore` before shipping**
+
+## 2026-07-06 - Device-Test Session: Firebase Live + UI Formatting Fixes
+
+- Firebase config deployed for the first time (rules were deny-all defaults): firestore.rules, storage.rules (bucket created), 12 deduped indexes (queryScope case fixed, firebase.json now references firestore.indexes.json)
+- Apple sign-in verified working on device end-to-end (caregiver doc created); Google configured (new plist w/ OAuth client + URL scheme)
+- verify-auth harness PASS (analyze clean — all 30 pre-existing infos fixed incl. purchasePackage→purchase(PurchaseParams) and onReorder→onReorderItem migrations, both need functional retest when touched)
+- Setup flow: keyboard now dismissed on page change; permissions page scrollable (CTA was hidden behind stuck keyboard)
+- Patient home: 2×3 no-scroll tile layout (all actions visible — accessibility requirement), tiles auto-fit via Flexible/FittedBox, greeting scales instead of word-per-line wrap
+- Expense flow verified on device: receipt scan → OCR pre-fill (real medical statement: merchant/date extracted) → submit → detail screen w/ role-gated actions
+- **New blanket policy**: memory/workflows/ui-formatting-checklist.md — mandatory visual walk of every touched screen, referenced from root CLAUDE.md
+
 ## 2026-07-03 - Apple + Google Sign-In for Caregivers (NEEDS CONSOLE CONFIG + DEVICE TEST)
 
 - Wired shared `ssa_auth` package (../packages/ssa_auth) into AuthService: `signInWithApple()` / `signInWithGoogle()` with `_ensureCaregiverProfile` (creates caregivers doc on first OAuth sign-in from provider displayName/email, else bumps lastLoginAt)
