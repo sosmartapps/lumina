@@ -61,7 +61,13 @@ class AppTheme {
       textTheme: _buildTextTheme(Brightness.light),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          minimumSize: const Size(double.infinity, 64),
+          // Min height keeps the large tap target; width must NOT be
+          // infinite — an infinite minimumSize makes any ElevatedButton
+          // inside a Row demand all width and crush its siblings to
+          // one-character-per-line (root cause of the 2026-07-06 vertical-
+          // text bugs). Full-width CTAs get their width from their
+          // SizedBox(width: double.infinity) wrappers instead.
+          minimumSize: const Size(64, 64),
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
           textStyle: GoogleFonts.roboto(
             fontSize: 20,
@@ -154,7 +160,13 @@ class AppTheme {
       textTheme: _buildTextTheme(Brightness.dark),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          minimumSize: const Size(double.infinity, 64),
+          // Min height keeps the large tap target; width must NOT be
+          // infinite — an infinite minimumSize makes any ElevatedButton
+          // inside a Row demand all width and crush its siblings to
+          // one-character-per-line (root cause of the 2026-07-06 vertical-
+          // text bugs). Full-width CTAs get their width from their
+          // SizedBox(width: double.infinity) wrappers instead.
+          minimumSize: const Size(64, 64),
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
           textStyle: GoogleFonts.roboto(
             fontSize: 20,

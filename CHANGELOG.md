@@ -13,6 +13,13 @@
 - Boot scheduling hooked into splash_screen + user_home_screen (after reminder scheduling, since reminderService.scheduleAllNotifications calls cancelAll first)
 - Firebase: `firestore.rules` for `pet_feedings` + `feeding_logs` (patient + caregivers r/w); 3 new indexes (pet_feedings userId+isActive; feeding_logs userId+fedAt desc; feeding_logs feedingId+fedAt desc). **Run `firebase deploy --only firestore` before shipping**
 
+## 2026-07-06 - ROOT CAUSE: infinite-width button theme (vertical-text bugs)
+
+- **`ElevatedButtonTheme minimumSize: Size(double.infinity, 64)` (both light + dark themes) made every ElevatedButton inside a Row demand infinite width** → sibling Expanded text collapsed to one character per line, button labels painted off-screen (permissions "Allow" card, User Profile lost-person banner). NOT device text-size related.
+- Fix: `minimumSize: Size(64, 64)`; audited all 49 ElevatedButtons — every full-width CTA already gets width from `SizedBox(width: double.infinity)` wrappers; the one unwrapped instance (quadtrack dialog action) is fixed, not broken, by this change
+- Kept as defense-in-depth: app-wide text scaling clamp (1.0–1.3×) and the 10-site fragile-Row sweep (contacts, dashboard badges, vehicle card, zones/medication button rows, paywall, medical records, setup welcome/tips)
+- Lesson added to memory/workflows/ui-formatting-checklist.md ("Theme-level traps")
+
 ## 2026-07-06 - Device-Test Session: Firebase Live + UI Formatting Fixes
 
 - Firebase config deployed for the first time (rules were deny-all defaults): firestore.rules, storage.rules (bucket created), 12 deduped indexes (queryScope case fixed, firebase.json now references firestore.indexes.json)
