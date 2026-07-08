@@ -14,7 +14,7 @@ dependencies:
   bug_reporter:
     path: packages/bug_reporter
   ssa_auth:
-    path: ../packages/ssa_auth
+    path: packages/ssa_auth
 
   # Sign-in providers (initialize call in main; flows live in ssa_auth)
   google_sign_in: ^7.2.0

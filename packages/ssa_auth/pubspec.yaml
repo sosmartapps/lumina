@@ -1,0 +1,21 @@
+name: ssa_auth
+description: Unified authentication package for So Smart Apps LLC — Google, Apple, Email sign-in with optional MFA, Riverpod providers, and secure storage.
+version: 1.0.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.7.0 <4.0.0'
+  flutter: '>=3.22.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: '>=2.5.0 <4.0.0'
+  firebase_auth: ^6.3.0
+  cloud_firestore: ^6.2.0
+  google_sign_in: ^7.2.0
+  sign_in_with_apple: ^7.0.1
+  flutter_secure_storage: ^10.0.0
+  crypto: ^3.0.6
+  ssa_core:
+    path: ../ssa_core

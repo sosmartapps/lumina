@@ -1,0 +1,18 @@
+name: ssa_core
+description: Shared foundation package for So Smart Apps LLC — Firebase init, Firestore helpers, base repository, connectivity, and logging.
+version: 1.0.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.7.0 <4.0.0'
+  flutter: '>=3.22.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  firebase_core: ^4.6.0
+  cloud_firestore: ^6.2.0
+  firebase_crashlytics: ^5.1.0
+  firebase_analytics: ^12.2.0
+  connectivity_plus: ^7.0.0
+  flutter_riverpod: '>=2.5.0 <4.0.0'
