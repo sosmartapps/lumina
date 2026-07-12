@@ -143,6 +143,10 @@ class PetFeeding {
   /// e.g. "1 cup", "2 scoops".
   final String? amount;
 
+  /// Photos of the food/portions (e.g. the measuring cup of kibble, the
+  /// wet-food container) so whoever feeds the pet sees exactly what to use.
+  final List<String> foodPhotoUrls;
+
   final List<FeedingTime> feedingTimes;
 
   /// null/empty = every day; otherwise specific weekdays (1=Mon..7=Sun).
@@ -165,6 +169,7 @@ class PetFeeding {
     this.petType = PetType.dog,
     this.foodType,
     this.amount,
+    this.foodPhotoUrls = const [],
     this.feedingTimes = const [],
     this.repeatDays,
     this.isActive = true,
@@ -200,6 +205,7 @@ class PetFeeding {
       petType: PetType.fromString(data['petType'] ?? 'dog'),
       foodType: data['foodType'],
       amount: data['amount'],
+      foodPhotoUrls: List<String>.from(data['foodPhotoUrls'] ?? []),
       feedingTimes: (data['feedingTimes'] as List<dynamic>?)
               ?.map((e) => FeedingTime.fromMap(Map<String, dynamic>.from(e)))
               .toList() ??
@@ -221,6 +227,7 @@ class PetFeeding {
       'petType': petType.value,
       'foodType': foodType,
       'amount': amount,
+      'foodPhotoUrls': foodPhotoUrls,
       'feedingTimes': feedingTimes.map((e) => e.toMap()).toList(),
       'repeatDays': repeatDays,
       'isActive': isActive,
@@ -236,6 +243,7 @@ class PetFeeding {
     PetType? petType,
     String? foodType,
     String? amount,
+    List<String>? foodPhotoUrls,
     List<FeedingTime>? feedingTimes,
     List<int>? repeatDays,
     bool? isActive,
@@ -249,6 +257,7 @@ class PetFeeding {
       petType: petType ?? this.petType,
       foodType: foodType ?? this.foodType,
       amount: amount ?? this.amount,
+      foodPhotoUrls: foodPhotoUrls ?? this.foodPhotoUrls,
       feedingTimes: feedingTimes ?? this.feedingTimes,
       repeatDays: repeatDays ?? this.repeatDays,
       isActive: isActive ?? this.isActive,

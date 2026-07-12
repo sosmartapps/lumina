@@ -22,6 +22,11 @@ class SubscriptionProvider extends ChangeNotifier {
   int get maxReminders => _subscription?.maxReminders ?? 5;
   int get maxMedications => _subscription?.maxMedications ?? 3;
   int get maxSavedLocations => _subscription?.maxSavedLocations ?? 3;
+  int get maxGeoZones => _subscription?.maxGeoZones ?? 1;
+
+  bool canAddGeoZone(int currentCount) =>
+      _subscription?.canAdd(currentCount: currentCount, limit: maxGeoZones) ??
+      currentCount < 1;
 
   bool canAddReminder(int currentCount) =>
       _subscription?.canAdd(currentCount: currentCount, limit: maxReminders) ?? true;

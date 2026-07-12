@@ -10,6 +10,12 @@ class Caregiver {
   final List<String> managedUserIds;
   final CaregiverRole role;
   final Map<String, CaregiverRole> roleOverrides;
+
+  /// Multi-role support (2026-07-08): a person can hold several roles for
+  /// one patient (e.g. Family Member + Fiduciary). Stored in Firestore as
+  /// multiRoleOverrides.{patientId}: [role, ...]. When absent, falls back
+  /// to the legacy single roleOverrides/role.
+  final Map<String, List<CaregiverRole>> multiRoleOverrides;
   final bool isVerified;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -24,6 +30,7 @@ class Caregiver {
     this.managedUserIds = const [],
     this.role = CaregiverRole.caregiver,
     this.roleOverrides = const {},
+    this.multiRoleOverrides = const {},
     this.isVerified = false,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -36,6 +43,13 @@ class Caregiver {
     return roleOverrides[patientId] ?? role;
   }
 
+  /// All roles this caregiver holds for a patient (multi-role aware).
+  List<CaregiverRole> rolesForPatient(String patientId) {
+    final multi = multiRoleOverrides[patientId];
+    if (multi != null && multi.isNotEmpty) return multi;
+    return [roleForPatient(patientId)];
+  }
+
   factory Caregiver.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
 
@@ -43,6 +57,16 @@ class Caregiver {
     final rawOverrides = data['roleOverrides'] as Map<String, dynamic>? ?? {};
     final overrides = rawOverrides.map(
       (key, value) => MapEntry(key, CaregiverRole.fromString(value as String)),
+    );
+
+    final rawMulti = data['multiRoleOverrides'] as Map<String, dynamic>? ?? {};
+    final multiOverrides = rawMulti.map(
+      (key, value) => MapEntry(
+        key,
+        (value as List)
+            .map((v) => CaregiverRole.fromString(v as String))
+            .toList(),
+      ),
     );
 
     return Caregiver(
@@ -54,6 +78,7 @@ class Caregiver {
       managedUserIds: List<String>.from(data['managedUserIds'] ?? []),
       role: CaregiverRole.fromString(data['role'] ?? 'caregiver'),
       roleOverrides: overrides,
+      multiRoleOverrides: multiOverrides,
       isVerified: data['isVerified'] ?? false,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -70,6 +95,8 @@ class Caregiver {
       'managedUserIds': managedUserIds,
       'role': role.value,
       'roleOverrides': roleOverrides.map((key, value) => MapEntry(key, value.value)),
+      'multiRoleOverrides': multiRoleOverrides.map(
+          (key, value) => MapEntry(key, value.map((r) => r.value).toList())),
       'isVerified': isVerified,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(DateTime.now()),
@@ -85,6 +112,7 @@ class Caregiver {
     List<String>? managedUserIds,
     CaregiverRole? role,
     Map<String, CaregiverRole>? roleOverrides,
+    Map<String, List<CaregiverRole>>? multiRoleOverrides,
     bool? isVerified,
     DateTime? lastLoginAt,
   }) {
@@ -97,6 +125,7 @@ class Caregiver {
       managedUserIds: managedUserIds ?? this.managedUserIds,
       role: role ?? this.role,
       roleOverrides: roleOverrides ?? this.roleOverrides,
+      multiRoleOverrides: multiRoleOverrides ?? this.multiRoleOverrides,
       isVerified: isVerified ?? this.isVerified,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
@@ -133,7 +162,7 @@ enum CaregiverRole {
       case CaregiverRole.healthcare:
         return 'Healthcare Provider';
       case CaregiverRole.financeManager:
-        return 'Finance Manager';
+        return 'Fiduciary (Financial)';
     }
   }
 }

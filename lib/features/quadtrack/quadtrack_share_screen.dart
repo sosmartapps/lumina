@@ -54,11 +54,21 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
 
   Future<void> _loadPatientData() async {
     try {
-      // Load UserProfile
-      final userProfileDoc = await FirebaseFirestore.instance
-          .collection('user_profiles')
+      // Load UserProfile — canonical store is the subcollection the
+      // User Profile screen writes (users/{id}/user_profile/profile);
+      // fall back to the legacy top-level user_profiles collection.
+      var userProfileDoc = await FirebaseFirestore.instance
+          .collection('users')
           .doc(widget.patientId)
+          .collection('user_profile')
+          .doc('profile')
           .get();
+      if (!userProfileDoc.exists) {
+        userProfileDoc = await FirebaseFirestore.instance
+            .collection('user_profiles')
+            .doc(widget.patientId)
+            .get();
+      }
       if (userProfileDoc.exists) {
         setState(() {
           _userProfile = UserProfile.fromFirestore(userProfileDoc);
@@ -196,14 +206,19 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
     // Medical Information
     if (_userProfile != null || _healthProfile != null || _activeConditions.isNotEmpty) {
       sb.writeln('MEDICAL INFORMATION');
-      if (_userProfile!.primaryDiagnosis != null && _userProfile!.primaryDiagnosis!.isNotEmpty) {
-        sb.writeln('Primary Diagnosis: ${_userProfile!.primaryDiagnosis}');
-      }
-      if (_userProfile!.cognitiveStatus != null && _userProfile!.cognitiveStatus!.isNotEmpty) {
-        sb.writeln('Cognitive Status: ${_userProfile!.cognitiveStatus}');
-      }
-      if (_userProfile!.medicalAlertInfo != null && _userProfile!.medicalAlertInfo!.isNotEmpty) {
-        sb.writeln('Medical Alert: ${_userProfile!.medicalAlertInfo}');
+      // _userProfile can be null here (this section also triggers on
+      // _healthProfile / _activeConditions alone) — use null-aware access.
+      final medProfile = _userProfile;
+      if (medProfile != null) {
+        if (medProfile.primaryDiagnosis != null && medProfile.primaryDiagnosis!.isNotEmpty) {
+          sb.writeln('Primary Diagnosis: ${medProfile.primaryDiagnosis}');
+        }
+        if (medProfile.cognitiveStatus != null && medProfile.cognitiveStatus!.isNotEmpty) {
+          sb.writeln('Cognitive Status: ${medProfile.cognitiveStatus}');
+        }
+        if (medProfile.medicalAlertInfo != null && medProfile.medicalAlertInfo!.isNotEmpty) {
+          sb.writeln('Medical Alert: ${medProfile.medicalAlertInfo}');
+        }
       }
       if (_activeConditions.isNotEmpty) {
         final conditionNames = _activeConditions.map((c) => c.name).join(', ');
@@ -337,6 +352,32 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
     return sb.toString();
   }
 
+  /// Short, dispatch-style SMS: identity + last known position + a
+  /// tappable turn-by-turn navigation link. Officers in the field need
+  /// directions on their phone, not a 6-segment SMS — the full package
+  /// goes by email/share instead.
+  String _buildDispatchSms(QuadTrackDevice device, String address) {
+    final lat = device.lastLocation!.latitude;
+    final lng = device.lastLocation!.longitude;
+    final name = _userProfile?.fullLegalName ?? 'Missing person';
+    final sb = StringBuffer();
+    sb.writeln('MISSING PERSON — $name');
+    if (_userProfile?.age != null) {
+      sb.write('Age ${_userProfile!.age}');
+      if (_userProfile?.gender != null) sb.write(', ${_userProfile!.gender}');
+      sb.writeln();
+    }
+    if (address.isNotEmpty) sb.writeln('Last known: $address');
+    if (device.lastSeenAt != null) {
+      sb.writeln(
+          'As of ${DateFormat('hh:mm a').format(device.lastSeenAt!)} (GPS tracker, updates live)');
+    }
+    sb.writeln(
+        'NAVIGATE: https://www.google.com/maps/dir/?api=1&destination=$lat,$lng');
+    sb.write('Full details to follow by email. — Lumina QuadTrack');
+    return sb.toString();
+  }
+
   Future<void> _shareViaSMS(
     String address,
     List<QuadTrackPing> pings,
@@ -352,40 +393,7 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
 
     if (device.lastLocation == null) return;
 
-    final message = _buildShareMessage(
-      device,
-      address,
-      pings,
-      device.lastLocation!.latitude,
-      device.lastLocation!.longitude,
-    );
-
-    // Check message length and warn if too long for SMS
-    if (message.length > 160) {
-      if (!mounted) return;
-      final shouldSend = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Message Too Long'),
-          content: Text(
-            'The message is ${message.length} characters. '
-            'It will be split into ${(message.length / 160).ceil()} SMS messages. '
-            'Consider using the Share button for email or messaging apps instead.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Send Anyway'),
-            ),
-          ],
-        ),
-      );
-      if (shouldSend != true) return;
-    }
+    final message = _buildDispatchSms(device, address);
 
     final smsUri = Uri(
       scheme: 'sms',
@@ -429,6 +437,53 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
     }
   }
 
+  /// Email the full alert package (identity, physical, medical, vehicle,
+  /// locations, contacts) via the device mail client.
+  Future<void> _shareViaEmail(
+    String address,
+    List<QuadTrackPing> pings,
+    QuadTrackDevice device,
+  ) async {
+    if (device.lastLocation == null) return;
+
+    final message = _buildShareMessage(
+      device,
+      address,
+      pings,
+      device.lastLocation!.latitude,
+      device.lastLocation!.longitude,
+    );
+    final patientName = _userProfile?.fullLegalName ?? 'Missing Person';
+
+    // Share sheet (not mailto:) so the user can pick Gmail/Outlook/Mail/
+    // messaging apps — the subject is honored by email apps chosen there.
+    try {
+      final result = await SharePlus.instance.share(ShareParams(
+        text: message,
+        subject: 'MISSING PERSON ALERT - $patientName',
+      ));
+
+      if (result.status == ShareResultStatus.success) {
+        await FirebaseFirestore.instance.collection('quadtrack_shares').add({
+          'deviceId': widget.deviceId,
+          'patientId': widget.patientId,
+          'sharedBy': widget.caregiverId,
+          'sharedWith': 'email',
+          'method': 'email',
+          'messageLength': message.length,
+          'sharedAt': FieldValue.serverTimestamp(),
+          'locationAtShare': device.lastLocation,
+          'battery': device.trackerBatteryLevel,
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sharing: $e')),
+      );
+    }
+  }
+
   Future<void> _copyToClipboard(
     String address,
     List<QuadTrackPing> pings,
@@ -453,54 +508,6 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
           backgroundColor: AppTheme.primaryGreen,
         ),
       );
-    }
-  }
-
-  Future<void> _shareViaShareSheet(
-    String address,
-    List<QuadTrackPing> pings,
-    QuadTrackDevice device,
-  ) async {
-    if (device.lastLocation == null) return;
-
-    final message = _buildShareMessage(
-      device,
-      address,
-      pings,
-      device.lastLocation!.latitude,
-      device.lastLocation!.longitude,
-    );
-    final patientName = _userProfile?.fullLegalName ?? 'Missing Person';
-
-    final result = await SharePlus.instance.share(ShareParams(
-      text: message,
-      subject: 'Missing Person Alert - $patientName',
-    ));
-
-    if (result.status == ShareResultStatus.success) {
-      // Log share to Firestore
-      await FirebaseFirestore.instance
-          .collection('quadtrack_shares')
-          .add({
-        'deviceId': widget.deviceId,
-        'patientId': widget.patientId,
-        'sharedBy': widget.caregiverId,
-        'sharedWith': 'share_sheet',
-        'method': 'share',
-        'messageLength': message.length,
-        'sharedAt': FieldValue.serverTimestamp(),
-        'locationAtShare': device.lastLocation,
-        'battery': device.trackerBatteryLevel,
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Information shared'),
-            backgroundColor: AppTheme.primaryGreen,
-          ),
-        );
-      }
     }
   }
 
@@ -661,10 +668,18 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
 
                         // Phone number input
                         Text(
-                          'Send via Text Message',
+                          'Text Directions to Officer',
                           style:
                               Theme.of(context).textTheme.titleMedium?.copyWith(
                                     fontWeight: FontWeight.bold,
+                                  ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Sends a short message with a tap-to-navigate link to the last known position',
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppTheme.textSecondaryLight,
                                   ),
                         ),
                         const SizedBox(height: 12),
@@ -686,17 +701,19 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
                           child: ElevatedButton.icon(
                             onPressed: () => _shareViaSMS(address, pings, device),
                             icon: const Icon(Icons.sms),
-                            label: const Text('Send via Text'),
+                            label: const Text('Text Directions'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppTheme.primaryBlue,
+                              // Theme foreground is blue — invisible on blue
+                              foregroundColor: Colors.white,
                             ),
                           ),
                         ),
                         const SizedBox(height: 24),
 
-                        // Other sharing options
+                        // Full details
                         Text(
-                          'Other Sharing Options',
+                          'Send Full Details',
                           style:
                               Theme.of(context).textTheme.titleMedium?.copyWith(
                                     fontWeight: FontWeight.bold,
@@ -704,33 +721,35 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'For long messages, use email or messaging apps instead of SMS',
+                          'Complete alert package: description, medical info, vehicle, contacts, and locations — choose email or any messaging app',
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
                                     color: AppTheme.textSecondaryLight,
                                   ),
                         ),
                         const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () =>
-                                    _copyToClipboard(address, pings, device),
-                                icon: const Icon(Icons.content_copy),
-                                label: const Text('Copy'),
-                              ),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () =>
+                                _shareViaEmail(address, pings, device),
+                            icon: const Icon(Icons.forward_to_inbox),
+                            label: const Text('Send Full Details'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primaryTeal,
+                              foregroundColor: Colors.white,
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () =>
-                                    _shareViaShareSheet(address, pings, device),
-                                icon: const Icon(Icons.share),
-                                label: const Text('Share'),
-                              ),
-                            ),
-                          ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () =>
+                                _copyToClipboard(address, pings, device),
+                            icon: const Icon(Icons.content_copy),
+                            label: const Text('Copy to Clipboard'),
+                          ),
                         ),
                         const SizedBox(height: 24),
 

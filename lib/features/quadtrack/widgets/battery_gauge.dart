@@ -98,18 +98,24 @@ class _BatteryGaugeState extends State<BatteryGauge>
                 alignment: Alignment.center,
                 children: [
                   // Circular progress indicator background
-                  CircularProgressIndicator(
-                    value: 1.0,
-                    strokeWidth: 8,
-                    valueColor:
-                        AlwaysStoppedAnimation(
-                            Colors.grey.withValues(alpha: 0.3)),
+                  // (Positioned.fill so the ring fills the 120px box —
+                  // unconstrained it renders at the 36px default and
+                  // overlaps the percentage text)
+                  Positioned.fill(
+                    child: CircularProgressIndicator(
+                      value: 1.0,
+                      strokeWidth: 8,
+                      valueColor: AlwaysStoppedAnimation(
+                          Colors.grey.withValues(alpha: 0.3)),
+                    ),
                   ),
                   // Animated circular progress indicator
-                  CircularProgressIndicator(
-                    value: displayPercentage / 100.0,
-                    strokeWidth: 8,
-                    valueColor: AlwaysStoppedAnimation(batteryColor),
+                  Positioned.fill(
+                    child: CircularProgressIndicator(
+                      value: displayPercentage / 100.0,
+                      strokeWidth: 8,
+                      valueColor: AlwaysStoppedAnimation(batteryColor),
+                    ),
                   ),
                   // Center percentage text
                   Column(

@@ -99,7 +99,12 @@ class ReminderService {
             // Daily: always show
             return true;
           case RepeatFrequency.weekly:
-            // Weekly: show on the same weekday as originally scheduled
+            // Weekly: use the caregiver-picked days when present,
+            // else fall back to the originally scheduled weekday
+            final weeklyDays = r.repeatDays;
+            if (weeklyDays != null && weeklyDays.isNotEmpty) {
+              return weeklyDays.contains(todayWeekday);
+            }
             return r.scheduledTime.weekday == todayWeekday;
           case RepeatFrequency.custom:
             // Custom days: show if today's weekday is in repeatDays

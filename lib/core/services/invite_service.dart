@@ -25,9 +25,10 @@ class InviteService {
   Future<InviteCode> createInviteCode({
     required String patientId,
     required String caregiverId,
-    required CaregiverRole assignedRole,
+    required List<CaregiverRole> assignedRoles,
     Duration expiry = const Duration(hours: 24),
   }) async {
+    assert(assignedRoles.isNotEmpty);
     // Generate a unique code, retry on collision
     String code;
     bool exists;
@@ -50,7 +51,8 @@ class InviteService {
       code: code,
       patientId: patientId,
       createdBy: caregiverId,
-      assignedRole: assignedRole,
+      assignedRole: assignedRoles.first,
+      assignedRoles: assignedRoles,
       createdAt: now,
       expiresAt: now.add(expiry),
     );
@@ -113,6 +115,8 @@ class InviteService {
       {
         'managedUserIds': FieldValue.arrayUnion([invite.patientId]),
         'roleOverrides.${invite.patientId}': invite.assignedRole.value,
+        'multiRoleOverrides.${invite.patientId}':
+            invite.assignedRoles.map((r) => r.value).toList(),
       },
     );
 

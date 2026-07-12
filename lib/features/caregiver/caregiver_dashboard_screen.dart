@@ -8,14 +8,15 @@ import 'package:intl/intl.dart';
 import '../../core/providers/providers.dart';
 import '../../core/providers/caregiver_provider.dart';
 import '../../core/providers/quadtrack_provider.dart';
-import '../../core/models/quadtrack_device.dart' show DeviceStatus;
 import '../../core/theme/app_theme.dart';
 import '../../core/models/app_user.dart';
 import '../../core/models/medication.dart';
 import '../../core/models/geo_zone.dart';
+import '../../core/models/quadtrack_device.dart' show DeviceStatus;
 import '../battery/battery_status_card.dart';
 import '../bouncie/vehicle_status_card.dart';
 import '../bouncie/trip_history_screen.dart';
+import '../bouncie/vehicle_tracking_screen.dart';
 import '../user_home/user_home_screen.dart';
 import 'monitoring_settings_screen.dart';
 import 'manage_contacts_screen.dart';
@@ -34,10 +35,13 @@ import 'user_profile_screen.dart';
 import 'add_patient_screen.dart';
 import 'invite_caregiver_screen.dart';
 import 'manage_caregivers_screen.dart';
+import 'patients_overview_screen.dart';
 import '../../features/subscription/subscription_status_card.dart';
 import '../../features/subscription/paywall_screen.dart';
 import '../medical_records/medical_records_screen.dart';
 import '../quadtrack/quadtrack_dashboard_screen.dart';
+import '../quadtrack/quadtrack_detail_screen.dart';
+import '../../core/services/notification_service.dart';
 
 /// Main dashboard for caregivers
 class CaregiverDashboardScreen extends ConsumerStatefulWidget {
@@ -51,10 +55,60 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
   int _selectedIndex = 0;
   LatLng? _vehiclePosition;
 
+  Function(String?)? _previousNotificationHandler;
+
   @override
   void initState() {
     super.initState();
     _refreshVehicleLocation();
+    _registerFcmToken();
+    _wireNotificationTaps();
+  }
+
+  /// Route QuadTrack notification taps ('quadtrack:<deviceDocId>') to the
+  /// device detail screen; delegate anything else to the previous handler.
+  void _wireNotificationTaps() {
+    _previousNotificationHandler = NotificationService.onNotificationTapped;
+    NotificationService.onNotificationTapped = (payload) {
+      if (payload != null && payload.startsWith('quadtrack:') && mounted) {
+        final deviceId = payload.replaceFirst('quadtrack:', '');
+        final caregiverId = ref.read(caregiverNotifierProvider).caregiver?.id ??
+            ref.read(appStateNotifierProvider).currentCaregiverId ??
+            '';
+        if (caregiverId.isNotEmpty) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => QuadTrackDetailScreen(
+                deviceId: deviceId,
+                caregiverId: caregiverId,
+              ),
+            ),
+          );
+          return;
+        }
+      }
+      _previousNotificationHandler?.call(payload);
+    };
+  }
+
+  /// Store this device's FCM token on the caregiver doc so
+  /// notifyCaregivers / Cloud Functions can reach this caregiver.
+  /// (saveFCMToken existed but was never called anywhere — no caregiver
+  /// ever had a token, so no push ever delivered.)
+  Future<void> _registerFcmToken() async {
+    try {
+      final caregiverId = ref.read(caregiverNotifierProvider).caregiver?.id ??
+          ref.read(appStateNotifierProvider).currentCaregiverId;
+      if (caregiverId != null && caregiverId.isNotEmpty) {
+        await NotificationService.saveFCMToken(
+          id: caregiverId,
+          isCaregiver: true,
+        );
+      }
+    } catch (e) {
+      debugPrint('FCM token registration failed: $e');
+    }
   }
 
   Future<void> _openDirectionsToVehicle() async {
@@ -77,9 +131,16 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
 
   Future<void> _refreshVehicleLocation() async {
     try {
-      final bouncie = ref.read(bouncieServiceProvider);
-      final imei = ref.read(bouncieVehicleImeiProvider);
-      final loc = await bouncie.getVehicleLocation(imei);
+      // Per-family Bouncie connection; no connection = no vehicle marker.
+      final patientId = ref.read(caregiverNotifierProvider).selectedUser?.id ??
+          ref.read(appStateNotifierProvider).currentUserId;
+      if (patientId == null) return;
+      final connection =
+          await ref.read(bouncieConnectionProvider(patientId).future);
+      if (connection == null) return;
+      final bouncie = bouncieServiceForConnection(
+          ref.read(bouncieAppConfigProvider), connection);
+      final loc = await bouncie.getVehicleLocation(connection.imei);
       if (loc != null && mounted) {
         setState(() => _vehiclePosition = LatLng(loc.latitude, loc.longitude));
       }
@@ -94,6 +155,15 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
         backgroundColor: AppTheme.primaryPurple,
         title: _buildPatientSwitcher(),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.group),
+            tooltip: 'All Patients',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => const PatientsOverviewScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.exit_to_app),
             onPressed: _exitCaregiverMode,
@@ -521,137 +591,6 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
     );
   }
 
-  Widget _buildQuadTrackCard() {
-    final caregiverId = ref.read(caregiverNotifierProvider).caregiver?.id ??
-        ref.read(appStateNotifierProvider).currentCaregiverId ??
-        '';
-
-    if (caregiverId.isEmpty) return const SizedBox.shrink();
-
-    final devicesAsync = ref.watch(caregiverDevicesProvider(caregiverId));
-
-    return devicesAsync.when(
-      loading: () => const SizedBox.shrink(),
-      error: (_, _) => const SizedBox.shrink(),
-      data: (devices) {
-        final online =
-            devices.where((d) => d.status == DeviceStatus.online).length;
-        final alerts = devices
-            .where((d) =>
-                d.status == DeviceStatus.lowBattery ||
-                d.status == DeviceStatus.phoneDead ||
-                d.status == DeviceStatus.offline)
-            .length;
-
-        return GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => QuadTrackDashboardScreen(
-                  caregiverId: caregiverId,
-                ),
-              ),
-            );
-          },
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryTeal.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.track_changes,
-                    color: AppTheme.primaryTeal,
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'QuadTrack Devices',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      if (devices.isEmpty)
-                        Text(
-                          'No devices registered',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey.shade600,
-                          ),
-                        )
-                      else
-                        Row(
-                          children: [
-                            Icon(Icons.circle,
-                                color: AppTheme.primaryGreen, size: 10),
-                            const SizedBox(width: 4),
-                            Text(
-                              '$online online',
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                            if (alerts > 0) ...[
-                              const SizedBox(width: 12),
-                              Icon(Icons.warning_amber_rounded,
-                                  color: AppTheme.primaryOrange, size: 16),
-                              const SizedBox(width: 4),
-                              Text(
-                                '$alerts alert${alerts > 1 ? 's' : ''}',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: AppTheme.primaryOrange,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                            const SizedBox(width: 12),
-                            Flexible(
-                              child: Text(
-                                '${devices.length} total',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.chevron_right, color: Colors.grey),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Widget _buildActivityItem(GeoZoneEvent event) {
     final isEntry = event.eventType == GeoZoneEventType.enter;
     final timeStr = DateFormat('MMM d, h:mm a').format(event.timestamp);
@@ -971,6 +910,16 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
             ),
           ),
           _buildManageItem(
+            'Vehicle Tracking',
+            'Connect the family Bouncie account',
+            Icons.directions_car,
+            AppTheme.primaryBlue,
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const VehicleTrackingScreen()),
+            ),
+          ),
+          _buildManageItem(
             'Trip History',
             'View recent vehicle trips',
             Icons.route,
@@ -1032,6 +981,142 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
           ),
         ],
       ),
+    );
+  }
+
+  /// QuadTrack devices status card for the Overview tab
+  Widget _buildQuadTrackCard() {
+    final caregiverId = ref.read(caregiverNotifierProvider).caregiver?.id ??
+        ref.read(appStateNotifierProvider).currentCaregiverId ??
+        '';
+    if (caregiverId.isEmpty) return const SizedBox.shrink();
+
+    final devicesAsync = ref.watch(caregiverDevicesProvider(caregiverId));
+
+    return devicesAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
+      data: (devices) {
+        // QuadTrack is opt-in (hardware still in development) — don't
+        // advertise it on the Overview tab until a device is registered.
+        // Discovery/registration lives in the Manage tab.
+        if (devices.isEmpty) return const SizedBox.shrink();
+
+        final online = devices
+            .where((d) => d.status == DeviceStatus.online)
+            .length;
+        final alerts = devices
+            .where((d) =>
+                d.status == DeviceStatus.lowBattery ||
+                d.status == DeviceStatus.phoneDead ||
+                d.status == DeviceStatus.offline)
+            .length;
+
+        return GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => QuadTrackDashboardScreen(
+                  caregiverId: caregiverId,
+                ),
+              ),
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryTeal.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.track_changes,
+                    color: AppTheme.primaryTeal,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'QuadTrack Devices',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      if (devices.isEmpty)
+                        Text(
+                          'No devices registered',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: AppTheme.textSecondaryLight,
+                              ),
+                        )
+                      else
+                        Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: AppTheme.primaryGreen,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '$online online',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            if (alerts > 0) ...[
+                              const SizedBox(width: 8),
+                              const Icon(
+                                Icons.warning_amber_rounded,
+                                size: 14,
+                                color: AppTheme.primaryOrange,
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                '$alerts alert${alerts == 1 ? '' : 's'}',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(color: AppTheme.primaryOrange),
+                              ),
+                            ],
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                '${devices.length} total',
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: AppTheme.textSecondaryLight,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: Colors.grey),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

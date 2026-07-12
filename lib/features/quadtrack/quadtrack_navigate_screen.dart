@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -32,6 +33,37 @@ class _QuadTrackNavigateScreenState
   Position? _caregiverPosition;
   Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
+  StreamSubscription<Position>? _positionSubscription;
+  MapType _mapType = MapType.normal;
+
+  /// Small white overlay button that toggles street/satellite view
+  Widget _buildMapTypeToggle() {
+    return Positioned(
+      top: 12,
+      right: 12,
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        elevation: 2,
+        child: IconButton(
+          tooltip: _mapType == MapType.normal
+              ? 'Satellite view'
+              : 'Street view',
+          icon: Icon(
+            _mapType == MapType.normal ? Icons.satellite_alt : Icons.map,
+            color: AppTheme.primaryTeal,
+          ),
+          onPressed: () {
+            setState(() {
+              _mapType = _mapType == MapType.normal
+                  ? MapType.hybrid
+                  : MapType.normal;
+            });
+          },
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -41,6 +73,7 @@ class _QuadTrackNavigateScreenState
 
   @override
   void dispose() {
+    _positionSubscription?.cancel();
     if (_isMapReady) {
       _mapController.dispose();
     }
@@ -48,7 +81,7 @@ class _QuadTrackNavigateScreenState
   }
 
   void _startLocationStream() {
-    Geolocator.getPositionStream(
+    _positionSubscription = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.best,
         distanceFilter: 10, // Update when moved 10+ meters
@@ -273,19 +306,25 @@ class _QuadTrackNavigateScreenState
           return Column(
             children: [
               Expanded(
-                child: GoogleMap(
-                  onMapCreated: _onMapCreated,
-                  initialCameraPosition: CameraPosition(
-                    target: LatLng(
-                      device.lastLocation!.latitude,
-                      device.lastLocation!.longitude,
+                child: Stack(
+                  children: [
+                    GoogleMap(
+                      onMapCreated: _onMapCreated,
+                      mapType: _mapType,
+                      initialCameraPosition: CameraPosition(
+                        target: LatLng(
+                          device.lastLocation!.latitude,
+                          device.lastLocation!.longitude,
+                        ),
+                        zoom: 14,
+                      ),
+                      markers: _markers,
+                      polylines: _polylines,
+                      myLocationButtonEnabled: true,
+                      zoomControlsEnabled: true,
                     ),
-                    zoom: 14,
-                  ),
-                  markers: _markers,
-                  polylines: _polylines,
-                  myLocationButtonEnabled: true,
-                  zoomControlsEnabled: true,
+                    _buildMapTypeToggle(),
+                  ],
                 ),
               ),
               Container(

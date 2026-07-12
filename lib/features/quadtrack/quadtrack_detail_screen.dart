@@ -8,6 +8,7 @@ import '../../core/providers/quadtrack_provider.dart';
 import '../../core/models/quadtrack_device.dart';
 import 'widgets/battery_gauge.dart';
 import 'quadtrack_navigate_screen.dart';
+import 'quadtrack_profile_setup_screen.dart';
 import 'quadtrack_share_screen.dart';
 
 /// Detail screen for a single QuadTrack device
@@ -31,6 +32,36 @@ class _QuadTrackDetailScreenState extends ConsumerState<QuadTrackDetailScreen> {
   bool _isMapReady = false;
   List<LatLng> _locationTrail = [];
   Set<Marker> _markers = {};
+  MapType _mapType = MapType.normal;
+
+  /// Small white overlay button that toggles street/satellite view
+  Widget _buildMapTypeToggle() {
+    return Positioned(
+      top: 12,
+      right: 12,
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        elevation: 2,
+        child: IconButton(
+          tooltip: _mapType == MapType.normal
+              ? 'Satellite view'
+              : 'Street view',
+          icon: Icon(
+            _mapType == MapType.normal ? Icons.satellite_alt : Icons.map,
+            color: AppTheme.primaryTeal,
+          ),
+          onPressed: () {
+            setState(() {
+              _mapType = _mapType == MapType.normal
+                  ? MapType.hybrid
+                  : MapType.normal;
+            });
+          },
+        ),
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -80,6 +111,115 @@ class _QuadTrackDetailScreenState extends ConsumerState<QuadTrackDetailScreen> {
     }
   }
 
+  /// Switch to a non-emergency mode. If the device is currently in
+  /// emergency, close the emergency record first (deactivateEmergency
+  /// resets the device to normal, so idle needs a follow-up update).
+  Future<void> _setNonEmergencyMode(
+    QuadTrackDevice device,
+    TrackingMode mode,
+  ) async {
+    final service = ref.read(quadTrackServiceProvider);
+    try {
+      if (device.trackingMode == TrackingMode.emergency) {
+        await service.deactivateEmergency(widget.deviceId);
+        if (mode != TrackingMode.normal) {
+          await service.updateTrackingMode(widget.deviceId, mode);
+        }
+      } else {
+        await service.updateTrackingMode(widget.deviceId, mode);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to change tracking mode: $e'),
+            backgroundColor: AppTheme.primaryRed,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Prompt for a reason, then activate battery-aware emergency tracking.
+  void _showEmergencyReasonDialog(QuadTrackDevice device) {
+    final reasonController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Activate Emergency Tracking'),
+        // Scrollable so the keyboard doesn't overflow the dialog
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Tracking frequency will increase automatically based on the tracker\'s battery level, and all caregivers will be notified.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppTheme.primaryRed,
+                    ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: reasonController,
+                decoration: const InputDecoration(
+                  labelText: 'Reason',
+                  hintText: 'e.g., Patient missing',
+                ),
+                maxLines: 2,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final reason = reasonController.text.trim().isEmpty
+                  ? 'Activated by caregiver'
+                  : reasonController.text.trim();
+              Navigator.pop(dialogContext);
+              try {
+                await ref
+                    .read(quadTrackServiceProvider)
+                    .activateEmergencyTracking(
+                      deviceId: widget.deviceId,
+                      caregiverId: widget.caregiverId,
+                      reason: reason,
+                    );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Emergency tracking activated'),
+                      backgroundColor: AppTheme.primaryRed,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to activate emergency: $e'),
+                      backgroundColor: AppTheme.primaryRed,
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryRed,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Activate'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showTrackingModeDialog(QuadTrackDevice device) {
     showDialog(
       context: context,
@@ -97,7 +237,7 @@ class _QuadTrackDetailScreenState extends ConsumerState<QuadTrackDetailScreen> {
               Column(
                 children: [
                   Text(
-                    'Emergency mode will increase tracking frequency to every 5 minutes and notify all caregivers.',
+                    'Emergency mode adjusts tracking frequency to the tracker\'s battery level and notifies all caregivers.',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: AppTheme.primaryRed,
                         ),
@@ -115,39 +255,28 @@ class _QuadTrackDetailScreenState extends ConsumerState<QuadTrackDetailScreen> {
           if (device.trackingMode != TrackingMode.normal)
             TextButton(
               onPressed: () {
-                ref
-                    .read(quadTrackServiceProvider)
-                    .updateTrackingMode(widget.deviceId, TrackingMode.normal);
                 Navigator.pop(context);
+                _setNonEmergencyMode(device, TrackingMode.normal);
               },
               child: const Text('Normal'),
             ),
           if (device.trackingMode != TrackingMode.emergency)
             ElevatedButton(
               onPressed: () {
-                ref
-                    .read(quadTrackServiceProvider)
-                    .updateTrackingMode(widget.deviceId, TrackingMode.emergency);
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Emergency tracking activated'),
-                    backgroundColor: AppTheme.primaryRed,
-                  ),
-                );
+                _showEmergencyReasonDialog(device);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryRed,
+                foregroundColor: Colors.white,
               ),
               child: const Text('Emergency'),
             ),
           if (device.trackingMode != TrackingMode.idle)
             TextButton(
               onPressed: () {
-                ref
-                    .read(quadTrackServiceProvider)
-                    .updateTrackingMode(widget.deviceId, TrackingMode.idle);
                 Navigator.pop(context);
+                _setNonEmergencyMode(device, TrackingMode.idle);
               },
               child: const Text('Idle'),
             ),
@@ -176,14 +305,24 @@ class _QuadTrackDetailScreenState extends ConsumerState<QuadTrackDetailScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               final newName = controller.text.trim();
+              Navigator.pop(context);
               if (newName.isNotEmpty && newName != device.name) {
-                ref
-                    .read(quadTrackServiceProvider)
-                    .updateTrackingMode(widget.deviceId, device.trackingMode);
-                // TODO: Implement rename in service
-                Navigator.pop(context);
+                try {
+                  await ref
+                      .read(quadTrackServiceProvider)
+                      .renameDevice(widget.deviceId, newName);
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to rename device: $e'),
+                        backgroundColor: AppTheme.primaryRed,
+                      ),
+                    );
+                  }
+                }
               }
             },
             child: const Text('Save'),
@@ -220,6 +359,7 @@ class _QuadTrackDetailScreenState extends ConsumerState<QuadTrackDetailScreen> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primaryRed,
+              foregroundColor: Colors.white,
             ),
             child: const Text('Remove'),
           ),
@@ -232,6 +372,8 @@ class _QuadTrackDetailScreenState extends ConsumerState<QuadTrackDetailScreen> {
   Widget build(BuildContext context) {
     final deviceAsync = ref.watch(deviceDetailProvider(widget.deviceId));
     final pingsAsync = ref.watch(devicePingsProvider(widget.deviceId));
+    final activeEmergency =
+        ref.watch(activeEmergencyProvider(widget.deviceId)).asData?.value;
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
@@ -248,6 +390,23 @@ class _QuadTrackDetailScreenState extends ConsumerState<QuadTrackDetailScreen> {
                   deviceAsync.whenData((device) {
                     if (device != null) {
                       _showRenameDialog(device);
+                    }
+                  });
+                },
+              ),
+              PopupMenuItem(
+                child: const Text('Missing-Person Profile'),
+                onTap: () {
+                  deviceAsync.whenData((device) {
+                    if (device != null) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => QuadTrackProfileSetupScreen(
+                            patientId: device.patientId,
+                          ),
+                        ),
+                      );
                     }
                   });
                 },
@@ -291,41 +450,87 @@ class _QuadTrackDetailScreenState extends ConsumerState<QuadTrackDetailScreen> {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (_, _) => const Center(child: Text('Error loading pings')),
             data: (pings) {
-              _updateMapContent(device, pings);
+              // Defer to after this frame — _updateMapContent calls
+              // setState, which is illegal during build.
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) _updateMapContent(device, pings);
+              });
 
               return SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Map section
-                    SizedBox(
-                      height: 300,
-                      child: GoogleMap(
-                        onMapCreated: _onMapCreated,
-                        initialCameraPosition: CameraPosition(
-                          target: device.lastLocation != null
-                              ? LatLng(
+                    // Active emergency banner
+                    if (activeEmergency != null)
+                      _buildEmergencyBanner(device, activeEmergency),
+                    // Map section — placeholder until the first ping
+                    // (a map centered on (0,0) is just empty ocean)
+                    if (device.lastLocation == null)
+                      Container(
+                        height: 300,
+                        width: double.infinity,
+                        color: Colors.grey.shade200,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.location_off,
+                              size: 48,
+                              color: Colors.grey.shade400,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No location yet',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(color: Colors.grey.shade600),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'The map will appear after the first ping',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: Colors.grey.shade500),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      SizedBox(
+                        height: 300,
+                        child: Stack(
+                          children: [
+                            GoogleMap(
+                              onMapCreated: _onMapCreated,
+                              mapType: _mapType,
+                              initialCameraPosition: CameraPosition(
+                                target: LatLng(
                                   device.lastLocation!.latitude,
                                   device.lastLocation!.longitude,
-                                )
-                              : const LatLng(0, 0),
-                          zoom: 14,
-                        ),
-                        markers: _markers,
-                        polylines: {
-                          if (_locationTrail.isNotEmpty)
-                            Polyline(
-                              polylineId: const PolylineId('trail'),
-                              points: _locationTrail,
-                              color: AppTheme.primaryBlue,
-                              width: 4,
-                              geodesic: true,
+                                ),
+                                zoom: 14,
+                              ),
+                              markers: _markers,
+                              polylines: {
+                                if (_locationTrail.isNotEmpty)
+                                  Polyline(
+                                    polylineId: const PolylineId('trail'),
+                                    points: _locationTrail,
+                                    color: AppTheme.primaryBlue,
+                                    width: 4,
+                                    geodesic: true,
+                                  ),
+                              },
+                              myLocationButtonEnabled: true,
+                              zoomControlsEnabled: true,
                             ),
-                        },
-                        myLocationButtonEnabled: true,
-                        zoomControlsEnabled: true,
+                            _buildMapTypeToggle(),
+                          ],
+                        ),
                       ),
-                    ),
 
                     // Action buttons
                     Padding(
@@ -351,6 +556,9 @@ class _QuadTrackDetailScreenState extends ConsumerState<QuadTrackDetailScreen> {
                               label: const Text('Navigate to Device'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppTheme.primaryBlue,
+                                // Explicit white — theme foreground is
+                                // blue, which was invisible on blue
+                                foregroundColor: Colors.white,
                               ),
                             ),
                           ),
@@ -635,6 +843,68 @@ class _QuadTrackDetailScreenState extends ConsumerState<QuadTrackDetailScreen> {
     );
   }
 
+  Widget _buildEmergencyBanner(
+    QuadTrackDevice device,
+    Map<String, dynamic> emergency,
+  ) {
+    final reason = emergency['reason'] as String? ?? 'Unknown';
+    final interval = emergency['intervalMinutes'] as int? ??
+        device.emergencyIntervalMinutes ??
+        TrackingMode.emergency.intervalMinutes;
+
+    return Container(
+      width: double.infinity,
+      color: AppTheme.primaryRed,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'EMERGENCY TRACKING ACTIVE',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Reason: $reason\nPinging every $interval min (battery-aware)',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.white,
+                ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () =>
+                  _setNonEmergencyMode(device, TrackingMode.normal),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.white, width: 2),
+              ),
+              child: const Text(
+                'End Emergency Tracking',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildInfoRow(
     String label,
     String value, {
@@ -686,11 +956,15 @@ class _QuadTrackDetailScreenState extends ConsumerState<QuadTrackDetailScreen> {
               width: isSelected ? 0 : 2,
             ),
           ),
-          child: Text(
-            mode.displayName,
-            style: TextStyle(
-              color: isSelected ? Colors.white : _getModeColor(mode),
-              fontWeight: FontWeight.bold,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              mode.displayName,
+              maxLines: 1,
+              style: TextStyle(
+                color: isSelected ? Colors.white : _getModeColor(mode),
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ),

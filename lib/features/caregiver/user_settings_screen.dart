@@ -16,6 +16,7 @@ class UserSettingsScreen extends ConsumerStatefulWidget {
 class _UserSettingsScreenState extends ConsumerState<UserSettingsScreen> {
   late bool _highContrastMode;
   late double _textScale;
+  late String _units;
   late bool _soundEnabled;
   late bool _vibrationEnabled;
   late bool _voicePromptsEnabled;
@@ -45,6 +46,7 @@ class _UserSettingsScreenState extends ConsumerState<UserSettingsScreen> {
     _voicePromptsEnabled = s.voicePromptsEnabled;
     _reminderVolume = s.reminderVolume;
     _voiceLanguage = s.voiceLanguage;
+    _units = s.units;
   }
 
   Future<void> _save() async {
@@ -60,6 +62,7 @@ class _UserSettingsScreenState extends ConsumerState<UserSettingsScreen> {
       voicePromptsEnabled: _voicePromptsEnabled,
       reminderVolume: _reminderVolume,
       voiceLanguage: _voiceLanguage,
+      units: _units,
     );
 
     await userProvider.updateSettings(updatedSettings);
@@ -135,6 +138,29 @@ class _UserSettingsScreenState extends ConsumerState<UserSettingsScreen> {
               ),
             ),
           ),
+
+          ListTile(
+            title: const Text('Measurement Units'),
+            subtitle: Text(_units == 'auto'
+                ? 'Automatic (follows this phone\'s region)'
+                : (_units == 'imperial' ? 'Imperial (ft, lb, mi)' : 'Metric (cm, kg, km)')),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'auto', label: Text('Auto')),
+                ButtonSegment(value: 'imperial', label: Text('Imperial')),
+                ButtonSegment(value: 'metric', label: Text('Metric')),
+              ],
+              selected: {_units},
+              onSelectionChanged: (sel) {
+                setState(() => _units = sel.first);
+                _markChanged();
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
 
           const Divider(height: 32),
 

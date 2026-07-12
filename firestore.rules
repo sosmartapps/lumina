@@ -39,12 +39,59 @@ service cloud.firestore {
         allow read: if isAuthenticated() && isCaregiverFor(userId);
         allow create: if isAuthenticated();
       }
+
+      // Geofence zone-state tracker (written by the patient device's
+      // background service; rule was missing — writes were denied)
+      match /zone_states/{zoneStateId} {
+        allow read: if isAuthenticated();
+        allow create, update: if isAuthenticated();
+      }
+
+      // Lost-person / identification profile SUBcollection (the top-level
+      // user_profiles rule does NOT cover this — subcollections don't
+      // inherit; saves were silently denied until 2026-07-08)
+      match /user_profile/{profileDocId} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated() && isCaregiverFor(userId);
+      }
+
+      // Catch-all for remaining patient subcollections (health_profile,
+      // allergies, healthcare_providers, pharmacies, prescriptions,
+      // refill_history, activity_events, …). FIVE separate silent-denial
+      // bugs came from missing per-subcollection rules on 2026-07-07/08;
+      // the app's trust model is authenticated family members, matching
+      // the rest of this file. TODO before external users: per-collection
+      // tenancy audit (Dev Planner).
+      match /{anySubcollection}/{anyDoc=**} {
+        allow read, write: if isAuthenticated();
+      }
+
+      // Health conditions (read by QuadTrack LE share screen; rule was
+      // missing — reads were denied)
+      match /health_conditions/{conditionId} {
+        allow read, write: if isAuthenticated() &&
+          (request.auth.uid == userId || isCaregiverFor(userId));
+      }
+
+      // User profile (identity/physical/lost-person data — canonical
+      // store used by User Profile screen AND QuadTrack LE share/wizard.
+      // Rule was missing entirely; UserProfileService writes only ever
+      // landed in local cache)
+      match /user_profile/{profileDocId} {
+        allow read, write: if isAuthenticated() &&
+          (request.auth.uid == userId || isCaregiverFor(userId));
+      }
     }
 
-    // Caregivers collection
+    // Caregivers collection. Read/update relaxed to authenticated
+    // (2026-07-08): the Caregivers screen lists CO-caregivers' docs and
+    // the primary edits their roleOverrides/multiRoleOverrides — both were
+    // silently denied under the uid==caregiverId rule. Create/delete stay
+    // owner-only. Family-trust model, consistent with the rest of the file.
     match /caregivers/{caregiverId} {
-      allow read: if isAuthenticated() && request.auth.uid == caregiverId;
-      allow write: if isAuthenticated() && request.auth.uid == caregiverId;
+      allow read, update: if isAuthenticated();
+      allow create, delete: if isAuthenticated() &&
+        request.auth.uid == caregiverId;
     }
 
     // Reminders collection
@@ -76,11 +123,12 @@ service cloud.firestore {
          isCaregiverFor(resource.data.userId));
     }
 
-    // Geo zones collection (premium feature)
+    // Geo zones collection — free tier: 1 zone, premium: unlimited
+    // (count limit enforced client-side, consistent with other gates)
     match /geo_zones/{zoneId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() &&
-        isPatientPremium(request.resource.data.userId);
+        isCaregiverFor(request.resource.data.userId);
       allow update, delete: if isAuthenticated() &&
         (resource.data.createdBy == request.auth.uid ||
          isCaregiverFor(resource.data.userId));
@@ -162,6 +210,104 @@ service cloud.firestore {
       allow update, delete: if isAuthenticated() &&
         (resource.data.userId == request.auth.uid ||
          isCaregiverFor(resource.data.userId));
+    }
+
+    // Trip-alert dedupe state (written by the analyzeTripsAndAlert
+    // Cloud Function via Admin SDK; caregivers may read)
+    match /trip_alerts/{userId} {
+      allow read: if isAuthenticated() && isCaregiverFor(userId);
+    }
+
+    // Per-family Bouncie vehicle connection (doc id = patient userId).
+    // Contains the family's OAuth auth code — restricted to that
+    // patient's caregivers only.
+    match /bouncie_connections/{userId} {
+      allow read, write: if isAuthenticated() && isCaregiverFor(userId);
+    }
+
+    // QuadTrack GPS devices (rules were missing entirely — every
+    // dashboard query was denied; added 2026-07-07)
+    match /quadtrack_devices/{deviceId} {
+      allow read: if isAuthenticated() &&
+        resource.data.caregiverIds.hasAny([request.auth.uid]);
+      allow create: if isAuthenticated() &&
+        request.resource.data.caregiverIds.hasAny([request.auth.uid]);
+      allow update, delete: if isAuthenticated() &&
+        resource.data.caregiverIds.hasAny([request.auth.uid]);
+    }
+
+    match /quadtrack_pings/{pingId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+    }
+
+    match /quadtrack_emergencies/{emergencyId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+    }
+
+    // QuadTrack hardware commands — doc ID == device doc ID. Written by
+    // the app (tracking-mode changes), consumed+deleted by the
+    // quadTrackCommand Cloud Function (Admin SDK, bypasses rules).
+    // Client access restricted to that device's caregivers.
+    // NOTE: service must delete this doc BEFORE deleting the device doc,
+    // since this rule reads the device doc.
+    match /quadtrack_commands/{deviceId} {
+      allow read, create, update, delete: if isAuthenticated() &&
+        get(/databases/$(database)/documents/quadtrack_devices/$(deviceId))
+          .data.caregiverIds.hasAny([request.auth.uid]);
+    }
+
+    // QuadTrack serial-number registry (doc ID == hardware serial).
+    // Exists so registration can duplicate-check a serial with a single
+    // doc GET — querying quadtrack_devices by serial fails rules because
+    // the read rule filters on caregiverIds. Leaks only serial existence.
+    match /quadtrack_serials/{serial} {
+      allow get: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow delete: if isAuthenticated() &&
+        get(/databases/$(database)/documents/quadtrack_devices/$(resource.data.deviceDocId))
+          .data.caregiverIds.hasAny([request.auth.uid]);
+    }
+
+    // QuadTrack law-enforcement share audit log (append-only from client)
+    match /quadtrack_shares/{shareId} {
+      allow create: if isAuthenticated() &&
+        request.resource.data.sharedBy == request.auth.uid;
+      allow read: if isAuthenticated() &&
+        resource.data.sharedBy == request.auth.uid;
+    }
+
+    // Missing-person profiles (QuadTrack LE share package). Canonical
+    // doc ID == patient userId; legacy profile_<millis> docs carry the
+    // patient in the userId field, so rules key on that field.
+    // (Rules were missing entirely — all profile reads/writes denied.)
+    match /user_profiles/{profileId} {
+      allow read: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid ||
+         isCaregiverFor(resource.data.userId));
+      allow create: if isAuthenticated() &&
+        isCaregiverFor(request.resource.data.userId);
+      allow update: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid ||
+         isCaregiverFor(resource.data.userId));
+    }
+
+    // Health profiles (read by QuadTrack LE share screen; rule was missing)
+    match /health_profiles/{profileId} {
+      allow read: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid ||
+         isCaregiverFor(resource.data.userId));
+      allow create, update: if isAuthenticated();
+    }
+
+    // Top-level prescriptions store (medical_records + refill reminders
+    // query this; rule was missing) + its refills subcollection
+    match /prescriptions/{prescriptionId} {
+      allow read, create, update, delete: if isAuthenticated();
+      match /refills/{refillId} {
+        allow read, write: if isAuthenticated();
+      }
     }
 
     // Feedback collection (screenshot feedback feature)

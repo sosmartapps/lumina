@@ -43,6 +43,46 @@ service firebase.storage {
       allow delete: if isAuthenticated();
     }
 
+    // Pill container/verification photos (PillPhotoService uploads here —
+    // the medication_photos rule below never matched this path)
+    match /pill_photos/{userId}/{allPaths=**} {
+      allow create: if isAuthenticated()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow read: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // Identification photos (User Profile → Photos tab; lost-person report)
+    // — rule was missing entirely; every upload failed (found 2026-07-08)
+    match /user_photos/{userId}/{allPaths=**} {
+      allow create: if isAuthenticated()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow read: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // Pet food photos — uploaded by caregivers under the patient's userId
+    match /pet_food_photos/{userId}/{allPaths=**} {
+      allow create: if isAuthenticated()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow read: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // QuadTrack missing-person profile photos — uploaded by caregivers,
+    // flat files named <patientId>_<millis>.jpg (rule was missing;
+    // uploads were denied)
+    match /user_profiles/{fileName} {
+      allow create: if isAuthenticated()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow read: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
     // Screenshot feedback attachments
     match /feedback_attachments/{userId}/{allPaths=**} {
       // Anyone authenticated can upload feedback screenshots

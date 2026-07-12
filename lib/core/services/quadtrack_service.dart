@@ -41,6 +41,14 @@ class QuadTrackService {
       );
 
       await docRef.set(device.toFirestore());
+
+      // Serial registry doc (doc ID = hardware serial) — enables the
+      // rules-compatible duplicate check in isDeviceRegistered
+      await _firestore.collection('quadtrack_serials').doc(deviceId).set({
+        'deviceDocId': docRef.id,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
       return device;
     } catch (e) {
       debugPrint('Error registering QuadTrack device: $e');
@@ -147,6 +155,7 @@ class QuadTrackService {
               data: {
                 'type': 'quadtrack_emergency',
                 'deviceId': deviceId,
+                'payload': 'quadtrack:$deviceId',
               },
             );
           }
@@ -184,21 +193,39 @@ class QuadTrackService {
     }
   }
 
+  /// Rename a device
+  Future<void> renameDevice(String deviceId, String name) async {
+    try {
+      await _firestore.collection('quadtrack_devices').doc(deviceId).update({
+        'name': name,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('Error renaming device: $e');
+      rethrow;
+    }
+  }
+
   /// Delete a device
   Future<void> removeDevice(String deviceId) async {
     try {
-      // Delete device
-      await _firestore.collection('quadtrack_devices').doc(deviceId).delete();
+      // Read the device first to learn its hardware serial
+      final deviceRef =
+          _firestore.collection('quadtrack_devices').doc(deviceId);
+      final deviceDoc = await deviceRef.get();
+      final serial = deviceDoc.exists
+          ? (deviceDoc.data() as Map<String, dynamic>)['deviceId'] as String?
+          : null;
 
-      // Delete any associated commands
-      final commandsSnapshot = await _firestore
-          .collection('quadtrack_commands')
-          .where('deviceId', isEqualTo: deviceId)
-          .get();
-
-      for (final doc in commandsSnapshot.docs) {
-        await doc.reference.delete();
+      // Delete command + serial docs FIRST — their rules read the device
+      // doc, so it must still exist when they're deleted.
+      await _firestore.collection('quadtrack_commands').doc(deviceId).delete();
+      if (serial != null && serial.isNotEmpty) {
+        await _firestore.collection('quadtrack_serials').doc(serial).delete();
       }
+
+      // Then delete the device
+      await deviceRef.delete();
     } catch (e) {
       debugPrint('Error removing device: $e');
       rethrow;
@@ -313,6 +340,7 @@ class QuadTrackService {
               data: {
                 'type': 'quadtrack_phone_dead',
                 'deviceId': deviceId,
+                'payload': 'quadtrack:$deviceId',
               },
             );
           }
@@ -324,16 +352,17 @@ class QuadTrackService {
     }
   }
 
-  /// Check if a device serial number is already registered
+  /// Check if a device serial number is already registered.
+  /// Uses the quadtrack_serials registry (doc ID = serial) — a direct
+  /// query on quadtrack_devices by serial is rejected by security rules,
+  /// which scope reads to the caregiver's own devices.
   Future<bool> isDeviceRegistered(String deviceId) async {
     try {
-      final snapshot = await _firestore
-          .collection('quadtrack_devices')
-          .where('deviceId', isEqualTo: deviceId)
-          .limit(1)
+      final doc = await _firestore
+          .collection('quadtrack_serials')
+          .doc(deviceId)
           .get();
-
-      return snapshot.docs.isNotEmpty;
+      return doc.exists;
     } catch (e) {
       debugPrint('Error checking device registration: $e');
       return false;
@@ -420,6 +449,7 @@ class QuadTrackService {
             'type': 'quadtrack_emergency',
             'deviceId': deviceId,
             'emergencyId': emergencyRef.id,
+            'payload': 'quadtrack:$deviceId',
           },
         );
       }
@@ -485,6 +515,7 @@ class QuadTrackService {
             data: {
               'type': 'quadtrack_emergency_ended',
               'deviceId': deviceId,
+              'payload': 'quadtrack:$deviceId',
             },
           );
         }

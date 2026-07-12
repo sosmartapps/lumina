@@ -30,9 +30,10 @@ class ExpenseService {
   /// financeManager, or (fallback so approvals are never orphaned) the
   /// caregiver is the patient's primary caregiver.
   static bool canManageFinances(Caregiver caregiver, AppUser patient) {
-    final role = caregiver.roleForPatient(patient.id);
-    return role == CaregiverRole.financeManager ||
-        role == CaregiverRole.primaryCaregiver ||
+    // Multi-role aware: a person may be e.g. Family Member + Fiduciary
+    final roles = caregiver.rolesForPatient(patient.id);
+    return roles.contains(CaregiverRole.financeManager) ||
+        roles.contains(CaregiverRole.primaryCaregiver) ||
         caregiver.id == patient.primaryCaregiverId;
   }
 

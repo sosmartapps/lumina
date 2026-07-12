@@ -32,7 +32,9 @@ class SubscriptionService {
   /// Get the current subscription status for a patient.
   Future<PatientSubscription> getSubscriptionStatus(String patientId) async {
     if (!_initialized) {
-      return PatientSubscription(patientId: patientId);
+      // RevenueCat not configured (dev builds / missing key) — honor the
+      // tier stored on the user doc instead of silently defaulting to free
+      return _getFromFirestore(patientId);
     }
 
     try {

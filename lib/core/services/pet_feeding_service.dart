@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../models/pet_feeding.dart';
 import 'notification_service.dart';
@@ -10,6 +14,8 @@ import 'notification_service.dart';
 /// schedule's `lastFedAt` is updated for quick "last fed" display.
 class PetFeedingService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance;
+  final ImagePicker _imagePicker = ImagePicker();
 
   CollectionReference get _feedings => _firestore.collection('pet_feedings');
   CollectionReference get _logs => _firestore.collection('feeding_logs');
@@ -28,6 +34,7 @@ class PetFeedingService {
       petType: feeding.petType,
       foodType: feeding.foodType,
       amount: feeding.amount,
+      foodPhotoUrls: feeding.foodPhotoUrls,
       feedingTimes: feeding.feedingTimes,
       repeatDays: feeding.repeatDays,
       isActive: feeding.isActive,
@@ -63,6 +70,55 @@ class PetFeedingService {
   Future<void> deleteFeeding(PetFeeding feeding) async {
     await NotificationService.cancelPetFeeding(feeding);
     await _feedings.doc(feeding.id).delete();
+  }
+
+  // ---------------------------------------------------------------------
+  // Food photos (e.g. the measuring cup of kibble, the wet-food can)
+  // ---------------------------------------------------------------------
+
+  Future<File?> captureFoodPhoto() async {
+    final image = await _imagePicker.pickImage(
+      source: ImageSource.camera,
+      preferredCameraDevice: CameraDevice.rear,
+      imageQuality: 85,
+      maxWidth: 1200,
+      maxHeight: 1200,
+    );
+    if (image == null) return null;
+    return File(image.path);
+  }
+
+  Future<File?> pickFoodPhotoFromGallery() async {
+    final image = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+      maxWidth: 1200,
+      maxHeight: 1200,
+    );
+    if (image == null) return null;
+    return File(image.path);
+  }
+
+  /// Upload a food photo; returns the download URL.
+  /// Storage path: pet_food_photos/{patientUserId}/{timestamp}.jpg
+  Future<String> uploadFoodPhoto({
+    required File file,
+    required String userId,
+  }) async {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final ref = _storage.ref().child('pet_food_photos/$userId/$timestamp.jpg');
+    final uploadTask = await ref.putFile(
+      file,
+      SettableMetadata(contentType: 'image/jpeg'),
+    );
+    return await uploadTask.ref.getDownloadURL();
+  }
+
+  /// Best-effort delete of an uploaded food photo.
+  Future<void> deleteFoodPhoto(String url) async {
+    try {
+      await _storage.refFromURL(url).delete();
+    } catch (_) {}
   }
 
   // ---------------------------------------------------------------------

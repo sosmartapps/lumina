@@ -85,6 +85,22 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
     );
   }
 
+  /// "Every Week · Mon, Wed" instead of just the frequency name.
+  String _repeatLabel(Reminder reminder) {
+    final freq = reminder.repeatFrequency;
+    final days = reminder.repeatDays;
+    if ((freq == RepeatFrequency.weekly || freq == RepeatFrequency.custom) &&
+        days != null &&
+        days.isNotEmpty) {
+      const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      final sorted = [...days]..sort();
+      if (sorted.length == 7) return 'Every Day';
+      final label = sorted.map((d) => names[d - 1]).join(', ');
+      return label;
+    }
+    return freq.displayName;
+  }
+
   Widget _buildReminderCard(Reminder reminder, CaregiverProvider provider) {
     final color = _getReminderColor(reminder.type);
     final icon = _getReminderIcon(reminder.type);
@@ -128,7 +144,7 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      reminder.repeatFrequency.displayName,
+                      _repeatLabel(reminder),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 12, color: color),
@@ -208,6 +224,7 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
     ReminderType selectedType = ReminderType.task;
     TimeOfDay selectedTime = TimeOfDay.now();
     RepeatFrequency repeatFrequency = RepeatFrequency.daily;
+    final selectedDays = <int>{DateTime.now().weekday};
     bool requiresPhoto = false;
     bool homeOnly = true;
 
@@ -305,6 +322,37 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
                     if (value != null) setState(() => repeatFrequency = value);
                   },
                 ),
+                if (repeatFrequency == RepeatFrequency.weekly ||
+                    repeatFrequency == RepeatFrequency.custom) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Repeat on days',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: List.generate(7, (i) {
+                      final day = i + 1; // 1=Mon .. 7=Sun
+                      const labels = [
+                        'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'
+                      ];
+                      return FilterChip(
+                        label: Text(labels[i]),
+                        selected: selectedDays.contains(day),
+                        onSelected: (checked) => setState(() {
+                          if (checked) {
+                            selectedDays.add(day);
+                          } else if (selectedDays.length > 1) {
+                            // Keep at least one day selected
+                            selectedDays.remove(day);
+                          }
+                        }),
+                      );
+                    }),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -357,6 +405,10 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
                   type: selectedType,
                   scheduledTime: scheduledTime,
                   repeatFrequency: repeatFrequency,
+                  repeatDays: (repeatFrequency == RepeatFrequency.weekly ||
+                          repeatFrequency == RepeatFrequency.custom)
+                      ? (selectedDays.toList()..sort())
+                      : null,
                   requiresPhoto: requiresPhoto,
                   homeOnly: homeOnly,
                   createdBy: provider.caregiver!.id,
@@ -386,6 +438,9 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
       minute: reminder.scheduledTime.minute,
     );
     RepeatFrequency repeatFrequency = reminder.repeatFrequency;
+    final selectedDays = <int>{
+      ...(reminder.repeatDays ?? [reminder.scheduledTime.weekday])
+    };
     bool requiresPhoto = reminder.requiresPhoto;
     bool homeOnly = reminder.homeOnly;
 
@@ -480,6 +535,37 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
                     if (value != null) setState(() => repeatFrequency = value);
                   },
                 ),
+                if (repeatFrequency == RepeatFrequency.weekly ||
+                    repeatFrequency == RepeatFrequency.custom) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Repeat on days',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: List.generate(7, (i) {
+                      final day = i + 1; // 1=Mon .. 7=Sun
+                      const labels = [
+                        'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'
+                      ];
+                      return FilterChip(
+                        label: Text(labels[i]),
+                        selected: selectedDays.contains(day),
+                        onSelected: (checked) => setState(() {
+                          if (checked) {
+                            selectedDays.add(day);
+                          } else if (selectedDays.length > 1) {
+                            // Keep at least one day selected
+                            selectedDays.remove(day);
+                          }
+                        }),
+                      );
+                    }),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -528,6 +614,7 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
                   type: selectedType,
                   scheduledTime: scheduledTime,
                   repeatFrequency: repeatFrequency,
+                  repeatDays: (selectedDays.toList()..sort()),
                   requiresPhoto: requiresPhoto,
                   homeOnly: homeOnly,
                 );

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme/app_theme.dart';
+import '../../core/models/app_user.dart';
+import '../../core/providers/providers.dart';
 import '../../core/providers/quadtrack_provider.dart';
+import '../../core/theme/app_theme.dart';
 import 'quadtrack_detail_screen.dart';
+import 'quadtrack_profile_setup_screen.dart';
 
 /// Registration flow for adding a new QuadTrack device
 class QuadTrackRegisterScreen extends ConsumerStatefulWidget {
@@ -28,11 +31,18 @@ class _QuadTrackRegisterScreenState
   String? _validationError;
   bool _isLoading = false;
 
-  final List<String> _dummyPatients = [
-    'Patient 1',
-    'Patient 2',
-    'Patient 3',
-  ];
+  /// The caregiver's real linked patients (same source as the rest of the
+  /// caregiver dashboard).
+  List<AppUser> get _patients =>
+      ref.read(caregiverNotifierProvider).managedUsers;
+
+  String _patientNameFor(String? patientId) {
+    if (patientId == null) return 'Not selected';
+    for (final p in _patients) {
+      if (p.id == patientId) return p.name;
+    }
+    return 'Unknown patient';
+  }
 
   @override
   void dispose() {
@@ -133,8 +143,36 @@ class _QuadTrackRegisterScreenState
 
       if (mounted) {
         setState(() => _isLoading = false);
-        // Navigate to detail screen
-        Navigator.of(context).pushReplacement(
+
+        // Offer missing-person profile setup — it powers the law
+        // enforcement share package.
+        final setUpProfile = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Set Up Missing-Person Profile?'),
+            content: const Text(
+              'A profile with a photo, physical description, and medical info lets you instantly share a complete alert package with law enforcement if the patient goes missing. You can also do this later from the device screen.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Later'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Set Up Now'),
+              ),
+            ],
+          ),
+        );
+
+        if (!mounted) return;
+
+        // Capture the navigator BEFORE pushReplacement — this State's
+        // context is defunct once the route is replaced.
+        final navigator = Navigator.of(context);
+
+        navigator.pushReplacement(
           MaterialPageRoute(
             builder: (context) => QuadTrackDetailScreen(
               deviceId: device.id,
@@ -142,6 +180,16 @@ class _QuadTrackRegisterScreenState
             ),
           ),
         );
+
+        if (setUpProfile == true) {
+          navigator.push(
+            MaterialPageRoute(
+              builder: (context) => QuadTrackProfileSetupScreen(
+                patientId: device.patientId,
+              ),
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -396,28 +444,51 @@ class _QuadTrackRegisterScreenState
               ),
         ),
         const SizedBox(height: 24),
-        DropdownButtonFormField<String>(
-          initialValue: _selectedPatientId,
-          decoration: InputDecoration(
-            labelText: 'Patient',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          items: _dummyPatients
-              .asMap()
-              .entries
-              .map((entry) => DropdownMenuItem(
-                    value: 'patient_${entry.key}',
-                    child: Text(entry.value),
-                  ))
-              .toList(),
-          onChanged: _isLoading
-              ? null
-              : (value) {
-                  setState(() => _selectedPatientId = value);
-                  _validateName();
-                },
+        ListenableBuilder(
+          listenable: ref.read(caregiverNotifierProvider),
+          builder: (context, _) {
+            final patients = _patients;
+            if (patients.isEmpty) {
+              return Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryRed.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.primaryRed),
+                ),
+                child: Text(
+                  'No linked patients found. Add a patient from the caregiver dashboard before registering a device.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppTheme.primaryRed,
+                      ),
+                ),
+              );
+            }
+            return DropdownButtonFormField<String>(
+              initialValue: _selectedPatientId,
+              decoration: InputDecoration(
+                labelText: 'Patient',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              items: patients
+                  .map((patient) => DropdownMenuItem(
+                        value: patient.id,
+                        child: Text(
+                          patient.name,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ))
+                  .toList(),
+              onChanged: _isLoading
+                  ? null
+                  : (value) {
+                      setState(() => _selectedPatientId = value);
+                      _validateName();
+                    },
+            );
+          },
         ),
         const SizedBox(height: 16),
         Text(
@@ -451,10 +522,7 @@ class _QuadTrackRegisterScreenState
                 const Divider(),
                 _buildReviewRow(
                   'Patient',
-                  _selectedPatientId != null
-                      ? _dummyPatients[
-                          int.parse(_selectedPatientId!.split('_')[1])]
-                      : 'Not selected',
+                  _patientNameFor(_selectedPatientId),
                 ),
               ],
             ),

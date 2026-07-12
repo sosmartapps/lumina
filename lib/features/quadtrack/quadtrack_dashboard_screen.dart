@@ -28,6 +28,36 @@ class _QuadTrackDashboardScreenState
   late GoogleMapController _mapController;
   Set<Marker> _markers = {};
   bool _isMapReady = false;
+  MapType _mapType = MapType.normal;
+
+  /// Small white overlay button that toggles street/satellite view
+  Widget _buildMapTypeToggle() {
+    return Positioned(
+      top: 12,
+      right: 12,
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        elevation: 2,
+        child: IconButton(
+          tooltip: _mapType == MapType.normal
+              ? 'Satellite view'
+              : 'Street view',
+          icon: Icon(
+            _mapType == MapType.normal ? Icons.satellite_alt : Icons.map,
+            color: AppTheme.primaryTeal,
+          ),
+          onPressed: () {
+            setState(() {
+              _mapType = _mapType == MapType.normal
+                  ? MapType.hybrid
+                  : MapType.normal;
+            });
+          },
+        ),
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -204,23 +234,61 @@ class _QuadTrackDashboardScreenState
             },
             child: Column(
               children: [
-                // Google Map at the top
-                SizedBox(
-                  height: 250,
-                  child: GoogleMap(
-                    onMapCreated: _onMapCreated,
-                    initialCameraPosition: CameraPosition(
-                      target: LatLng(
-                        devices.first.lastLocation?.latitude ?? 0,
-                        devices.first.lastLocation?.longitude ?? 0,
-                      ),
-                      zoom: 12,
+                // Google Map at the top — placeholder until a device has
+                // reported a location ((0,0) is just empty ocean)
+                if (!devices.any((d) => d.lastLocation != null))
+                  Container(
+                    height: 250,
+                    width: double.infinity,
+                    color: Colors.grey.shade200,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.location_off,
+                          size: 40,
+                          color: Colors.grey.shade400,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Waiting for first location ping',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(color: Colors.grey.shade600),
+                        ),
+                      ],
                     ),
-                    markers: _markers,
-                    myLocationButtonEnabled: true,
-                    zoomControlsEnabled: true,
+                  )
+                else
+                  SizedBox(
+                    height: 250,
+                    child: Stack(
+                      children: [
+                        GoogleMap(
+                          onMapCreated: _onMapCreated,
+                          mapType: _mapType,
+                          initialCameraPosition: CameraPosition(
+                            target: LatLng(
+                              devices
+                                  .firstWhere((d) => d.lastLocation != null)
+                                  .lastLocation!
+                                  .latitude,
+                              devices
+                                  .firstWhere((d) => d.lastLocation != null)
+                                  .lastLocation!
+                                  .longitude,
+                            ),
+                            zoom: 12,
+                          ),
+                          markers: _markers,
+                          myLocationButtonEnabled: true,
+                          zoomControlsEnabled: true,
+                        ),
+                        _buildMapTypeToggle(),
+                      ],
+                    ),
                   ),
-                ),
                 // Device list below map
                 Expanded(
                   child: ListView.builder(

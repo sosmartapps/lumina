@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/models/caregiver.dart';
@@ -18,10 +19,25 @@ class InviteCaregiverScreen extends ConsumerStatefulWidget {
 }
 
 class _InviteCaregiverScreenState extends ConsumerState<InviteCaregiverScreen> {
-  CaregiverRole _selectedRole = CaregiverRole.familyMember;
+  // People can hold multiple roles at once (e.g. Family Member + Fiduciary)
+  final Set<CaregiverRole> _selectedRoles = {CaregiverRole.familyMember};
+  final _phoneController = TextEditingController();
   InviteCode? _generatedInvite;
   bool _isLoading = false;
   String? _errorMessage;
+
+  static const _invitableRoles = [
+    CaregiverRole.caregiver,
+    CaregiverRole.familyMember,
+    CaregiverRole.healthcare,
+    CaregiverRole.financeManager,
+  ];
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    super.dispose();
+  }
 
   Future<void> _generateCode() async {
     final caregiverProvider = ref.read(caregiverNotifierProvider);
@@ -40,7 +56,7 @@ class _InviteCaregiverScreenState extends ConsumerState<InviteCaregiverScreen> {
       final invite = await inviteService.createInviteCode(
         patientId: patient.id,
         caregiverId: caregiver.id,
-        assignedRole: _selectedRole,
+        assignedRoles: _selectedRoles.toList(),
       );
       setState(() => _generatedInvite = invite);
     } catch (e) {
@@ -52,17 +68,40 @@ class _InviteCaregiverScreenState extends ConsumerState<InviteCaregiverScreen> {
 
   void _shareInvite() {
     if (_generatedInvite == null) return;
+    SharePlus.instance.share(ShareParams(text: _inviteMessage()));
+  }
+
+  String _inviteMessage() {
     final inviteService = ref.read(inviteServiceProvider);
     final link = inviteService.generateShareLink(_generatedInvite!);
     final patient = ref.read(caregiverNotifierProvider).selectedUser;
-    SharePlus.instance.share(
-      ShareParams(
-        text: 'Join me as a caregiver for ${patient?.name ?? 'my loved one'} on Lumina!\n\n'
-            'Use invite code: ${_generatedInvite!.code}\n'
-            'Or open this link: $link\n\n'
-            'The code expires in 24 hours.',
-      ),
+    return 'Join me as a caregiver for ${patient?.name ?? 'my loved one'} on Lumina!\n\n'
+        'Use invite code: ${_generatedInvite!.code}\n'
+        'Or open this link: $link\n\n'
+        'The code expires in 24 hours.';
+  }
+
+  /// Opens Messages with the invite prefilled to the entered phone number.
+  Future<void> _textInvite() async {
+    if (_generatedInvite == null) return;
+    final phone = _phoneController.text.trim();
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a phone number first')),
+      );
+      return;
+    }
+    final uri = Uri(
+      scheme: 'sms',
+      path: phone,
+      queryParameters: {'body': _inviteMessage()},
     );
+    final ok = await launchUrl(uri);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open Messages')),
+      );
+    }
   }
 
   void _copyCode() {
@@ -98,29 +137,53 @@ class _InviteCaregiverScreenState extends ConsumerState<InviteCaregiverScreen> {
             ),
             const SizedBox(height: 24),
 
-            // Role picker
+            // Role tickboxes — one person can hold several roles
             const Text(
-              'Assign a Role',
+              'Assign Roles',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<CaregiverRole>(
-              initialValue: _selectedRole,
-              onChanged: (role) {
-                if (role != null) setState(() => _selectedRole = role);
-              },
-              items: [
-                CaregiverRole.caregiver,
-                CaregiverRole.familyMember,
-                CaregiverRole.healthcare,
-              ]
-                  .map((role) => DropdownMenuItem(
-                        value: role,
-                        child: Text(role.displayName),
-                      ))
-                  .toList(),
+            const SizedBox(height: 4),
+            Text(
+              'Tick every role this person will have',
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 4),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: _invitableRoles.map((role) {
+                  return CheckboxListTile(
+                    dense: true,
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 12),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: Text(role.displayName),
+                    value: _selectedRoles.contains(role),
+                    onChanged: (checked) => setState(() {
+                      if (checked == true) {
+                        _selectedRoles.add(role);
+                      } else if (_selectedRoles.length > 1) {
+                        // Keep at least one role ticked
+                        _selectedRoles.remove(role);
+                      }
+                    }),
+                  );
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Optional: text the invite straight to their phone
+            TextField(
+              controller: _phoneController,
+              keyboardType: TextInputType.phone,
               decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.badge),
+                labelText: 'Phone number (optional)',
+                hintText: 'To text them the invite',
+                prefixIcon: Icon(Icons.phone),
               ),
             ),
             const SizedBox(height: 24),
@@ -216,7 +279,8 @@ class _InviteCaregiverScreenState extends ConsumerState<InviteCaregiverScreen> {
                       style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
                     ),
                     Text(
-                      'Role: ${_selectedRole.displayName}',
+                      'Roles: ${_generatedInvite!.rolesLabel}',
+                      textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
                     ),
                     const SizedBox(height: 16),
@@ -244,6 +308,21 @@ class _InviteCaregiverScreenState extends ConsumerState<InviteCaregiverScreen> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _textInvite,
+                        icon: const Icon(Icons.sms, color: Colors.white),
+                        label: const Text(
+                          'Text Invite',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryGreen,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -299,7 +378,7 @@ class _InviteCaregiverScreenState extends ConsumerState<InviteCaregiverScreen> {
                   ),
                 ),
                 subtitle: Text(
-                  '${invite.assignedRole.displayName} · Expires ${DateFormat('MMM d, h:mm a').format(invite.expiresAt)}',
+                  '${invite.rolesLabel} · Expires ${DateFormat('MMM d, h:mm a').format(invite.expiresAt)}',
                 ),
                 trailing: IconButton(
                   icon: const Icon(Icons.close, color: Colors.red),

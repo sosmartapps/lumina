@@ -270,7 +270,7 @@ class _PillVerificationScreenState
                     ),
                     const SizedBox(height: 12),
                     SizedBox(
-                      height: 52,
+                      width: double.infinity,
                       child: ElevatedButton.icon(
                         onPressed: () =>
                             _captureAndUpload(PillPhotoType.verification),

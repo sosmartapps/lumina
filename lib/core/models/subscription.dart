@@ -37,7 +37,9 @@ class PatientSubscription {
   bool get isPremium => tier == SubscriptionTier.premium && isActive;
 
   // Feature gates
-  bool get canUseGeofencing => isPremium;
+  /// Geofencing is available on every tier; free is capped at 1 zone
+  /// (see [maxGeoZones]) — decided 2026-07-07.
+  bool get canUseGeofencing => true;
   bool get canUseVehicleTracking => isPremium;
   bool get canInviteCaregivers => isPremium;
   bool get canUseMedicationPhotos => isPremium;
@@ -45,6 +47,7 @@ class PatientSubscription {
   int get maxReminders => isPremium ? -1 : 5; // -1 = unlimited
   int get maxMedications => isPremium ? -1 : 3;
   int get maxSavedLocations => isPremium ? -1 : 3;
+  int get maxGeoZones => isPremium ? -1 : 1;
 
   /// Check if adding one more of a limited resource is allowed
   bool canAdd({required int currentCount, required int limit}) {

@@ -15,6 +15,9 @@
 - **History**: See [CHANGELOG.md](CHANGELOG.md)
 
 ## Active Issues
+- **QuadTrack LIVE (2026-07-08)** — core flow device-verified end-to-end incl. push w/ deep-links (see CHANGELOG). Remaining tests: geofence breach push, phone-dead escalation, LE share screen, profile wizard, remove device, Android
+- **Bouncie redirect now https://sosmartapps.app/bouncie (2026-07-08)** — hosted copy-code page live; all 6 secrets created (Twilio blank), full functions deploy WORKS. Reconnect vehicle via new flow + device test pending
+- Bouncie per-family linking BUILT 2026-07-07 (ship-blocker fix; Manage → Vehicle Tracking) — needs `firebase deploy --only firestore` + device test: reconnect via new flow (paste .env BOUNCIE_AUTH_CODE), verify card hides for unlinked patients
 - Pet feeding reminders (2026-07-06) built but NOT device-tested — test add/edit/delete schedule, mark-fed, notifications fire, history; then `firebase deploy --only firestore`
 - Expense/reimbursement feature (2026-07-03) built but NOT device-tested — test add/scan/approve/reimburse flow, then deploy `firebase deploy --only firestore,storage`
 - Apple sign-in VERIFIED on iPhone; Google configured both platforms (untested). Android: never run on device/emulator — needs full pass (Google sign-in, OCR w/ Play services, UI walk)

@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
+import 'trip_analyzer.dart';
+import 'trip_detail_screen.dart';
 
 /// Displays Bouncie trip history for the tracked vehicle.
 class TripHistoryScreen extends ConsumerStatefulWidget {
@@ -20,6 +22,7 @@ class _TripHistoryScreenState extends ConsumerState<TripHistoryScreen> {
   List<Map<String, dynamic>> _trips = [];
   bool _loading = true;
   String? _error;
+  int _days = 7; // 7 / 30 / 90 day window
 
   @override
   void initState() {
@@ -34,20 +37,35 @@ class _TripHistoryScreenState extends ConsumerState<TripHistoryScreen> {
     });
 
     try {
-      final bouncie = ref.read(bouncieServiceProvider);
-      final imei = ref.read(bouncieVehicleImeiProvider);
+      final patientId =
+          ref.read(caregiverNotifierProvider).selectedUser?.id;
+      if (patientId == null) {
+        throw Exception('No patient selected');
+      }
+      final connection =
+          await ref.read(bouncieConnectionProvider(patientId).future);
+      if (connection == null) {
+        throw Exception('No vehicle connected — link one in Manage → '
+            'Vehicle Tracking');
+      }
+      final bouncie = bouncieServiceForConnection(
+          ref.read(bouncieAppConfigProvider), connection);
+      final imei = connection.imei;
       final token = await bouncie.getToken();
 
-      // Fetch last 7 days of trips
+      // Fetch the selected window of trips
       final now = DateTime.now();
-      final weekAgo = now.subtract(const Duration(days: 7));
-      final startStr = weekAgo.toIso8601String();
+      final windowStart = now.subtract(Duration(days: _days));
+      final startStr = windowStart.toIso8601String();
       final endStr = now.toIso8601String();
 
+      // Bouncie trips endpoint is /trips with an imei query param
+      // (NOT /vehicles/{imei}/trips — that 404s).
       final response = await http.get(
         Uri.parse(
-          'https://api.bouncie.dev/v1/vehicles/$imei/trips'
-          '?starts-after=$startStr&ends-before=$endStr',
+          'https://api.bouncie.dev/v1/trips'
+          '?imei=$imei&gps-format=polyline'
+          '&starts-after=$startStr&ends-before=$endStr',
         ),
         headers: {
           'Authorization': token,
@@ -57,9 +75,12 @@ class _TripHistoryScreenState extends ConsumerState<TripHistoryScreen> {
 
       if (response.statusCode == 200) {
         final list = jsonDecode(response.body) as List;
+        final trips = list.cast<Map<String, dynamic>>()
+          ..sort((a, b) =>
+              (b['startTime'] ?? '').toString().compareTo((a['startTime'] ?? '').toString()));
         if (mounted) {
           setState(() {
-            _trips = list.cast<Map<String, dynamic>>();
+            _trips = trips;
             _loading = false;
           });
         }
@@ -110,6 +131,14 @@ class _TripHistoryScreenState extends ConsumerState<TripHistoryScreen> {
               const SizedBox(height: 12),
               Text('Could not load trips',
                   style: TextStyle(color: Colors.grey.shade600)),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _error!.replaceFirst('Exception: ', ''),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                ),
+              ],
               const SizedBox(height: 12),
               FilledButton(
                   onPressed: _fetchTrips, child: const Text('Retry')),
@@ -120,26 +149,126 @@ class _TripHistoryScreenState extends ConsumerState<TripHistoryScreen> {
     }
 
     if (_trips.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.directions_car_outlined,
-                size: 64, color: Colors.grey.shade300),
-            const SizedBox(height: 12),
-            Text('No trips in the last 7 days',
-                style: TextStyle(color: Colors.grey.shade500)),
-          ],
-        ),
+      return Column(
+        children: [
+          _buildRangeSelector(),
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.directions_car_outlined,
+                      size: 64, color: Colors.grey.shade300),
+                  const SizedBox(height: 12),
+                  Text('No trips in the last $_days days',
+                      style: TextStyle(color: Colors.grey.shade500)),
+                ],
+              ),
+            ),
+          ),
+        ],
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: _fetchTrips,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _trips.length,
-        itemBuilder: (context, index) => _buildTripCard(_trips[index]),
+    final concerns = TripAnalyzer.analyze(_trips);
+
+    return Column(
+      children: [
+        _buildRangeSelector(),
+        if (concerns.isNotEmpty) _buildConcernsBanner(concerns),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _fetchTrips,
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              itemCount: _trips.length,
+              itemBuilder: (context, index) => _buildTripCard(_trips[index]),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRangeSelector() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: SegmentedButton<int>(
+        segments: const [
+          ButtonSegment(value: 7, label: Text('7 days')),
+          ButtonSegment(value: 30, label: Text('30 days')),
+          ButtonSegment(value: 90, label: Text('90 days')),
+        ],
+        selected: {_days},
+        onSelectionChanged: (selection) {
+          setState(() => _days = selection.first);
+          _fetchTrips();
+        },
+      ),
+    );
+  }
+
+  Widget _buildConcernsBanner(List<TripConcern> concerns) {
+    final worst = concerns.first.severity;
+    final color = worst == ConcernSeverity.alert
+        ? AppTheme.primaryRed
+        : AppTheme.primaryOrange;
+    final shown = concerns.take(4).toList();
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(concerns.first.icon, color: color, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Driving concerns (${concerns.length})',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold, color: color, fontSize: 15),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...shown.map((c) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(c.icon, size: 15, color: c.color),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text.rich(
+                        TextSpan(children: [
+                          TextSpan(
+                              text: '${c.title}: ',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w600)),
+                          TextSpan(text: c.detail),
+                        ]),
+                        style: TextStyle(
+                            fontSize: 13, color: Colors.grey.shade800),
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+          if (concerns.length > shown.length)
+            Text(
+              '+ ${concerns.length - shown.length} more',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+        ],
       ),
     );
   }
@@ -151,8 +280,10 @@ class _TripHistoryScreenState extends ConsumerState<TripHistoryScreen> {
     final maxSpeed = (trip['maxSpeed'] as num?)?.toDouble();
     final startAddress = trip['startAddress'] as String?;
     final endAddress = trip['endAddress'] as String?;
-    final hardBrakes = trip['hardBrakes'] as int? ?? 0;
-    final hardAccels = trip['hardAccelerations'] as int? ?? 0;
+    final hardBrakes =
+        (trip['hardBrakingCount'] ?? trip['hardBrakes']) as int? ?? 0;
+    final hardAccels =
+        (trip['hardAccelerationCount'] ?? trip['hardAccelerations']) as int? ?? 0;
 
     final dateStr = startTime != null
         ? DateFormat('EEE, MMM d').format(startTime)
@@ -165,11 +296,21 @@ class _TripHistoryScreenState extends ConsumerState<TripHistoryScreen> {
         ? _formatDuration(endTime.difference(startTime))
         : '--';
 
-    return Container(
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => TripDetailScreen(trip: trip)),
+      ),
+      child: Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
+        border: TripAnalyzer.isTripConcerning(trip)
+            ? Border.all(
+                color: AppTheme.primaryOrange.withValues(alpha: 0.6),
+                width: 1.5)
+            : null,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -203,6 +344,8 @@ class _TripHistoryScreenState extends ConsumerState<TripHistoryScreen> {
                           fontWeight: FontWeight.w600,
                           color: AppTheme.primaryBlue)),
                 ),
+                const SizedBox(width: 4),
+                Icon(Icons.chevron_right, size: 20, color: Colors.grey.shade400),
               ],
             ),
             const SizedBox(height: 10),
@@ -269,6 +412,7 @@ class _TripHistoryScreenState extends ConsumerState<TripHistoryScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

@@ -209,7 +209,11 @@ export const sendGeofenceAlert = functions.firestore
       const tokens: string[] = [];
       caregiverDocs.forEach(doc => {
         const caregiverData = doc.data();
-        if (caregiverData?.fcmToken) {
+        // App stores tokens in the fcmTokens ARRAY (legacy singular
+        // fcmToken kept as fallback)
+        if (caregiverData?.fcmTokens?.length) {
+          tokens.push(...caregiverData.fcmTokens);
+        } else if (caregiverData?.fcmToken) {
           tokens.push(caregiverData.fcmToken);
         }
       });
@@ -361,7 +365,11 @@ export const sendMedicationAlert = functions.firestore
       const tokens: string[] = [];
       caregiverDocs.forEach(doc => {
         const caregiverData = doc.data();
-        if (caregiverData?.fcmToken) {
+        // App stores tokens in the fcmTokens ARRAY (legacy singular
+        // fcmToken kept as fallback)
+        if (caregiverData?.fcmTokens?.length) {
+          tokens.push(...caregiverData.fcmTokens);
+        } else if (caregiverData?.fcmToken) {
           tokens.push(caregiverData.fcmToken);
         }
       });
@@ -1005,6 +1013,22 @@ export const publishToApexLife = functions.pubsub
 // ============================================================================
 
 /**
+ * Expected ping interval in seconds, derived from the device's tracking
+ * mode. MUST stay in sync with the Dart TrackingMode enum
+ * (lib/core/models/quadtrack_device.dart): normal=30min, emergency=5min
+ * (overridden by battery-aware emergencyIntervalMinutes), idle=240min.
+ */
+const quadTrackIntervalSeconds = (device: Record<string, any>): number => {
+  if (device.trackingMode === 'emergency') {
+    return (device.emergencyIntervalMinutes || 5) * 60;
+  }
+  if (device.trackingMode === 'idle') {
+    return 240 * 60;
+  }
+  return 30 * 60; // normal
+};
+
+/**
  * Ingest location pings from QuadTrack hardware via LTE-M/MQTT bridge
  * Validates device key, stores ping, updates device status, and handles low/dead battery alerts
  */
@@ -1057,18 +1081,23 @@ export const ingestQuadTrackPing = functions.https.onRequest(async (req, res) =>
     const deviceData = deviceDoc.data();
     const deviceRef = deviceDoc.ref;
 
-    // Store ping
+    // Store ping — canonical shape matches the Dart QuadTrackPing model
+    // (location GeoPoint + batteryLevel + timestamp) and keys deviceId by
+    // the DEVICE DOC ID, which is what the app streams pings by
+    // (streamLatestPings(device.id)). receivedAt kept as server metadata.
     const pingRef = db.collection('quadtrack_pings').doc();
     await pingRef.set({
-      deviceId: deviceKey,
-      lat,
-      lng,
-      accuracy: accuracy || null,
-      altitude: altitude || null,
-      battery,
-      phoneBattery: phoneBattery || null,
+      deviceId: deviceDoc.id,
+      hardwareSerial: deviceKey,
+      location: new admin.firestore.GeoPoint(lat, lng),
+      accuracy: accuracy ?? null,
+      altitude: altitude ?? null,
+      batteryLevel: battery,
+      // NOTE: must be ?? (not ||) — phoneBattery 0 means DEAD, not absent
+      phoneBatteryLevel: typeof phoneBattery === 'number' ? phoneBattery : null,
       chargingState: chargingState || 'on_battery',
       source: source || 'gps',
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
       receivedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -1088,16 +1117,9 @@ export const ingestQuadTrackPing = functions.https.onRequest(async (req, res) =>
 
     await deviceRef.update(updateData);
 
-    let nextPingSeconds = 60; // default
-
-    // Determine next ping interval based on tracking mode
-    if (deviceData.trackingMode === 'emergency') {
-      nextPingSeconds = 10;
-    } else if (deviceData.trackingMode === 'active') {
-      nextPingSeconds = 30;
-    } else if (deviceData.trackingMode === 'idle') {
-      nextPingSeconds = 300;
-    }
+    // Next ping interval derived from the device's actual mode/interval
+    // (same semantics as the Dart TrackingMode enum)
+    const nextPingSeconds = quadTrackIntervalSeconds(deviceData);
 
     // Handle low battery alert
     if (battery < 20) {
@@ -1114,7 +1136,11 @@ export const ingestQuadTrackPing = functions.https.onRequest(async (req, res) =>
         const tokens: string[] = [];
         caregiverDocs.forEach(doc => {
           const caregiverData = doc.data();
-          if (caregiverData?.fcmToken) {
+          // App stores tokens in the fcmTokens ARRAY (legacy singular
+          // fcmToken kept as fallback)
+          if (caregiverData?.fcmTokens?.length) {
+            tokens.push(...caregiverData.fcmTokens);
+          } else if (caregiverData?.fcmToken) {
             tokens.push(caregiverData.fcmToken);
           }
         });
@@ -1127,8 +1153,9 @@ export const ingestQuadTrackPing = functions.https.onRequest(async (req, res) =>
             },
             data: {
               type: 'quadtrack_low_battery',
-              deviceId: deviceKey,
+              deviceId: deviceDoc.id,
               batteryLevel: battery.toString(),
+              payload: `quadtrack:${deviceDoc.id}`,
             },
             tokens,
           };
@@ -1157,7 +1184,11 @@ export const ingestQuadTrackPing = functions.https.onRequest(async (req, res) =>
         const tokens: string[] = [];
         caregiverDocs.forEach(doc => {
           const caregiverData = doc.data();
-          if (caregiverData?.fcmToken) {
+          // App stores tokens in the fcmTokens ARRAY (legacy singular
+          // fcmToken kept as fallback)
+          if (caregiverData?.fcmTokens?.length) {
+            tokens.push(...caregiverData.fcmTokens);
+          } else if (caregiverData?.fcmToken) {
             tokens.push(caregiverData.fcmToken);
           }
         });
@@ -1170,8 +1201,9 @@ export const ingestQuadTrackPing = functions.https.onRequest(async (req, res) =>
             },
             data: {
               type: 'quadtrack_phone_dead',
-              deviceId: deviceKey,
+              deviceId: deviceDoc.id,
               timestamp: new Date().toISOString(),
+              payload: `quadtrack:${deviceDoc.id}`,
             },
             tokens,
           };
@@ -1202,30 +1234,43 @@ export const evaluateQuadTrackGeofences = functions.firestore
     const db = admin.firestore();
 
     try {
-      // Get device
-      const deviceQuery = await db
+      // Get device — ping.deviceId is canonically the device DOC ID;
+      // fall back to hardware-serial lookup for any legacy pings.
+      let deviceData: Record<string, any> | undefined;
+      const deviceByDocId = await db
         .collection('quadtrack_devices')
-        .where('deviceId', '==', ping.deviceId)
-        .limit(1)
+        .doc(ping.deviceId)
         .get();
 
-      if (deviceQuery.empty) {
+      if (deviceByDocId.exists) {
+        deviceData = deviceByDocId.data();
+      } else {
+        const deviceQuery = await db
+          .collection('quadtrack_devices')
+          .where('deviceId', '==', ping.deviceId)
+          .limit(1)
+          .get();
+        if (!deviceQuery.empty) {
+          deviceData = deviceQuery.docs[0].data();
+        }
+      }
+
+      if (!deviceData) {
         console.log('Device not found for ping');
         return null;
       }
-
-      const deviceDoc = deviceQuery.docs[0];
-      const deviceData = deviceDoc.data();
 
       if (!deviceData.patientId) {
         return null;
       }
 
-      // Get all active geo zones for this patient
+      // Get all active geo zones for this patient — zones live in the
+      // TOP-LEVEL geo_zones collection keyed by userId (the app writes
+      // them there; the old users/{id}/geo_zones subcollection path
+      // never matched anything).
       const zonesSnap = await db
-        .collection('users')
-        .doc(deviceData.patientId)
         .collection('geo_zones')
+        .where('userId', '==', deviceData.patientId)
         .where('isActive', '==', true)
         .get();
 
@@ -1251,13 +1296,15 @@ export const evaluateQuadTrackGeofences = functions.firestore
         return R * c;
       };
 
-      // Check each zone
+      // Check each zone — GeoZone stores center (GeoPoint) and
+      // radiusMeters (haversine here returns km)
       for (const zoneDoc of zonesSnap.docs) {
         const zone = zoneDoc.data();
         const zoneLat = zone.center?.latitude || zone.lat;
         const zoneLng = zone.center?.longitude || zone.lng;
         const distance = haversineDistance(pingLat, pingLng, zoneLat, zoneLng);
-        const isInside = distance <= (zone.radiusKm || 0.5);
+        const radiusKm = (zone.radiusMeters || 100) / 1000;
+        const isInside = distance <= radiusKm;
 
         // Determine if we should trigger an event
         let eventType: string | null = null;
@@ -1301,7 +1348,11 @@ export const evaluateQuadTrackGeofences = functions.firestore
             const tokens: string[] = [];
             caregiverDocs.forEach(doc => {
               const caregiverData = doc.data();
-              if (caregiverData?.fcmToken) {
+              // App stores tokens in the fcmTokens ARRAY (legacy singular
+              // fcmToken kept as fallback)
+              if (caregiverData?.fcmTokens?.length) {
+                tokens.push(...caregiverData.fcmTokens);
+              } else if (caregiverData?.fcmToken) {
                 tokens.push(caregiverData.fcmToken);
               }
             });
@@ -1324,6 +1375,7 @@ export const evaluateQuadTrackGeofences = functions.firestore
                   eventType,
                   zoneName: zone.name,
                   distance: distance.toString(),
+                  payload: `quadtrack:${ping.deviceId}`,
                 },
                 tokens,
               };
@@ -1376,17 +1428,12 @@ export const quadTrackHealthCheck = functions.pubsub
           : new Date(device.lastSeenAt);
         const secondsAgo = (now.getTime() - lastSeen.getTime()) / 1000;
 
-        // Determine expected interval based on tracking mode
-        let expectedIntervalSeconds = 60;
-        if (device.trackingMode === 'emergency') {
-          expectedIntervalSeconds = 10;
-        } else if (device.trackingMode === 'active') {
-          expectedIntervalSeconds = 30;
-        } else if (device.trackingMode === 'idle') {
-          expectedIntervalSeconds = 300;
-        }
-
-        const timeoutThreshold = expectedIntervalSeconds * 2;
+        // Expected interval from the device's actual mode (minutes-based,
+        // same semantics as the app). Threshold = 2x expected, floored at
+        // 10 minutes — this job only runs every 15 minutes, so sub-minute
+        // thresholds would just flap fast-pinging emergency devices.
+        const expectedIntervalSeconds = quadTrackIntervalSeconds(device);
+        const timeoutThreshold = Math.max(expectedIntervalSeconds * 2, 600);
 
         // If exceeded 2x expected interval, mark offline
         if (secondsAgo > timeoutThreshold) {
@@ -1403,7 +1450,11 @@ export const quadTrackHealthCheck = functions.pubsub
             const tokens: string[] = [];
             caregiverDocs.forEach(doc => {
               const caregiverData = doc.data();
-              if (caregiverData?.fcmToken) {
+              // App stores tokens in the fcmTokens ARRAY (legacy singular
+              // fcmToken kept as fallback)
+              if (caregiverData?.fcmTokens?.length) {
+                tokens.push(...caregiverData.fcmTokens);
+              } else if (caregiverData?.fcmToken) {
                 tokens.push(caregiverData.fcmToken);
               }
             });
@@ -1416,8 +1467,9 @@ export const quadTrackHealthCheck = functions.pubsub
                 },
                 data: {
                   type: 'quadtrack_offline',
-                  deviceId: device.deviceId,
+                  deviceId: deviceDoc.id,
                   timestamp: now.toISOString(),
+                  payload: `quadtrack:${deviceDoc.id}`,
                 },
                 tokens,
               };
@@ -1444,7 +1496,7 @@ export const quadTrackCommand = functions.https.onRequest(async (req, res) => {
   // CORS handling
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Content-Type');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, X-Device-Key');
 
   if (req.method === 'OPTIONS') {
     res.status(204).send('');
@@ -1457,16 +1509,33 @@ export const quadTrackCommand = functions.https.onRequest(async (req, res) => {
   }
 
   try {
-    const deviceId = req.query.deviceId as string;
-    if (!deviceId) {
-      res.status(400).json({ error: 'Missing deviceId query parameter' });
+    // Authenticate the device by hardware key (same scheme as ingest) —
+    // previously this endpoint was unauthenticated and anyone could
+    // consume pending commands.
+    const deviceKey = req.headers['x-device-key'] as string;
+    if (!deviceKey) {
+      res.status(400).json({ error: 'Missing X-Device-Key header' });
       return;
     }
 
     const db = admin.firestore();
 
-    // Check for pending commands
-    const commandRef = db.collection('quadtrack_commands').doc(deviceId);
+    const deviceQuery = await db
+      .collection('quadtrack_devices')
+      .where('deviceId', '==', deviceKey)
+      .limit(1)
+      .get();
+
+    if (deviceQuery.empty) {
+      res.status(401).json({ error: 'Device not registered' });
+      return;
+    }
+
+    // Commands are keyed by the DEVICE DOC ID (that's where the app
+    // writes them) — resolve it from the authenticated device.
+    const commandRef = db
+      .collection('quadtrack_commands')
+      .doc(deviceQuery.docs[0].id);
     const commandDoc = await commandRef.get();
 
     if (!commandDoc.exists) {
@@ -1584,3 +1653,279 @@ export const bouncieWebhook = functions.https.onRequest(async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// ============================================================================
+// TRIP ANALYSIS & CAREGIVER ALERTS (Bouncie)
+// ============================================================================
+//
+// Runs every 4 hours: for each per-family Bouncie connection, fetches the
+// last ~25h of trips, evaluates the SAME heuristics as the app's
+// lib/features/bouncie/trip_analyzer.dart (keep thresholds in sync), and
+// notifies caregivers of NEW concerns via FCM push — and via SMS when
+// Twilio secrets are configured (set to empty strings to disable SMS).
+//
+// Secrets required before deploy (firebase functions:secrets:set):
+//   BOUNCIE_FN_CLIENT_ID, BOUNCIE_FN_CLIENT_SECRET, BOUNCIE_FN_REDIRECT_URI
+//   TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER  (may be empty)
+
+const NIGHT_START = 22;
+const NIGHT_END = 5;
+const HARSH_EVENTS_ALERT = 3;
+const SPEED_WARN = 80;
+const SPEED_ALERT = 90;
+const LONG_TRIP_MIN = 90;
+
+interface TripConcernTS {
+  severity: 'warning' | 'alert';
+  title: string;
+  detail: string;
+  key: string; // dedupe key: `${title}|${tripStartTime}`
+}
+
+function analyzeTripsTS(trips: any[]): TripConcernTS[] {
+  const concerns: TripConcernTS[] = [];
+  for (const trip of trips) {
+    const startRaw: string | undefined = trip.startTime;
+    const start = startRaw ? new Date(startRaw) : null;
+    const end = trip.endTime ? new Date(trip.endTime) : null;
+    const maxSpeed: number = trip.maxSpeed ?? 0;
+    const harsh: number =
+      (trip.hardBrakingCount ?? trip.hardBrakes ?? 0) +
+      (trip.hardAccelerationCount ?? trip.hardAccelerations ?? 0);
+    const whenKey = startRaw ?? 'unknown';
+    // Format in the vehicle's local-ish time; server runs UTC so show UTC-7
+    // (AZ, no DST) — good enough for alert text.
+    const when = start
+      ? new Date(start.getTime() - 7 * 3600 * 1000)
+          .toISOString()
+          .slice(5, 16)
+          .replace('T', ' ')
+      : 'a recent trip';
+
+    if (start) {
+      const azHour = (start.getUTCHours() - 7 + 24) % 24;
+      if (azHour >= NIGHT_START || azHour < NIGHT_END) {
+        concerns.push({
+          severity: 'alert',
+          title: 'Night driving',
+          detail: `Trip started at ${when} — driving late at night.`,
+          key: `Night driving|${whenKey}`,
+        });
+      }
+    }
+    if (harsh >= HARSH_EVENTS_ALERT) {
+      concerns.push({
+        severity: 'alert',
+        title: 'Harsh driving',
+        detail: `${harsh} hard braking/acceleration events on the trip at ${when}.`,
+        key: `Harsh driving|${whenKey}`,
+      });
+    }
+    if (maxSpeed >= SPEED_ALERT) {
+      concerns.push({
+        severity: 'alert',
+        title: 'High speed',
+        detail: `Reached ${Math.round(maxSpeed)} mph on the trip at ${when}.`,
+        key: `High speed|${whenKey}`,
+      });
+    } else if (maxSpeed >= SPEED_WARN) {
+      concerns.push({
+        severity: 'warning',
+        title: 'Elevated speed',
+        detail: `Reached ${Math.round(maxSpeed)} mph on the trip at ${when}.`,
+        key: `Elevated speed|${whenKey}`,
+      });
+    }
+    if (start && end) {
+      const minutes = (end.getTime() - start.getTime()) / 60000;
+      if (minutes >= LONG_TRIP_MIN) {
+        concerns.push({
+          severity: 'warning',
+          title: 'Long trip',
+          detail: `The trip at ${when} lasted ${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m.`,
+          key: `Long trip|${whenKey}`,
+        });
+      }
+    }
+  }
+  return concerns;
+}
+
+async function sendTwilioSms(
+  sid: string,
+  token: string,
+  from: string,
+  to: string,
+  body: string,
+): Promise<void> {
+  const params = new URLSearchParams({ From: from, To: to, Body: body });
+  const res = await fetch(
+    `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization:
+          'Basic ' + Buffer.from(`${sid}:${token}`).toString('base64'),
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    },
+  );
+  if (!res.ok) {
+    console.error(`Twilio SMS to ${to} failed: ${res.status} ${await res.text()}`);
+  }
+}
+
+export const analyzeTripsAndAlert = functions
+  .runWith({
+    secrets: [
+      'BOUNCIE_FN_CLIENT_ID',
+      'BOUNCIE_FN_CLIENT_SECRET',
+      'BOUNCIE_FN_REDIRECT_URI',
+      'TWILIO_ACCOUNT_SID',
+      'TWILIO_AUTH_TOKEN',
+      'TWILIO_FROM_NUMBER',
+    ],
+    timeoutSeconds: 300,
+  })
+  .pubsub.schedule('every 4 hours')
+  .onRun(async () => {
+    const clientId = (process.env.BOUNCIE_FN_CLIENT_ID || '').trim();
+    const clientSecret = (process.env.BOUNCIE_FN_CLIENT_SECRET || '').trim();
+    const redirectUri = (process.env.BOUNCIE_FN_REDIRECT_URI || '').trim();
+    const twilioSid = (process.env.TWILIO_ACCOUNT_SID || '').trim();
+    const twilioToken = (process.env.TWILIO_AUTH_TOKEN || '').trim();
+    const twilioFrom = (process.env.TWILIO_FROM_NUMBER || '').trim();
+    const smsEnabled = !!(twilioSid && twilioToken && twilioFrom);
+
+    if (!clientId || !clientSecret) {
+      console.log('Bouncie function secrets not configured; skipping.');
+      return null;
+    }
+
+    const db = admin.firestore();
+    const connections = await db.collection('bouncie_connections').get();
+    console.log(
+      `Trip analysis: ${connections.size} connection(s), SMS ${smsEnabled ? 'ENABLED' : 'disabled'}`,
+    );
+
+    for (const connDoc of connections.docs) {
+      const patientId = connDoc.id;
+      const conn = connDoc.data();
+      try {
+        // Exchange the family's auth code for a token.
+        const tokenRes = await fetch('https://auth.bouncie.com/oauth/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            client_id: clientId,
+            client_secret: clientSecret,
+            grant_type: 'authorization_code',
+            code: conn.authCode,
+            redirect_uri: redirectUri,
+          }),
+        });
+        if (!tokenRes.ok) {
+          console.error(
+            `Bouncie token exchange failed for ${patientId}: ${tokenRes.status}`,
+          );
+          continue;
+        }
+        const accessToken = (await tokenRes.json()).access_token as string;
+
+        // Last 25 hours of trips (overlap so nothing slips between runs).
+        const now = new Date();
+        const windowStart = new Date(now.getTime() - 25 * 3600 * 1000);
+        const tripsRes = await fetch(
+          `https://api.bouncie.dev/v1/trips?imei=${conn.imei}&gps-format=polyline` +
+            `&starts-after=${windowStart.toISOString()}&ends-before=${now.toISOString()}`,
+          { headers: { Authorization: accessToken } },
+        );
+        if (!tripsRes.ok) {
+          console.error(`Trips fetch failed for ${patientId}: ${tripsRes.status}`);
+          continue;
+        }
+        const trips = (await tripsRes.json()) as any[];
+        const concerns = analyzeTripsTS(trips);
+        if (concerns.length === 0) continue;
+
+        // Dedupe against already-alerted concerns.
+        const stateRef = db.collection('trip_alerts').doc(patientId);
+        const stateDoc = await stateRef.get();
+        const alerted: string[] = stateDoc.data()?.alertedKeys ?? [];
+        const fresh = concerns.filter((c) => !alerted.includes(c.key));
+        if (fresh.length === 0) continue;
+
+        // Gather patient + caregivers.
+        const userDoc = await db.collection('users').doc(patientId).get();
+        const userData = userDoc.data();
+        const patientName = userData?.name ?? 'your family member';
+        const caregiverIds: string[] = userData?.caregiverIds ?? [];
+        const caregiverDocs = await Promise.all(
+          caregiverIds.map((id) => db.collection('caregivers').doc(id).get()),
+        );
+
+        const worst = fresh.some((c) => c.severity === 'alert')
+          ? 'alert'
+          : 'warning';
+        const title =
+          worst === 'alert' ? '🚗 Driving alert' : '🚗 Driving notice';
+        const summary = fresh
+          .slice(0, 3)
+          .map((c) => `${c.title}: ${c.detail}`)
+          .join(' ');
+        const body = `${patientName} — ${summary}`;
+
+        // Push notifications.
+        const tokens: string[] = [];
+        const phones: string[] = [];
+        for (const doc of caregiverDocs) {
+          const cg = doc.data();
+          if (cg?.fcmTokens?.length) tokens.push(...cg.fcmTokens);
+          else if (cg?.fcmToken) tokens.push(cg.fcmToken);
+          if (cg?.phoneNumber) phones.push(cg.phoneNumber);
+        }
+        if (tokens.length > 0) {
+          const response = await admin.messaging().sendEachForMulticast({
+            notification: { title, body },
+            data: { type: 'trip_alert', userId: patientId },
+            tokens,
+          });
+          console.log(
+            `Trip alert push for ${patientId}: ${response.successCount} ok, ${response.failureCount} failed`,
+          );
+        }
+
+        // SMS via Twilio (when configured).
+        if (smsEnabled) {
+          for (const phone of phones) {
+            const to = phone.startsWith('+')
+              ? phone
+              : `+1${phone.replace(/\D/g, '')}`;
+            await sendTwilioSms(
+              twilioSid,
+              twilioToken,
+              twilioFrom,
+              to,
+              `Lumina: ${title.replace('🚗 ', '')} — ${body}`,
+            );
+          }
+          console.log(`Trip alert SMS sent to ${phones.length} caregiver(s)`);
+        }
+
+        // Persist dedupe state (cap growth).
+        const merged = [...alerted, ...fresh.map((c) => c.key)].slice(-200);
+        await stateRef.set(
+          {
+            alertedKeys: merged,
+            lastAlertAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastSummary: body,
+          },
+          { merge: true },
+        );
+      } catch (e) {
+        console.error(`Trip analysis failed for ${patientId}:`, e);
+      }
+    }
+    return null;
+  });

@@ -11,13 +11,25 @@ import 'package:latlong2/latlong.dart';
 class BouncieService {
   static const String _baseUrl = 'https://api.bouncie.dev/v1';
   static const String _tokenUrl = 'https://auth.bouncie.com/oauth/token';
-  static const String _tokenKey = 'bouncie_access_token';
-  static const String _tokenExpiryKey = 'bouncie_token_expiry';
+
+  /// URL a user visits to authorize this app against THEIR Bouncie account.
+  static String authorizeUrl({
+    required String clientId,
+    required String redirectUri,
+  }) =>
+      'https://auth.bouncie.com/dialog/authorize'
+      '?client_id=$clientId&response_type=code'
+      '&redirect_uri=${Uri.encodeComponent(redirectUri)}';
 
   final String clientId;
   final String clientSecret;
   final String authCode;
   final String redirectUri;
+
+  /// Token cache keys are per-authCode so two patients' connections never
+  /// collide in SharedPreferences.
+  String get _tokenKey => 'bouncie_access_token_${authCode.hashCode}';
+  String get _tokenExpiryKey => 'bouncie_token_expiry_${authCode.hashCode}';
 
   String? _accessToken;
   DateTime? _tokenExpiry;

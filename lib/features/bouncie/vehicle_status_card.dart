@@ -6,15 +6,42 @@ import 'package:intl/intl.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
 
+import '../../core/models/bouncie_connection.dart';
+
 /// Live vehicle status card for the caregiver dashboard.
-class VehicleStatusCard extends ConsumerStatefulWidget {
+///
+/// Shows nothing unless the selected patient has a Bouncie connection
+/// (per-family, stored in bouncie_connections/{patientId}).
+class VehicleStatusCard extends ConsumerWidget {
   const VehicleStatusCard({super.key});
 
   @override
-  ConsumerState<VehicleStatusCard> createState() => _VehicleStatusCardState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final patient = ref.watch(caregiverNotifierProvider).selectedUser;
+    if (patient == null) return const SizedBox.shrink();
+
+    return ref.watch(bouncieConnectionProvider(patient.id)).when(
+          loading: () => const SizedBox.shrink(),
+          error: (_, _) => const SizedBox.shrink(),
+          data: (connection) => connection == null
+              ? const SizedBox.shrink()
+              : _VehicleStatusBody(
+                  key: ValueKey(connection.imei),
+                  connection: connection,
+                ),
+        );
+  }
 }
 
-class _VehicleStatusCardState extends ConsumerState<VehicleStatusCard> {
+class _VehicleStatusBody extends ConsumerStatefulWidget {
+  final BouncieConnection connection;
+  const _VehicleStatusBody({super.key, required this.connection});
+
+  @override
+  ConsumerState<_VehicleStatusBody> createState() => _VehicleStatusCardState();
+}
+
+class _VehicleStatusCardState extends ConsumerState<_VehicleStatusBody> {
   Map<String, dynamic>? _vehicleData;
   bool _loading = true;
   String? _error;
@@ -39,9 +66,9 @@ class _VehicleStatusCardState extends ConsumerState<VehicleStatusCard> {
 
   Future<void> _fetchVehicleData() async {
     try {
-      final bouncie = ref.read(bouncieServiceProvider);
-      final imei = ref.read(bouncieVehicleImeiProvider);
-      final data = await bouncie.getVehicleData(imei);
+      final bouncie = bouncieServiceForConnection(
+          ref.read(bouncieAppConfigProvider), widget.connection);
+      final data = await bouncie.getVehicleData(widget.connection.imei);
       if (mounted) {
         setState(() {
           _vehicleData = data;

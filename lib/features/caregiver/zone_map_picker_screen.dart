@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart' show GeoPoint;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -196,6 +197,10 @@ class _ZoneMapPickerScreenState extends ConsumerState<ZoneMapPickerScreen> {
               borderRadius: BorderRadius.circular(12),
               child: TextField(
                 controller: _searchController,
+                inputFormatters: [
+                  FilteringTextInputFormatter.deny(RegExp(
+                      '[\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u206F\\uFEFF]')),
+                ],
                 textInputAction: TextInputAction.search,
                 onSubmitted: (_) => _searchAddress(),
                 decoration: InputDecoration(

@@ -245,7 +245,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
             ),
             const SizedBox(height: 24),
             SizedBox(
-              height: 52,
+              width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: _submitting ? null : _submit,
                 style: ElevatedButton.styleFrom(

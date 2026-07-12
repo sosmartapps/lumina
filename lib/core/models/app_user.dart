@@ -240,6 +240,9 @@ class UserSettings {
   final int morningWindowStart; // hour (0-23), default 5
   final int morningWindowEnd; // hour (0-23), default 10
 
+  /// Measurement system: 'auto' (follow device region), 'imperial', 'metric'.
+  final String units;
+
   UserSettings({
     this.highContrastMode = false,
     this.textScale = 1.2,
@@ -253,6 +256,7 @@ class UserSettings {
     this.motionDetectionEnabled = true,
     this.morningWindowStart = 5,
     this.morningWindowEnd = 10,
+    this.units = 'auto',
   });
 
   factory UserSettings.fromMap(Map<String, dynamic> map) {
@@ -269,6 +273,7 @@ class UserSettings {
       motionDetectionEnabled: map['motionDetectionEnabled'] ?? true,
       morningWindowStart: map['morningWindowStart'] ?? 5,
       morningWindowEnd: map['morningWindowEnd'] ?? 10,
+      units: map['units'] ?? 'auto',
     );
   }
 
@@ -286,6 +291,7 @@ class UserSettings {
       'motionDetectionEnabled': motionDetectionEnabled,
       'morningWindowStart': morningWindowStart,
       'morningWindowEnd': morningWindowEnd,
+      'units': units,
     };
   }
 
@@ -302,6 +308,7 @@ class UserSettings {
     bool? motionDetectionEnabled,
     int? morningWindowStart,
     int? morningWindowEnd,
+    String? units,
   }) {
     return UserSettings(
       highContrastMode: highContrastMode ?? this.highContrastMode,
@@ -316,6 +323,7 @@ class UserSettings {
       motionDetectionEnabled: motionDetectionEnabled ?? this.motionDetectionEnabled,
       morningWindowStart: morningWindowStart ?? this.morningWindowStart,
       morningWindowEnd: morningWindowEnd ?? this.morningWindowEnd,
+      units: units ?? this.units,
     );
   }
 }

@@ -1,5 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+import '../models/bouncie_connection.dart';
 
 import 'app_state_provider.dart';
 import 'user_provider.dart';
@@ -53,19 +56,47 @@ final sundownServiceProvider = Provider((ref) {
   return service;
 });
 
-// Bouncie vehicle tracking
-final bouncieServiceProvider = Provider((ref) {
-  return BouncieService(
-    clientId: dotenv.env['BOUNCIE_CLIENT_ID']!,
-    clientSecret: dotenv.env['BOUNCIE_CLIENT_SECRET']!,
-    authCode: dotenv.env['BOUNCIE_AUTH_CODE']!,
-    redirectUri: dotenv.env['BOUNCIE_REDIRECT_URI']!,
+// ── Bouncie vehicle tracking ─────────────────────────────────────────────
+// App-level developer credentials (identify the Lumina app to Bouncie —
+// NOT user-specific). Per-family authorization + vehicle live in
+// Firestore `bouncie_connections/{patientId}` (BouncieConnection).
+
+/// (clientId, clientSecret, redirectUri) for the Lumina Bouncie app.
+/// Empty strings when unconfigured — callers must handle gracefully.
+final bouncieAppConfigProvider =
+    Provider<({String clientId, String clientSecret, String redirectUri})>(
+        (ref) {
+  return (
+    clientId: dotenv.env['BOUNCIE_CLIENT_ID'] ?? '',
+    clientSecret: dotenv.env['BOUNCIE_CLIENT_SECRET'] ?? '',
+    redirectUri: dotenv.env['BOUNCIE_REDIRECT_URI'] ?? '',
   );
 });
 
-final bouncieVehicleImeiProvider = Provider((ref) {
-  return dotenv.env['BOUNCIE_VEHICLE_IMEI']!;
+/// Live per-patient Bouncie connection (null = no vehicle linked).
+final bouncieConnectionProvider =
+    StreamProvider.family<BouncieConnection?, String>((ref, patientId) {
+  return FirebaseFirestore.instance
+      .collection('bouncie_connections')
+      .doc(patientId)
+      .snapshots()
+      .map((doc) => doc.exists ? BouncieConnection.fromFirestore(doc) : null);
 });
+
+/// Builds a [BouncieService] for a specific family connection.
+/// Callers pass `ref.read(bouncieAppConfigProvider)` (works from both
+/// widget and provider refs).
+BouncieService bouncieServiceForConnection(
+  ({String clientId, String clientSecret, String redirectUri}) config,
+  BouncieConnection connection,
+) {
+  return BouncieService(
+    clientId: config.clientId,
+    clientSecret: config.clientSecret,
+    authCode: connection.authCode,
+    redirectUri: config.redirectUri,
+  );
+}
 
 // Invite service
 final inviteServiceProvider = Provider((ref) => InviteService());

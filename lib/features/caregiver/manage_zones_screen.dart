@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart' show GeoPoint;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/providers.dart';
@@ -9,6 +10,7 @@ import '../../core/providers/caregiver_provider.dart';
 import '../../core/services/geofence_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/models/geo_zone.dart';
+import '../subscription/paywall_screen.dart';
 import 'zone_map_picker_screen.dart';
 
 /// Screen for caregivers to manage geofence zones
@@ -20,6 +22,43 @@ class ManageZonesScreen extends ConsumerStatefulWidget {
 }
 
 class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
+  /// Latest zone count from the stream, read by the FAB gate at tap time.
+  int _zoneCount = 0;
+
+  void _onAddZonePressed() {
+    final sub = ref.read(subscriptionNotifierProvider);
+    if (!sub.canAddGeoZone(_zoneCount)) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Zone Limit Reached'),
+          content: const Text(
+              'The free plan includes 1 safe zone. Upgrade to Premium for '
+              'unlimited zones, or delete the existing zone first.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Not Now'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => const PaywallScreen()),
+                );
+              },
+              child: const Text('Upgrade'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    _showAddZoneDialog(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -28,7 +67,7 @@ class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
         title: const Text('Safe Zones'),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddZoneDialog(context),
+        onPressed: _onAddZonePressed,
         backgroundColor: AppTheme.primaryTeal,
         icon: const Icon(Icons.add),
         label: const Text('Add Zone'),
@@ -48,6 +87,7 @@ class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
             stream: geofenceService.getZones(user.id),
             builder: (context, snapshot) {
               final zones = snapshot.data ?? [];
+              _zoneCount = zones.length;
 
               if (zones.isEmpty) {
                 return _buildEmptyState();
@@ -299,6 +339,9 @@ class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
     bool isLoading = false;
     GeoPoint? pickedCenter;
     String? pickedLabel;
+    // Text the map pick auto-filled; if the user edits away from it,
+    // the pin is cleared so the typed value wins (predictable priority).
+    String lastAutofill = '';
 
     showDialog(
       context: context,
@@ -322,10 +365,24 @@ class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
                 const SizedBox(height: 16),
                 TextField(
                   controller: addressController,
+                  // Block invisible Unicode marks (Google Maps copies
+                  // carry them) so pasted text is exactly what you see.
+                  inputFormatters: [
+                    FilteringTextInputFormatter.deny(RegExp(
+                        '[\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u206F\\uFEFF]')),
+                  ],
+                  onChanged: (value) {
+                    if (pickedCenter != null && value != lastAutofill) {
+                      setState(() {
+                        pickedCenter = null;
+                        pickedLabel = null;
+                      });
+                    }
+                  },
                   decoration: InputDecoration(
                     labelText: pickedCenter == null
                         ? 'Zone Center *'
-                        : 'Zone Center (optional)',
+                        : 'Zone Center (using map pin)',
                     prefixIcon: const Icon(Icons.place),
                     hintText: 'Address, lat,lng, or ///what.three.words',
                   ),
@@ -357,9 +414,9 @@ class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
                           pickedLabel = result.address ??
                               '${result.center.latitude.toStringAsFixed(5)}, '
                                   '${result.center.longitude.toStringAsFixed(5)}';
-                          if (result.address != null &&
-                              addressController.text.isEmpty) {
+                          if (result.address != null) {
                             addressController.text = result.address!;
+                            lastAutofill = result.address!;
                           }
                         });
                       }
@@ -374,8 +431,10 @@ class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
                       pickedCenter == null
                           ? 'Pick on Map'
                           : 'Pinned: $pickedLabel',
-                      maxLines: 1,
+                      maxLines: 2,
+                      textAlign: TextAlign.center,
                       overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 14),
                     ),
                   ),
                 ),

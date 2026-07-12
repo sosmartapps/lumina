@@ -126,6 +126,9 @@ class _QuadTrackProfileSetupScreenState
     'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
   ];
 
+  /// Existing profile loaded from Firestore (null = new profile).
+  UserProfile? _existingProfile;
+
   @override
   void initState() {
     super.initState();
@@ -133,6 +136,91 @@ class _QuadTrackProfileSetupScreenState
     _countryController.text = 'USA';
     _state = 'AZ';
     _vehicleState = 'AZ';
+    _loadExistingProfile();
+  }
+
+  /// Load the patient's existing profile from the canonical store
+  /// (users/{id}/user_profile/profile — same doc the User Profile screen
+  /// and UserProfileService use), with fallbacks to the legacy top-level
+  /// user_profiles collection. Prefills the wizard.
+  Future<void> _loadExistingProfile() async {
+    try {
+      final firestore = FirebaseFirestore.instance;
+      DocumentSnapshot? doc = await firestore
+          .collection('users')
+          .doc(widget.patientId)
+          .collection('user_profile')
+          .doc('profile')
+          .get();
+
+      if (!doc.exists) {
+        doc = await firestore
+            .collection('user_profiles')
+            .doc(widget.patientId)
+            .get();
+      }
+
+      if (!doc.exists) {
+        final legacy = await firestore
+            .collection('user_profiles')
+            .where('userId', isEqualTo: widget.patientId)
+            .limit(1)
+            .get();
+        doc = legacy.docs.isNotEmpty ? legacy.docs.first : null;
+      }
+
+      if (doc == null || !doc.exists || !mounted) return;
+
+      final profile = UserProfile.fromFirestore(doc);
+      String? inList(String? value, List<String> options) =>
+          value != null && options.contains(value) ? value : null;
+
+      setState(() {
+        _existingProfile = profile;
+        _firstNameController.text = profile.legalFirstName ?? '';
+        _middleNameController.text = profile.legalMiddleName ?? '';
+        _lastNameController.text = profile.legalLastName ?? '';
+        _preferredNameController.text = profile.preferredName ?? '';
+        _dateOfBirth = profile.dateOfBirth;
+        _gender = inList(profile.gender, _genders);
+        _heightCm = profile.heightCm;
+        _weightKg = profile.weightKg;
+        _hairColor = inList(profile.hairColor, _hairColors);
+        _eyeColor = inList(profile.eyeColor, _eyeColors);
+        _race = inList(profile.race, _races);
+        _buildType = inList(profile.buildType, _builds);
+        _marksController.text = profile.distinguishingMarks ?? '';
+        _clothingController.text = profile.usualClothing ?? '';
+        _glasses = inList(profile.glasses, _glasseTypes);
+        _mobilityAids = inList(profile.mobilityAids, _mobilityTypes);
+        _diagnosisController.text = profile.primaryDiagnosis ?? '';
+        _cognitiveStatus = inList(profile.cognitiveStatus, _cognitiveStatuses);
+        _medicalAlertController.text = profile.medicalAlertInfo ?? '';
+        _behaviorController.text = profile.behaviorWhenLost ?? '';
+        _communicationController.text = profile.communicationAbility ?? '';
+        _calmingController.text = profile.calmingTechniques ?? '';
+        _triggersController.text = profile.triggersToAvoid ?? '';
+        _vehicleMakeController.text = profile.vehicleMake ?? '';
+        _vehicleModelController.text = profile.vehicleModel ?? '';
+        _vehicleYearController.text = profile.vehicleYear?.toString() ?? '';
+        _vehicleColorController.text = profile.vehicleColor ?? '';
+        _vehiclePlateController.text = profile.vehicleLicensePlate ?? '';
+        _vehicleState =
+            inList(profile.vehicleLicenseState, _states) ?? _vehicleState;
+        _vehicleVinController.text = profile.vehicleVin ?? '';
+        _vehicleNotesController.text = profile.vehicleNotes ?? '';
+        _streetController.text = profile.streetAddress ?? '';
+        _cityController.text = profile.city ?? '';
+        _state = inList(profile.state, _states) ?? _state;
+        _zipController.text = profile.zipCode ?? '';
+        if (profile.country != null && profile.country!.isNotEmpty) {
+          _countryController.text = profile.country!;
+        }
+        _photoUrl = profile.mostRecentPhoto?.url;
+      });
+    } catch (e) {
+      debugPrint('Error loading existing profile: $e');
+    }
   }
 
   @override
@@ -203,8 +291,11 @@ class _QuadTrackProfileSetupScreenState
         photoUrl = await _uploadPhoto();
       }
 
+      // Canonical doc ID = patientId (what the LE share screen reads).
+      // Fields not covered by this wizard are preserved from the
+      // previously loaded profile.
       final userProfile = UserProfile(
-        id: widget.initialUserProfileId ?? 'profile_${DateTime.now().millisecondsSinceEpoch}',
+        id: widget.patientId,
         userId: widget.patientId,
         legalFirstName: _firstNameController.text.isNotEmpty
             ? _firstNameController.text
@@ -284,24 +375,32 @@ class _QuadTrackProfileSetupScreenState
         vehicleNotes: _vehicleNotesController.text.isNotEmpty
             ? _vehicleNotesController.text
             : null,
-        photos: photoUrl != null
-            ? [
-                UserPhoto(
-                  id: 'photo_${DateTime.now().millisecondsSinceEpoch}',
-                  url: photoUrl,
-                  dateTaken: DateTime.now(),
-                  isPrimary: true,
-                )
-              ]
-            : [],
-        createdAt: DateTime.now(),
+        photos: [
+          ...(_existingProfile?.photos ?? const []),
+          if (_photoFile != null && photoUrl != null)
+            UserPhoto(
+              id: 'photo_${DateTime.now().millisecondsSinceEpoch}',
+              url: photoUrl,
+              dateTaken: DateTime.now(),
+              isPrimary: true,
+            ),
+        ],
+        // Preserve fields this wizard doesn't edit
+        frequentPlaces: _existingProfile?.frequentPlaces ?? const [],
+        responseToName: _existingProfile?.responseToName,
+        responseToStrangers: _existingProfile?.responseToStrangers,
+        wanderingHistory: _existingProfile?.wanderingHistory,
+        createdAt: _existingProfile?.createdAt ?? DateTime.now(),
         updatedAt: DateTime.now(),
       );
 
+      // Canonical store — same doc the User Profile screen writes
       await FirebaseFirestore.instance
-          .collection('user_profiles')
-          .doc(userProfile.id)
-          .set(userProfile.toFirestore());
+          .collection('users')
+          .doc(widget.patientId)
+          .collection('user_profile')
+          .doc('profile')
+          .set(userProfile.toFirestore(), SetOptions(merge: true));
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

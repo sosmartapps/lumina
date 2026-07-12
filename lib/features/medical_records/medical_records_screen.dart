@@ -360,7 +360,7 @@ class _MedicalRecordsScreenState extends ConsumerState<MedicalRecordsScreen> {
 
           // Action buttons
           SizedBox(
-            height: 52,
+            width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: _sharePdf,
               icon: const Icon(Icons.share, color: Colors.white),
@@ -380,7 +380,7 @@ class _MedicalRecordsScreenState extends ConsumerState<MedicalRecordsScreen> {
           ),
           const SizedBox(height: 8),
           SizedBox(
-            height: 52,
+            width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: _printPdf,
               icon: const Icon(Icons.print),

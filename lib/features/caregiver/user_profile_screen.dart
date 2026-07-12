@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -7,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/models/user_profile.dart';
 import '../../core/services/user_profile_service.dart';
+import '../../core/utils/units.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final String userId;
@@ -33,6 +35,14 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   final _legalLastNameController = TextEditingController();
   final _preferredNameController = TextEditingController();
   final _nicknameController = TextEditingController();
+  // App display identity (users/{id}.name + phoneNumber — what the home
+  // screen greeting, notifications, and caregiver lists show)
+  final _displayNameController = TextEditingController();
+  final _userPhoneController = TextEditingController();
+  // Imperial entry (converted to metric for storage)
+  final _heightFtController = TextEditingController();
+  final _heightInController = TextEditingController();
+  UnitsSystem _units = Units.resolve(null);
   DateTime? _dateOfBirth;
   String? _gender;
 
@@ -78,8 +88,47 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   final _triggersToAvoidController = TextEditingController();
 
   @override
+  /// True when any field changed since the last successful save —
+  /// guards against silent data loss on back-navigation (2026-07-08).
+  bool _dirty = false;
+
+  /// Debounced auto-save: fires 2.5s after the user stops typing.
+  Timer? _autoSaveTimer;
+  bool _autoSaveFailed = false;
+
+  void _wireDirtyTracking() {
+    for (final c in [
+      _legalFirstNameController,
+      _legalMiddleNameController,
+      _legalLastNameController,
+      _preferredNameController,
+      _nicknameController,
+      _displayNameController,
+      _userPhoneController,
+      _heightController,
+      _weightController,
+      _heightFtController,
+      _heightInController,
+    ]) {
+      c.addListener(() {
+        if (!mounted) return;
+        if (!_dirty) setState(() => _dirty = true);
+        _autoSaveTimer?.cancel();
+        _autoSaveTimer = Timer(const Duration(milliseconds: 2500), () {
+          if (mounted && _dirty && !_isSaving) _saveProfile(auto: true);
+        });
+      });
+    }
+  }
+
   void initState() {
     super.initState();
+    // Wire AFTER first frame so programmatic loads don't mark dirty.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) _wireDirtyTracking();
+      });
+    });
     _tabController = TabController(length: 6, vsync: this);
     _loadProfile();
   }
@@ -97,6 +146,11 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     _legalLastNameController.dispose();
     _preferredNameController.dispose();
     _nicknameController.dispose();
+    _displayNameController.dispose();
+    _userPhoneController.dispose();
+    _autoSaveTimer?.cancel();
+    _heightFtController.dispose();
+    _heightInController.dispose();
     _heightController.dispose();
     _weightController.dispose();
     _distinguishingMarksController.dispose();
@@ -132,6 +186,19 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       if (profile != null) {
         _populateControllers(profile);
       }
+      // Core app identity from the users doc (editable here since 2026-07-07)
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.userId)
+          .get();
+      final userData = userDoc.data();
+      if (userData != null) {
+        _displayNameController.text = userData['name'] ?? '';
+        _userPhoneController.text = userData['phoneNumber'] ?? '';
+        final settings = userData['settings'] as Map<String, dynamic>?;
+        _units = Units.resolve(settings?['units'] as String?);
+        _syncImperialControllers();
+      }
       setState(() {
         _profile = profile;
         _isLoading = false;
@@ -143,6 +210,21 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           SnackBar(content: Text('Error loading profile: $e')),
         );
       }
+    }
+  }
+
+  /// Fill ft/in and lb fields from the metric values.
+  void _syncImperialControllers() {
+    if (_units != UnitsSystem.imperial) return;
+    final cm = double.tryParse(_heightController.text);
+    if (cm != null) {
+      final h = Units.cmToFeetInches(cm);
+      _heightFtController.text = h.feet.toString();
+      _heightInController.text = h.inches.toString();
+    }
+    final kg = double.tryParse(_weightController.text);
+    if (kg != null) {
+      _weightController.text = Units.kgToLb(kg).round().toString();
     }
   }
 
@@ -198,7 +280,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     _triggersToAvoidController.text = profile.triggersToAvoid ?? '';
   }
 
-  Future<void> _saveProfile() async {
+  Future<void> _saveProfile({bool auto = false}) async {
     setState(() => _isSaving = true);
     try {
       final now = DateTime.now();
@@ -221,8 +303,19 @@ class _UserProfileScreenState extends State<UserProfileScreen>
             _nicknameController.text.isEmpty ? null : _nicknameController.text,
         dateOfBirth: _dateOfBirth,
         gender: _gender,
-        heightCm: double.tryParse(_heightController.text),
-        weightKg: double.tryParse(_weightController.text),
+        heightCm: _units == UnitsSystem.imperial
+            ? ((_heightFtController.text.isNotEmpty ||
+                    _heightInController.text.isNotEmpty)
+                ? Units.feetInchesToCm(
+                    int.tryParse(_heightFtController.text) ?? 0,
+                    int.tryParse(_heightInController.text) ?? 0)
+                : null)
+            : double.tryParse(_heightController.text),
+        weightKg: _units == UnitsSystem.imperial
+            ? (double.tryParse(_weightController.text) != null
+                ? Units.lbToKg(double.parse(_weightController.text))
+                : null)
+            : double.tryParse(_weightController.text),
         hairColor: _hairColor,
         eyeColor: _eyeColor,
         race: _race,
@@ -303,22 +396,28 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
       await UserProfileService.saveUserProfile(widget.userId, updatedProfile);
 
-      // Sync preferred name to AppUser so TTS/notifications use it
+      // Sync core identity to AppUser (greeting, notifications, lists)
       final newPreferred = _preferredNameController.text.trim();
+      final newDisplayName = _displayNameController.text.trim();
+      final newPhone = _userPhoneController.text.trim();
       await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.userId)
           .update({
         'preferredName': newPreferred.isEmpty ? null : newPreferred,
+        if (newDisplayName.isNotEmpty) 'name': newDisplayName,
+        'phoneNumber': newPhone.isEmpty ? null : newPhone,
         'updatedAt': Timestamp.fromDate(DateTime.now()),
       });
 
       setState(() {
         _profile = updatedProfile;
         _isSaving = false;
+        _dirty = false;
+        _autoSaveFailed = false;
       });
 
-      if (mounted) {
+      if (mounted && !auto) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Profile saved successfully'),
@@ -327,10 +426,29 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         );
       }
     } catch (e) {
-      setState(() => _isSaving = false);
+      setState(() {
+        _isSaving = false;
+        if (auto) _autoSaveFailed = true;
+      });
+      if (auto) return; // banner shows; manual save gives the full dialog
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving profile: $e')),
+        // BLOCKING dialog — a snackbar was missable and typed data was
+        // lost when the user navigated away after a failed save.
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            icon: const Icon(Icons.error, color: Colors.red, size: 40),
+            title: const Text('NOT saved'),
+            content: Text(
+                'Your entries are still on this screen — do not leave '
+                'without saving.\n\nError: $e'),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Keep editing'),
+              ),
+            ],
+          ),
         );
       }
     }
@@ -644,7 +762,34 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final leave = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Unsaved changes'),
+            content: const Text(
+                'You have unsaved changes. Leave without saving?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Keep editing'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Discard'),
+              ),
+            ],
+          ),
+        );
+        if (leave == true && context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('User Profile'),
         actions: [
@@ -655,13 +800,23 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                 child: SizedBox(
                   width: 20,
                   height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
                 ),
+              ),
+            )
+          else if (!_dirty && !_autoSaveFailed)
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Tooltip(
+                message: 'All changes saved',
+                child: Icon(Icons.check_circle, color: Colors.white),
               ),
             )
           else
             IconButton(
-              icon: const Icon(Icons.save),
+              icon: Icon(Icons.save,
+                  color: _autoSaveFailed ? Colors.red.shade200 : Colors.white),
               onPressed: _saveProfile,
               tooltip: 'Save Profile',
             ),
@@ -683,39 +838,86 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // Lost Person Report Banner
+                if (_autoSaveFailed)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    color: Colors.red,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.cloud_off,
+                            color: Colors.white, size: 18),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'Changes NOT saved — check connection',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _saveProfile,
+                          child: const Text('Retry',
+                              style: TextStyle(color: Colors.white)),
+                        ),
+                      ],
+                    ),
+                  ),
+                // Lost Person Report Banner — sentence full-width on top,
+                // compact button below (side-by-side crushed the text).
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                   color: Colors.red.shade50,
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.warning_amber, color: Colors.red.shade700),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'In an emergency, generate a Lost Person Report to share with authorities.',
-                          style: TextStyle(color: Colors.red.shade700),
-                        ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.warning_amber,
+                              color: Colors.red.shade700, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'In an emergency, generate a Lost Person Report '
+                              'to share with authorities.',
+                              style: TextStyle(
+                                  color: Colors.red.shade700, fontSize: 14),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      ElevatedButton(
-                        onPressed:
-                            _isGeneratingReport ? null : _generateLostPersonReport,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
-                          foregroundColor: Colors.white,
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 44,
+                        child: ElevatedButton.icon(
+                          onPressed: _isGeneratingReport
+                              ? null
+                              : _generateLostPersonReport,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                            textStyle: const TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.bold),
+                          ),
+                          icon: _isGeneratingReport
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.description, size: 18),
+                          label: const Text('Generate Lost Person Report'),
                         ),
-                        child: _isGeneratingReport
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text('Generate Report'),
                       ),
                     ],
                   ),
@@ -736,6 +938,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                 ),
               ],
             ),
+    ),
     );
   }
 
@@ -783,6 +986,25 @@ class _UserProfileScreenState extends State<UserProfileScreen>
             decoration: const InputDecoration(
               labelText: 'Nickname',
               hintText: 'Family nickname, etc.',
+            ),
+          ),
+          const SizedBox(height: 24),
+          _buildSectionTitle('App Display'),
+          TextFormField(
+            controller: _displayNameController,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+              labelText: 'Display Name *',
+              hintText: 'Shown on the home screen and to caregivers',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _userPhoneController,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              labelText: "User's Phone",
+              hintText: 'The phone this person carries',
             ),
           ),
           const SizedBox(height: 24),
@@ -858,33 +1080,73 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildSectionTitle('Measurements'),
-          Row(
-            children: [
-              Expanded(
-                child: TextFormField(
-                  controller: _heightController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Height (cm)',
-                    hintText: 'e.g., 170',
+          if (_units == UnitsSystem.imperial)
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _heightFtController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Height (ft)',
+                      hintText: '5',
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: TextFormField(
-                  controller: _weightController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Weight (kg)',
-                    hintText: 'e.g., 75',
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: _heightInController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: '(in)',
+                      hintText: '11',
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: _weightController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Weight (lb)',
+                      hintText: '165',
+                    ),
+                  ),
+                ),
+              ],
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _heightController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Height (cm)',
+                      hintText: 'e.g., 170',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: TextFormField(
+                    controller: _weightController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Weight (kg)',
+                      hintText: 'e.g., 75',
+                    ),
+                  ),
+                ),
+              ],
+            ),
           if (_heightController.text.isNotEmpty ||
-              _weightController.text.isNotEmpty) ...[
+              _weightController.text.isNotEmpty ||
+              _heightFtController.text.isNotEmpty ||
+              _heightInController.text.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
               _buildMeasurementSummary(),
@@ -1015,19 +1277,30 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
   String _buildMeasurementSummary() {
     final parts = <String>[];
-    final height = double.tryParse(_heightController.text);
-    final weight = double.tryParse(_weightController.text);
 
-    if (height != null) {
-      final totalInches = height / 2.54;
-      final feet = (totalInches / 12).floor();
-      final inches = (totalInches % 12).round();
-      parts.add("$feet'$inches\" ($height cm)");
-    }
-
-    if (weight != null) {
-      final lbs = (weight * 2.205).round();
-      parts.add('$lbs lbs ($weight kg)');
+    if (_units == UnitsSystem.imperial) {
+      // Fields hold ft/in and lb; show the metric equivalent.
+      final ft = int.tryParse(_heightFtController.text);
+      final inches = int.tryParse(_heightInController.text);
+      if (ft != null || inches != null) {
+        final cm = Units.feetInchesToCm(ft ?? 0, inches ?? 0);
+        parts.add("${ft ?? 0}'${inches ?? 0}\" (${cm.round()} cm)");
+      }
+      final lb = double.tryParse(_weightController.text);
+      if (lb != null) {
+        parts.add('${lb.round()} lb (${Units.lbToKg(lb).round()} kg)');
+      }
+    } else {
+      final height = double.tryParse(_heightController.text);
+      final weight = double.tryParse(_weightController.text);
+      if (height != null) {
+        parts.add(
+            '${Units.formatHeight(height, UnitsSystem.imperial)} (${height.round()} cm)');
+      }
+      if (weight != null) {
+        parts.add(
+            '${Units.formatWeight(weight, UnitsSystem.imperial)} (${weight.round()} kg)');
+      }
     }
 
     return parts.join(' • ');

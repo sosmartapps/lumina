@@ -59,6 +59,16 @@ class AppTheme {
         ),
       ),
       textTheme: _buildTextTheme(Brightness.light),
+      // Screens set their own FAB backgroundColor; without a themed white
+      // foreground the label/icon rendered near-black on purple and was
+      // illegible ("Add Patient", 2026-07-08).
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        foregroundColor: Colors.white,
+        extendedTextStyle: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           // Min height keeps the large tap target; width must NOT be
@@ -158,6 +168,16 @@ class AppTheme {
         ),
       ),
       textTheme: _buildTextTheme(Brightness.dark),
+      // Screens set their own FAB backgroundColor; without a themed white
+      // foreground the label/icon rendered near-black on purple and was
+      // illegible ("Add Patient", 2026-07-08).
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        foregroundColor: Colors.white,
+        extendedTextStyle: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           // Min height keeps the large tap target; width must NOT be

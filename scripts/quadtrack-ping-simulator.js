@@ -21,7 +21,10 @@
  *   --charging      Charging state: on_battery, charging_qi, charging_reverse, charging_pogo (default: on_battery)
  *   --source        Location source: gps, wifi, cell (default: gps)
  *   --emergency     Simulate emergency mode (rapid pings, erratic movement)
- *   --project       Firebase project ID (default: ssa-bug-dashboard)
+ *   --project       Firebase project ID (default: lumina-sosmartapps)
+ *   --token         OAuth bearer token for Firestore REST auth (rules require
+ *                   an authenticated user). Get one with:
+ *                   gcloud auth print-access-token
  *   --dry-run       Print pings to console without sending to Firestore
  */
 
@@ -61,7 +64,8 @@ const config = {
   charging: args.charging || 'on_battery',
   source: args.source || 'gps',
   emergency: !!args.emergency,
-  project: args.project || 'ssa-bug-dashboard',
+  project: args.project || 'lumina-sosmartapps',
+  token: args.token || process.env.FIRESTORE_TOKEN || null,
   dryRun: !!args['dry-run'],
 };
 
@@ -139,6 +143,7 @@ function writePingToFirestore(ping) {
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(body),
+        ...(config.token ? { Authorization: `Bearer ${config.token}` } : {}),
       },
     };
 

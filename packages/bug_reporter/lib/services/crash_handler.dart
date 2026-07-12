@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,16 +8,38 @@ class CrashHandler {
   static Future<void> initialize({
     required GlobalKey<NavigatorState> navigatorKey,
   }) async {
+    // Debug builds never show the crash-report sheet (the developer has
+    // the console) — also purge any queue left over from earlier sessions
+    // so it can't replay on every hot restart.
+    if (kDebugMode) {
+      await clearPendingCrashes();
+    }
     // Flutter framework errors (widget build failures, etc.)
     FlutterError.onError = (FlutterErrorDetails details) {
+      // Keep developer visibility in the console.
+      FlutterError.presentError(details);
+
+      // Debug-only framework assertions (layout warnings, ink-splash
+      // advisories, overflow reports…) are NOT crashes: they don't exist
+      // in release builds. Recording them as fatal + popping the crash
+      // sheet caused a report-on-every-reload loop (Lumina 2026-07-07).
+      final isDebugAssertion = kDebugMode && details.exception is FlutterError;
+      if (isDebugAssertion) {
+        FirebaseCrashlytics.instance.recordFlutterError(details, fatal: false);
+        return;
+      }
+
       FirebaseCrashlytics.instance.recordFlutterFatalError(details);
       _persistCrash(details.toString());
     };
 
     // Dart async / platform channel errors
     WidgetsBinding.instance.platformDispatcher.onError = (error, stack) {
+      debugPrint('UNCAUGHT: $error\n$stack');
       FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-      _persistCrash('$error\n\n$stack');
+      // In debug the developer sees the console; only queue the in-app
+      // crash sheet for release users.
+      if (!kDebugMode) _persistCrash('$error\n\n$stack');
       return true;
     };
   }

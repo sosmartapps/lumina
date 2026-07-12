@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -181,6 +183,41 @@ class _ManagePetFeedingScreenState
             ),
             const SizedBox(height: 12),
 
+            // Food photos — tap to view full-screen
+            if (feeding.foodPhotoUrls.isNotEmpty) ...[
+              SizedBox(
+                height: 72,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: feeding.foodPhotoUrls
+                      .map((url) => Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: GestureDetector(
+                              onTap: () => _showFoodPhoto(url),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.network(
+                                  url,
+                                  width: 72,
+                                  height: 72,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stack) =>
+                                      Container(
+                                    width: 72,
+                                    color: Colors.grey.shade200,
+                                    child: const Icon(Icons.broken_image,
+                                        color: Colors.grey),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ))
+                      .toList(),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+
             // Feeding times
             Wrap(
               spacing: 8,
@@ -353,6 +390,11 @@ class _ManagePetFeedingScreenState
     final notesController = TextEditingController(text: existing?.notes ?? '');
 
     PetType petType = existing?.petType ?? PetType.dog;
+    // Food photos: existing uploaded URLs + newly picked local files.
+    final photoUrls = <String>[...(existing?.foodPhotoUrls ?? const [])];
+    final newPhotoFiles = <File>[];
+    final removedUrls = <String>[];
+    bool saving = false;
     final times = <FeedingTime>[
       ...(existing?.feedingTimes ??
           [
@@ -424,6 +466,72 @@ class _ManagePetFeedingScreenState
                     ),
                   ),
                   const SizedBox(height: 20),
+
+                  // Food photos — show exactly which cup/can to use
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text('Food photos',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      IconButton(
+                        tooltip: 'Take photo',
+                        icon: const Icon(Icons.camera_alt,
+                            color: AppTheme.primaryGreen),
+                        onPressed: () async {
+                          final file = await ref
+                              .read(petFeedingServiceProvider)
+                              .captureFoodPhoto();
+                          if (file != null) {
+                            setState(() => newPhotoFiles.add(file));
+                          }
+                        },
+                      ),
+                      IconButton(
+                        tooltip: 'From gallery',
+                        icon: const Icon(Icons.photo_library,
+                            color: AppTheme.primaryGreen),
+                        onPressed: () async {
+                          final file = await ref
+                              .read(petFeedingServiceProvider)
+                              .pickFoodPhotoFromGallery();
+                          if (file != null) {
+                            setState(() => newPhotoFiles.add(file));
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  if (photoUrls.isEmpty && newPhotoFiles.isEmpty)
+                    Text(
+                      'e.g., the measuring cup of dry food, the wet-food can',
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    )
+                  else
+                    SizedBox(
+                      height: 84,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          ...photoUrls.map((url) => _foodThumb(
+                                image: Image.network(url,
+                                    width: 72, height: 84, fit: BoxFit.cover),
+                                onRemove: () => setState(() {
+                                  photoUrls.remove(url);
+                                  removedUrls.add(url);
+                                }),
+                              )),
+                          ...newPhotoFiles.map((file) => _foodThumb(
+                                image: Image.file(file,
+                                    width: 72, height: 84, fit: BoxFit.cover),
+                                onRemove: () => setState(
+                                    () => newPhotoFiles.remove(file)),
+                              )),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 8),
 
                   // Feeding times
                   Row(
@@ -538,7 +646,9 @@ class _ManagePetFeedingScreenState
               ElevatedButton(
                 style:
                     ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryGreen),
-                onPressed: () async {
+                onPressed: saving
+                    ? null
+                    : () async {
                   final name = nameController.text.trim();
                   if (name.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -572,41 +682,133 @@ class _ManagePetFeedingScreenState
                   final amount = amountController.text.trim();
                   final notes = notesController.text.trim();
 
-                  if (isEdit) {
-                    final updated = existing.copyWith(
-                      petName: name,
-                      petType: petType,
-                      foodType: foodType.isEmpty ? null : foodType,
-                      amount: amount.isEmpty ? null : amount,
-                      feedingTimes: times,
-                      repeatDays: repeatDays,
-                      notes: notes.isEmpty ? null : notes,
+                  setState(() => saving = true);
+                  try {
+                    // Upload any newly picked food photos first.
+                    final uploadedUrls = <String>[];
+                    for (final file in newPhotoFiles) {
+                      uploadedUrls.add(await service.uploadFoodPhoto(
+                        file: file,
+                        userId: user.id,
+                      ));
+                    }
+                    final allPhotoUrls = [...photoUrls, ...uploadedUrls];
+
+                    if (isEdit) {
+                      final updated = existing.copyWith(
+                        petName: name,
+                        petType: petType,
+                        foodType: foodType.isEmpty ? null : foodType,
+                        amount: amount.isEmpty ? null : amount,
+                        foodPhotoUrls: allPhotoUrls,
+                        feedingTimes: times,
+                        repeatDays: repeatDays,
+                        notes: notes.isEmpty ? null : notes,
+                      );
+                      await service.updateFeeding(updated);
+                    } else {
+                      final created = PetFeeding(
+                        id: '',
+                        userId: user.id,
+                        petName: name,
+                        petType: petType,
+                        foodType: foodType.isEmpty ? null : foodType,
+                        amount: amount.isEmpty ? null : amount,
+                        foodPhotoUrls: allPhotoUrls,
+                        feedingTimes: times,
+                        repeatDays: repeatDays,
+                        notes: notes.isEmpty ? null : notes,
+                        createdBy: createdBy,
+                      );
+                      await service.createFeeding(created);
+                    }
+
+                    // Clean up photos the user removed from an existing pet.
+                    for (final url in removedUrls) {
+                      await service.deleteFoodPhoto(url);
+                    }
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    setState(() => saving = false);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Could not save: $e')),
                     );
-                    await service.updateFeeding(updated);
-                  } else {
-                    final created = PetFeeding(
-                      id: '',
-                      userId: user.id,
-                      petName: name,
-                      petType: petType,
-                      foodType: foodType.isEmpty ? null : foodType,
-                      amount: amount.isEmpty ? null : amount,
-                      feedingTimes: times,
-                      repeatDays: repeatDays,
-                      notes: notes.isEmpty ? null : notes,
-                      createdBy: createdBy,
-                    );
-                    await service.createFeeding(created);
+                    return;
                   }
 
                   if (!context.mounted) return;
                   Navigator.pop(context);
                 },
-                child: Text(isEdit ? 'Save' : 'Add'),
+                child: saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : Text(isEdit ? 'Save' : 'Add'),
               ),
             ],
           );
         },
+      ),
+    );
+  }
+
+  void _showFoodPhoto(String url) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.all(8),
+        child: Stack(
+          children: [
+            InteractiveViewer(
+              maxScale: 5,
+              child: Image.network(url),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close),
+                style: IconButton.styleFrom(backgroundColor: Colors.white70),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _foodThumb({
+    required Widget image,
+    required VoidCallback onRemove,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: image,
+          ),
+          Positioned(
+            top: 2,
+            right: 2,
+            child: GestureDetector(
+              onTap: onRemove,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: const BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.close, size: 14, color: Colors.white),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

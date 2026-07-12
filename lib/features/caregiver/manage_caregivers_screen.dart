@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/models/caregiver.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
+import 'invite_caregiver_screen.dart';
 
 /// Screen for viewing and managing caregivers linked to the selected patient
 class ManageCaregiversScreen extends ConsumerStatefulWidget {
@@ -31,14 +32,81 @@ class _ManageCaregiversScreenState extends ConsumerState<ManageCaregiversScreen>
     return caregivers;
   }
 
-  Future<void> _changeRole(Caregiver caregiver, CaregiverRole newRole) async {
+  /// Multi-role editor: tick every role this person holds for the patient.
+  Future<void> _editRoles(Caregiver caregiver) async {
     final patient = ref.read(caregiverNotifierProvider).selectedUser;
     if (patient == null) return;
 
-    await _firestore.collection('caregivers').doc(caregiver.id).update({
-      'roleOverrides.${patient.id}': newRole.value,
-    });
-    setState(() {});
+    const editableRoles = [
+      CaregiverRole.caregiver,
+      CaregiverRole.familyMember,
+      CaregiverRole.healthcare,
+      CaregiverRole.financeManager,
+    ];
+    final selected = <CaregiverRole>{
+      ...caregiver
+          .rolesForPatient(patient.id)
+          .where((r) => r != CaregiverRole.primaryCaregiver),
+    };
+    if (selected.isEmpty) selected.add(CaregiverRole.caregiver);
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Roles for ${caregiver.name}'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: editableRoles.map((role) {
+              return CheckboxListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text(role.displayName),
+                value: selected.contains(role),
+                onChanged: (checked) => setDialogState(() {
+                  if (checked == true) {
+                    selected.add(role);
+                  } else if (selected.length > 1) {
+                    // Keep at least one role
+                    selected.remove(role);
+                  }
+                }),
+                );
+              }).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved != true) return;
+
+    try {
+      await _firestore.collection('caregivers').doc(caregiver.id).update({
+        'roleOverrides.${patient.id}': selected.first.value,
+        'multiRoleOverrides.${patient.id}':
+            selected.map((r) => r.value).toList(),
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not update roles: $e')),
+        );
+      }
+    }
+    if (mounted) setState(() {});
   }
 
   Future<void> _removeCaregiver(Caregiver caregiver) async {
@@ -105,6 +173,23 @@ class _ManageCaregiversScreenState extends ConsumerState<ManageCaregiversScreen>
         backgroundColor: AppTheme.primaryPurple,
         title: const Text('Caregivers'),
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const InviteCaregiverScreen(),
+            ),
+          );
+          if (mounted) setState(() {}); // refresh after invites redeemed
+        },
+        backgroundColor: AppTheme.primaryPurple,
+        icon: const Icon(Icons.person_add, color: Colors.white),
+        label: const Text(
+          'Invite Caregiver',
+          style: TextStyle(color: Colors.white),
+        ),
+      ),
       body: FutureBuilder<List<Caregiver>>(
         future: _loadCaregivers(),
         builder: (context, snapshot) {
@@ -118,12 +203,14 @@ class _ManageCaregiversScreenState extends ConsumerState<ManageCaregiversScreen>
           }
 
           return ListView.builder(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
             itemCount: caregivers.length,
             itemBuilder: (context, index) {
               final cg = caregivers[index];
               final isPrimary = patient?.primaryCaregiverId == cg.id;
-              final role = cg.roleForPatient(patient?.id ?? '');
+              final roles = cg.rolesForPatient(patient?.id ?? '');
+              final rolesLabel =
+                  roles.map((r) => r.displayName).join(' + ');
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -181,7 +268,7 @@ class _ManageCaregiversScreenState extends ConsumerState<ManageCaregiversScreen>
                       Text(cg.email),
                       const SizedBox(height: 2),
                       Text(
-                        role.displayName,
+                        rolesLabel,
                         style: TextStyle(
                           color: Colors.grey.shade600,
                           fontSize: 13,
@@ -195,26 +282,21 @@ class _ManageCaregiversScreenState extends ConsumerState<ManageCaregiversScreen>
                           onSelected: (value) {
                             if (value == 'remove') {
                               _removeCaregiver(cg);
-                            } else {
-                              _changeRole(cg, CaregiverRole.fromString(value));
+                            } else if (value == 'roles') {
+                              _editRoles(cg);
                             }
                           },
                           itemBuilder: (context) => [
-                            ...CaregiverRole.values
-                                .where((r) => r != CaregiverRole.primaryCaregiver)
-                                .map((r) => PopupMenuItem(
-                                      value: r.value,
-                                      child: Row(
-                                        children: [
-                                          if (r == role)
-                                            const Icon(Icons.check, size: 18, color: AppTheme.primaryGreen)
-                                          else
-                                            const SizedBox(width: 18),
-                                          const SizedBox(width: 8),
-                                          Text(r.displayName),
-                                        ],
-                                      ),
-                                    )),
+                            const PopupMenuItem(
+                              value: 'roles',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.badge, size: 18),
+                                  SizedBox(width: 8),
+                                  Text('Edit Roles'),
+                                ],
+                              ),
+                            ),
                             const PopupMenuDivider(),
                             const PopupMenuItem(
                               value: 'remove',

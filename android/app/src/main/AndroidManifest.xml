@@ -19,6 +19,9 @@
     <!-- Notification and vibration -->
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Exact alarms for medication reminders (auto-granted for alarm/
+         reminder apps on Android 14+; medication timing qualifies) -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
 
     <!-- Boot and wake -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>

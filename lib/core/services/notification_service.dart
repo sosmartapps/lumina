@@ -448,6 +448,22 @@ class NotificationService {
     required String id,
     required bool isCaregiver,
   }) async {
+    // On iOS, getToken() throws apns-token-not-set if called before the
+    // APNS token arrives — wait for it (up to ~10s).
+    if (Platform.isIOS) {
+      String? apnsToken = await _firebaseMessaging.getAPNSToken();
+      var attempts = 0;
+      while (apnsToken == null && attempts < 10) {
+        await Future.delayed(const Duration(seconds: 1));
+        apnsToken = await _firebaseMessaging.getAPNSToken();
+        attempts++;
+      }
+      if (apnsToken == null) {
+        debugPrint('APNS token never arrived — skipping FCM registration');
+        return;
+      }
+    }
+
     final token = await getFCMToken();
     if (token == null) return;
 

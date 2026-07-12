@@ -226,10 +226,21 @@ class LocationService {
   /// Resolve a free-form location query. Accepts, in priority order:
   /// 1. what3words — `///word.word.word` or `word.word.word`
   ///    (requires W3W_API_KEY in .env; free tier at what3words.com)
-  /// 2. Raw coordinates — `32.2226, -110.9747`
-  /// 3. Street address (geocoded)
+  /// 2. Decimal coordinates — `32.487749, -110.912154` (as copied from
+  ///    Google Maps, including its invisible Unicode formatting marks)
+  /// 3. DMS coordinates — `32°29'15.9"N 110°54'43.8"W`
+  /// 4. Street address (geocoded)
   Future<GeoPoint?> resolveLocationQuery(String query) async {
-    final q = query.trim();
+    // Strip invisible/bidi formatting chars (Google Maps copies include
+    // them — they survive trim() and silently break parsing) and unify
+    // curly quotes to straight ones for DMS.
+    final q = query
+        // zero-width & bidi marks (Google Maps copies include these)
+        .replaceAll(RegExp('[\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u206F\\uFEFF]'), '')
+        // curly/prime quotes -> straight, for DMS input
+        .replaceAll(RegExp('[\\u2018\\u2019\\u2032]'), "'")
+        .replaceAll(RegExp('[\\u201C\\u201D\\u2033]'), '"')
+        .trim();
     if (q.isEmpty) return null;
 
     // what3words: three words separated by dots, optional /// prefix.
@@ -242,9 +253,9 @@ class LocationService {
           '${w3w.group(1)}.${w3w.group(2)}.${w3w.group(3)}');
     }
 
-    // Raw "lat, lng" coordinates.
+    // Decimal "lat, lng" — tolerant of extra whitespace.
     final coords = RegExp(
-      r'^(-?\d{1,3}(?:\.\d+)?)\s*[, ]\s*(-?\d{1,3}(?:\.\d+)?)$',
+      r'^(-?\d{1,3}(?:\.\d+)?)\s*[,;\s]\s*(-?\d{1,3}(?:\.\d+)?)$',
     ).firstMatch(q);
     if (coords != null) {
       final lat = double.tryParse(coords.group(1)!);
@@ -252,6 +263,20 @@ class LocationService {
       if (lat != null && lng != null && lat.abs() <= 90 && lng.abs() <= 180) {
         return GeoPoint(lat, lng);
       }
+    }
+
+    // DMS: 32°29'15.9"N 110°54'43.8"W
+    final dms = RegExp(
+      r'''^(\d{1,3})°\s*(\d{1,2})'\s*([\d.]+)"?\s*([NSns])[,\s]+(\d{1,3})°\s*(\d{1,2})'\s*([\d.]+)"?\s*([EWew])$''',
+    ).firstMatch(q);
+    if (dms != null) {
+      double toDecimal(String d, String m, String s) =>
+          double.parse(d) + double.parse(m) / 60 + double.parse(s) / 3600;
+      var lat = toDecimal(dms.group(1)!, dms.group(2)!, dms.group(3)!);
+      var lng = toDecimal(dms.group(5)!, dms.group(6)!, dms.group(7)!);
+      if (dms.group(4)!.toUpperCase() == 'S') lat = -lat;
+      if (dms.group(8)!.toUpperCase() == 'W') lng = -lng;
+      if (lat.abs() <= 90 && lng.abs() <= 180) return GeoPoint(lat, lng);
     }
 
     return getLocationFromAddress(q);

@@ -367,7 +367,7 @@ class _ExpenseDetailScreenState extends ConsumerState<ExpenseDetailScreen> {
     bool outlined = false,
   }) {
     return SizedBox(
-      height: 52,
+      width: double.infinity,
       child: outlined
           ? OutlinedButton.icon(
               onPressed: onPressed,
