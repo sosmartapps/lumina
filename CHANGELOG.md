@@ -3,6 +3,14 @@
 <!-- Claude will automatically log completed work here. -->
 <!-- Format: Date - Build Number - Summary heading, then bullet points of what changed. -->
 
+## 2026-07-12 - Bouncie per-family linking DEVICE-VERIFIED + patient-switch state bugs fixed
+
+- **Per-family Bouncie linking verified end-to-end on dev iPhone** (PRIVACY ship-blocker closed): reconnect via new sosmartapps.app/bouncie copy-code flow works, linked patient shows live vehicle card, unlinked patient shows NO vehicle card. Firestore rules+indexes deployed (`firebase deploy --only firestore`; rules were already current, indexes deployed fresh).
+- **Root-caused stale patient-switch UI**: `caregiverNotifierProvider` was a plain `Provider` wrapping a ChangeNotifier, so every `ref.watch` on it silently never rebuilt. Symptoms on device: AppBar title stuck on previous patient; `const VehicleStatusCard` stuck on previous patient's vehicle (showed Jack's F-150 on Michael's dashboard). Fix: `ChangeNotifierProvider` (flutter_riverpod/legacy) + `ref.watch` in caregiver dashboard build. Also un-froze existing watchers in patients_overview_screen and vehicle_tracking_screen.
+- **Duplicate managed-user rows fixed**: `addManagedUser` appended blindly — same patient appeared twice in All Patients, both badged "Viewing". Now dedupes by id.
+- All fixes device-verified on iPhone (switch Jack↔Michael: title tracks, vehicle card appears/disappears correctly, single Michael row).
+- Backlog task filed in Dev Planner: Firebase App Check provider missing (Android logcat spams "No AppCheckProvider installed"; harmless until enforcement enabled). Marked "per-user Bouncie linking (PRIVACY)" done.
+
 ## 2026-07-08 - QuadTrack DEVICE-TESTED end-to-end + push notifications fixed app-wide
 
 - **First-ever live pass verified on dev iPhone**: dashboard empty state → registration (real patients, serial dup-check, profile prompt) → detail screen (map+trail, gauges, satellite toggle, rename, battery-aware emergency w/ reason + banner) → ingest function pings render live → low-battery push banner w/ correct text → tap deep-links to device screen

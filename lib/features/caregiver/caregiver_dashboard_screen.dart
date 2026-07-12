@@ -149,6 +149,9 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
 
   @override
   Widget build(BuildContext context) {
+    // Rebuild the whole screen (incl. AppBar title) on patient switch —
+    // works now that caregiverNotifierProvider is a ChangeNotifierProvider.
+    ref.watch(caregiverNotifierProvider);
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(

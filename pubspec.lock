@@ -1814,14 +1814,14 @@ packages:
   ssa_auth:
     dependency: "direct main"
     description:
-      path: "../packages/ssa_auth"
+      path: "packages/ssa_auth"
       relative: true
     source: path
     version: "1.0.0"
   ssa_core:
     dependency: transitive
     description:
-      path: "../packages/ssa_core"
+      path: "packages/ssa_core"
       relative: true
     source: path
     version: "1.0.0"

@@ -1,6 +1,8 @@
 # QuadTrack — Complete Feature Reference (Pause Snapshot, 2026-07-07)
 
-> **Purpose of this document:** QuadTrack is being **paused and unhooked from the Lumina UI on 2026-07-07**. This file is the single source of truth for resuming the feature in a fresh session with zero other context. It captures product intent, every code artifact, the Firestore footprint, Cloud Functions, exact integration points that were removed, known bugs, and a resume checklist.
+> **⚠️ STALE — RESUMED 2026-07-07, DEVICE-TESTED 2026-07-08.** This was the pause snapshot. The resume session worked the entire §7 TODO list: UI re-hooked, rules added+deployed (incl. `quadtrack_commands`/`quadtrack_shares`), ping schema unified to the Dart shape, TrackingMode/'active' mismatch fixed, `quadTrackCommand` hardened with X-Device-Key auth, real patients wired into registration, rename implemented, battery-aware emergency hooked up. Functions deployed; core flow verified live on the dev iPhone. **See CHANGELOG.md entries 2026-07-07/08 for current state** — §2 bugs and §7 TODOs below are RESOLVED except the "Still untested" list in the 07-08 entry and the hardware track (§7 #13). Architecture sections (§3–§6) remain accurate reference.
+>
+> **Original purpose:** QuadTrack was **paused and unhooked from the Lumina UI on 2026-07-07**. This file captured product intent, every code artifact, the Firestore footprint, Cloud Functions, exact integration points that were removed, known bugs, and a resume checklist.
 
 ---
 

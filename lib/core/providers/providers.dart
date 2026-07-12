@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import '../models/bouncie_connection.dart';
@@ -29,7 +30,12 @@ import '../../features/bouncie/bouncie_service.dart';
 // ListenableBuilder to reactively rebuild on notifyListeners().
 final appStateNotifierProvider = Provider((ref) => AppStateProvider());
 final userNotifierProvider = Provider((ref) => UserProvider());
-final caregiverNotifierProvider = Provider((ref) => CaregiverProvider());
+// ChangeNotifierProvider (not plain Provider) so ref.watch() rebuilds on
+// notifyListeners() — plain Provider silently never rebuilds watchers
+// (caused stale AppBar title + stale VehicleStatusCard on patient switch,
+// 2026-07-12).
+final caregiverNotifierProvider =
+    ChangeNotifierProvider((ref) => CaregiverProvider());
 
 // Service providers
 final authServiceProvider = Provider((ref) => AuthService());

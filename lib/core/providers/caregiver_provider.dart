@@ -190,7 +190,14 @@ class CaregiverProvider with ChangeNotifier {
 
   /// Add a newly created patient and auto-select them
   void addManagedUser(AppUser user) {
-    _managedUsers.add(user);
+    // Dedupe by id — appending the same user twice caused duplicate rows
+    // in All Patients, both badged "Viewing" (2026-07-12).
+    final index = _managedUsers.indexWhere((u) => u.id == user.id);
+    if (index != -1) {
+      _managedUsers[index] = user;
+    } else {
+      _managedUsers.add(user);
+    }
     _selectedUser = user;
     notifyListeners();
   }
