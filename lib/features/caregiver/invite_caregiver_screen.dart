@@ -26,6 +26,10 @@ class _InviteCaregiverScreenState extends ConsumerState<InviteCaregiverScreen> {
   bool _isLoading = false;
   String? _errorMessage;
 
+  /// One code covering every patient this caregiver manages (2026-07-12).
+  bool _shareAllPatients = false;
+  int _sharedPatientCount = 1;
+
   static const _invitableRoles = [
     CaregiverRole.caregiver,
     CaregiverRole.familyMember,
@@ -52,13 +56,42 @@ class _InviteCaregiverScreenState extends ConsumerState<InviteCaregiverScreen> {
     });
 
     try {
+      // "Share all" only covers patients where THIS caregiver is the
+      // primary (firestore.rules rejects invite docs for the rest).
+      final patientIds = _shareAllPatients
+          ? caregiverProvider.managedUsers
+              .where((u) =>
+                  u.primaryCaregiverId == null ||
+                  u.primaryCaregiverId == caregiver.id)
+              .map((u) => u.id)
+              .toList()
+          : [patient.id];
       final inviteService = ref.read(inviteServiceProvider);
-      final invite = await inviteService.createInviteCode(
-        patientId: patient.id,
+      final result = await inviteService.createInviteCode(
+        patientIds: patientIds.isEmpty ? [patient.id] : patientIds,
         caregiverId: caregiver.id,
         assignedRoles: _selectedRoles.toList(),
       );
-      setState(() => _generatedInvite = invite);
+      setState(() {
+        _generatedInvite = result.invite;
+        _sharedPatientCount = (patientIds.isEmpty ? 1 : patientIds.length) -
+            result.skippedPatientIds.length;
+      });
+      if (result.skippedPatientIds.isNotEmpty && mounted) {
+        final names = caregiverProvider.managedUsers
+            .where((u) => result.skippedPatientIds.contains(u.id))
+            .map((u) => u.name)
+            .join(', ');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.primaryOrange,
+            duration: const Duration(seconds: 6),
+            content: Text(
+                'Code does NOT cover: $names (Premium required, or you '
+                'are not their primary caregiver)'),
+          ),
+        );
+      }
     } catch (e) {
       setState(() => _errorMessage = e.toString());
     } finally {
@@ -75,7 +108,10 @@ class _InviteCaregiverScreenState extends ConsumerState<InviteCaregiverScreen> {
     final inviteService = ref.read(inviteServiceProvider);
     final link = inviteService.generateShareLink(_generatedInvite!);
     final patient = ref.read(caregiverNotifierProvider).selectedUser;
-    return 'Join me as a caregiver for ${patient?.name ?? 'my loved one'} on Lumina!\n\n'
+    final who = _sharedPatientCount > 1
+        ? 'my $_sharedPatientCount patients'
+        : (patient?.name ?? 'my loved one');
+    return 'Join me as a caregiver for $who on Lumina!\n\n'
         'Use invite code: ${_generatedInvite!.code}\n'
         'Or open this link: $link\n\n'
         'The code expires in 24 hours.';
@@ -135,7 +171,27 @@ class _InviteCaregiverScreenState extends ConsumerState<InviteCaregiverScreen> {
               'Invite someone to help care for ${patient?.name ?? 'your patient'}',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
+
+            // Share every managed patient with one code
+            if (caregiverProvider.managedUsers.length > 1)
+              Material(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                child: SwitchListTile(
+                  value: _shareAllPatients,
+                  onChanged: (v) => setState(() => _shareAllPatients = v),
+                  title: const Text('Share all my patients'),
+                  subtitle: Text(
+                    'One code adds them to all '
+                    '${caregiverProvider.managedUsers.length} patients '
+                    'you manage',
+                    style: TextStyle(
+                        fontSize: 13, color: Colors.grey.shade600),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 12),
 
             // Role tickboxes — one person can hold several roles
             const Text(

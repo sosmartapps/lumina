@@ -479,7 +479,7 @@ class _CaregiverLoginScreenState extends ConsumerState<CaregiverLoginScreen> {
                             );
 
                             final inviteService = ref.read(inviteServiceProvider);
-                            final patient = await inviteService.redeemInviteCode(
+                            final patients = await inviteService.redeemInviteCode(
                               code: code,
                               caregiverId: credential.user!.uid,
                             );
@@ -500,7 +500,9 @@ class _CaregiverLoginScreenState extends ConsumerState<CaregiverLoginScreen> {
 
                             ScaffoldMessenger.of(this.context).showSnackBar(
                               SnackBar(
-                                content: Text('Joined ${patient.name}\'s care team!'),
+                                content: Text(patients.length == 1
+                                    ? 'Joined ${patients.first.name}\'s care team!'
+                                    : 'Joined ${patients.length} care teams!'),
                                 backgroundColor: AppTheme.primaryGreen,
                               ),
                             );

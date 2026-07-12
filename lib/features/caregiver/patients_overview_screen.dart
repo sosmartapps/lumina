@@ -9,6 +9,7 @@ import '../../core/models/medication.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
 import 'add_patient_screen.dart';
+import 'redeem_invite_dialog.dart';
 
 /// One page to watch every patient a caregiver manages: live status card
 /// per patient (activity, today's meds, pending expenses, driving alerts).
@@ -25,6 +26,13 @@ class PatientsOverviewScreen extends ConsumerWidget {
       appBar: AppBar(
         backgroundColor: AppTheme.primaryPurple,
         title: const Text('All Patients'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.qr_code),
+            tooltip: 'Redeem invite code',
+            onPressed: () => showRedeemInviteDialog(context, ref),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.push(

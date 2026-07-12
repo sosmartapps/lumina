@@ -65,9 +65,17 @@ class CaregiverProvider with ChangeNotifier {
 
     final users = <AppUser>[];
     for (final userId in _caregiver!.managedUserIds) {
-      final doc = await _firestore.collection('users').doc(userId).get();
-      if (doc.exists) {
-        users.add(AppUser.fromFirestore(doc));
+      try {
+        final doc = await _firestore.collection('users').doc(userId).get();
+        if (doc.exists) {
+          users.add(AppUser.fromFirestore(doc));
+        }
+      } catch (e) {
+        // Dangling id (deleted patient doc): rules DENY reads of missing
+        // docs, so get() throws instead of returning exists=false. One bad
+        // id must not abort loading the rest (2026-07-12: deleted dup
+        // left every patient invisible).
+        debugPrint('Skipping unreadable managed user $userId: $e');
       }
     }
 
@@ -89,6 +97,13 @@ class CaregiverProvider with ChangeNotifier {
 
   /// Select user by ID
   void selectUserById(String userId) {
+    // Empty list = nothing to select ("Bad state: No element" crash when
+    // app state pointed at a deleted patient, 2026-07-12).
+    if (_managedUsers.isEmpty) {
+      _selectedUser = null;
+      notifyListeners();
+      return;
+    }
     _selectedUser = _managedUsers.firstWhere(
       (u) => u.id == userId,
       orElse: () => _managedUsers.first,

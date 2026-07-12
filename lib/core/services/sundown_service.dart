@@ -141,8 +141,8 @@ class SundownService {
       final now = DateTime.now();
       final timeToSunset = sunsetTime.difference(now);
 
-      // Detect travel mode from GPS speed
-      final travelMode = _detectTravelMode(position.speed);
+      // Detect travel mode from GPS speed (distance-based when stationary)
+      final travelMode = _detectTravelMode(position.speed, distance);
       final avgSpeed = _getAverageSpeed(travelMode);
 
       // Estimate travel time with routing factor
@@ -284,7 +284,7 @@ class SundownService {
       if (sunsetTime == null) return;
 
       final timeToSunset = sunsetTime.difference(now);
-      final travelMode = _detectTravelMode(position.speed);
+      final travelMode = _detectTravelMode(position.speed, distance);
       final avgSpeed = _getAverageSpeed(travelMode);
       final estimatedTravelSeconds = (distance * _routingFactor) / avgSpeed;
       final estimatedTravelMinutes = (estimatedTravelSeconds / 60).ceil();
@@ -314,9 +314,20 @@ class SundownService {
     }
   }
 
-  TravelMode _detectTravelMode(double speedMs) {
-    // Filter out invalid/noisy speed readings
-    if (speedMs < 0.5) return TravelMode.walking;
+  /// Beyond this distance from home, a stationary user is assumed to be
+  /// driving — nobody walks this far home (2026-07-12: stationary user
+  /// 55 km out was told "733 minutes to get home. Walking").
+  static const double _walkableDistanceMeters = 2000;
+
+  TravelMode _detectTravelMode(double speedMs, double distanceMeters) {
+    // Stationary or noisy reading — GPS speed says nothing about how
+    // they'll travel. Fall back to distance: short → walking, far →
+    // driving.
+    if (speedMs < 0.5) {
+      return distanceMeters > _walkableDistanceMeters
+          ? TravelMode.driving
+          : TravelMode.walking;
+    }
     return speedMs > _speedThreshold ? TravelMode.driving : TravelMode.walking;
   }
 

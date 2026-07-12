@@ -185,13 +185,13 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         if (deepLinkService.pendingInviteCode != null) {
           try {
             final inviteService = ref.read(inviteServiceProvider);
-            final patient = await inviteService.redeemInviteCode(
+            final patients = await inviteService.redeemInviteCode(
               code: deepLinkService.pendingInviteCode!,
               caregiverId: appState.currentCaregiverId!,
             );
             deepLinkService.clearPendingInviteCode();
             await caregiverProv.loadCaregiver(appState.currentCaregiverId!);
-            caregiverProv.selectUserById(patient.id);
+            caregiverProv.selectUserById(patients.first.id);
             _navigateTo(const CaregiverDashboardScreen());
           } catch (e) {
             debugPrint('Deep link invite redeem failed: $e');

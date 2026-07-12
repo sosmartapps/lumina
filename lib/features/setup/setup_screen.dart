@@ -1270,7 +1270,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   }
 
   Widget _buildCompletePage() {
-    return Padding(
+    // Scrollable so the page survives small viewports (keyboard up /
+    // small phones) — fixed Column overflowed 165px on Android 2026-07-12.
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(32),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1334,7 +1336,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
             ),
           ),
 
-          const Spacer(),
+          const SizedBox(height: 40),
 
           SizedBox(
             width: double.infinity,
@@ -1463,7 +1465,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
     // If invite mode, redeem code and skip patient creation
     if (_authMode == 2) {
       final inviteService = ref.read(inviteServiceProvider);
-      final patient = await inviteService.redeemInviteCode(
+      final patients = await inviteService.redeemInviteCode(
         code: _inviteCodeController.text.trim(),
         caregiverId: _caregiverId!,
       );
@@ -1472,18 +1474,41 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
 
       final appState = ref.read(appStateNotifierProvider);
       await appState.setSetupComplete(
-        userId: patient.id,
+        userId: patients.first.id,
         caregiverId: _caregiverId,
       );
 
       final userProvider = ref.read(userNotifierProvider);
-      await userProvider.loadUser(patient.id);
+      await userProvider.loadUser(patients.first.id);
 
       final caregiverProvider = ref.read(caregiverNotifierProvider);
       await caregiverProvider.loadCaregiver(_caregiverId!);
 
       _joinedViaInvite = true;
       _pageController.jumpToPage(_totalPages - 1);
+      return;
+    }
+
+    // RETURNING caregiver on a new device: if this account already
+    // manages patients, don't march them into creating a new one —
+    // go straight to their dashboard (2026-07-12: Google caregiver with
+    // 2 patients was funneled into the new-patient wizard).
+    final caregiverProvider = ref.read(caregiverNotifierProvider);
+    await caregiverProvider.loadCaregiver(_caregiverId!);
+    if (!mounted) return;
+    if (caregiverProvider.managedUsers.isNotEmpty) {
+      final appState = ref.read(appStateNotifierProvider);
+      await appState.setSetupComplete(
+        userId: caregiverProvider.managedUsers.first.id,
+        caregiverId: _caregiverId,
+      );
+      await appState.setCaregiverMode(true, caregiverId: _caregiverId!);
+      caregiverProvider.listenToCaregiver(_caregiverId!);
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+            builder: (context) => const CaregiverDashboardScreen()),
+      );
       return;
     }
 

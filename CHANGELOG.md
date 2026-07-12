@@ -3,6 +3,26 @@
 <!-- Claude will automatically log completed work here. -->
 <!-- Format: Date - Build Number - Summary heading, then bullet points of what changed. -->
 
+## 2026-07-12 (evening) - Share-all invites + returning-caregiver onboarding + dangling-id crash fixes (all DEVICE-VERIFIED on Pixel)
+
+- **Share-all-patients invite**: one code, one rules-validated invite doc per patient (rules can't loop arrays, so per-doc premium/primary checks are preserved). Toggle on Invite Caregiver screen; redeem links every patient the code covers; orange snackbar reports patients the code could NOT cover (premium required / not primary). Return types: create → `(invite, skippedPatientIds)`, redeem → `List<AppUser>` (4 callers updated).
+- **Returning-caregiver onboarding fixed**: setup wizard now loads the caregiver after OAuth sign-in and, if they already manage patients, skips patient creation and goes straight to the dashboard. Previously every returning caregiver on a new device was funneled into creating a duplicate patient (this is how the July 7 duplicate Jack existed).
+- **Dangling managedUserId crash fixed**: rules DENY reads of deleted docs, so `get()` throws instead of `exists=false`; `_loadManagedUsers` now try/catches per doc (one deleted patient made ALL patients invisible). `selectUserById` no longer throws on empty list.
+- **Data cleanup (Firebase console)**: deleted duplicate July 7 Jack (`users/2Rzg9giSjYIZkUQ8PijQ`, Google-primary), set Michael `subscriptionTier: premium` (new patients default to free, and rules block invites for free patients — root cause of share-all silently skipping him before skip-reporting existed).
+- **medication_logs index added** (userId ASC + scheduledTime ASC) — deployed; existing index was DESC-only.
+- **Sundown travel-mode fix**: stationary user now classified by distance-to-home (>2 km ⇒ driving) instead of defaulting to walking ("733 minutes to get home. Walking").
+- **Misc**: invite share-all switch wrapped in Material (ListTile assertion spam); Android fresh-install flow verified end-to-end: Google sign-in → dashboard with both patients, Jack shows F-150 Bouncie card, Michael doesn't.
+- Remaining Android items: OCR w/ Play services, full UI walk. Remaining invite item: exercise the orange "code does NOT cover" snackbar deliberately.
+
+## 2026-07-12 (later) - Android first real pass: Google sign-in + invite redeem + Bouncie card VERIFIED; OAuth invite gap fixed
+
+- **Android device-verified**: Google sign-in works; invite code redeem works; Jack's dashboard renders with live Bouncie vehicle card. First successful end-to-end Android session.
+- **Account-split discovery**: Apple-on-iPhone (private relay email) and Google-on-Android are separate Firebase UIDs — second device lands in new-account wizard. Not linkable by email (relay). Resolution: join family via invite codes.
+- **OAuth invite gap fixed**: the only redeem UI was the login screen's email/password dialog — OAuth caregivers had NO path to join a family. Added shared `redeem_invite_dialog.dart` (redeems as current signed-in user, any provider), wired into caregiver dashboard "No patients yet" empty state (new Add Patient + invite buttons) and All Patients AppBar QR icon.
+- **Setup wizard "All Set" page overflowed 165px** with keyboard up (Android) — now SingleChildScrollView, Spacer→SizedBox.
+- **Open question for launch**: subscription entitlement is per caregiver account — Android/Google caregiver saw "Free Plan" while Apple/iPhone caregiver has Premium, same family. Needs family-level entitlement decision. Task filed.
+- Still untested on Android: OCR w/ Play services, full UI walk, patient switching (needs 2nd patient joined).
+
 ## 2026-07-12 - Bouncie per-family linking DEVICE-VERIFIED + patient-switch state bugs fixed
 
 - **Per-family Bouncie linking verified end-to-end on dev iPhone** (PRIVACY ship-blocker closed): reconnect via new sosmartapps.app/bouncie copy-code flow works, linked patient shows live vehicle card, unlinked patient shows NO vehicle card. Firestore rules+indexes deployed (`firebase deploy --only firestore`; rules were already current, indexes deployed fresh).

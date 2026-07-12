@@ -19,7 +19,8 @@
 - Bouncie per-family linking DEVICE-VERIFIED 2026-07-12 (privacy ship-blocker closed; see CHANGELOG). Patient-switch state bugs fixed same day (ChangeNotifierProvider + addManagedUser dedupe) — device-verified
 - Pet feeding reminders (2026-07-06) built but NOT device-tested — test add/edit/delete schedule, mark-fed, notifications fire, history; then `firebase deploy --only firestore`
 - Expense/reimbursement feature (2026-07-03) built but NOT device-tested — test add/scan/approve/reimburse flow, then deploy `firebase deploy --only firestore,storage`
-- Apple sign-in VERIFIED on iPhone; Google configured both platforms (untested). Android: needs full pass (Google sign-in, OCR w/ Play services, UI walk, re-verify Bouncie/patient-switch)
+- Apple sign-in VERIFIED iPhone; Google sign-in VERIFIED Android (Pixel 10 Pro XL). Android verified 07-12: fresh install → Google → dashboard, invite redeem (incl. share-all), Bouncie card, patient list. Remaining: OCR w/ Play services, full UI walk
+- Multi-device caregivers use invite codes (Apple/Google = separate UIDs; relay email blocks linking). Share-all invite live. Subscription is per-caregiver-account — family entitlement task in Dev Planner
 - App Check provider not installed (logcat spam, harmless until enforced) — backlog task in Dev Planner
 
 ## Remaining Work

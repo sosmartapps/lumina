@@ -36,6 +36,7 @@ import 'add_patient_screen.dart';
 import 'invite_caregiver_screen.dart';
 import 'manage_caregivers_screen.dart';
 import 'patients_overview_screen.dart';
+import 'redeem_invite_dialog.dart';
 import '../../features/subscription/subscription_status_card.dart';
 import '../../features/subscription/paywall_screen.dart';
 import '../medical_records/medical_records_screen.dart';
@@ -304,23 +305,49 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
 
   Widget _buildNoUserSelected() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.person_search,
-            size: 80,
-            color: Colors.grey.shade400,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No user selected',
-            style: TextStyle(
-              fontSize: 20,
-              color: Colors.grey.shade600,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.person_search,
+              size: 80,
+              color: Colors.grey.shade400,
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+            Text(
+              'No patients yet',
+              style: TextStyle(
+                fontSize: 20,
+                color: Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Add a new patient, or join an existing '
+              'care team with an invite code.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const AddPatientScreen()),
+              ),
+              icon: const Icon(Icons.person_add),
+              label: const Text('Add Patient'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => showRedeemInviteDialog(context, ref),
+              icon: const Icon(Icons.qr_code),
+              label: const Text('Have an invite code?'),
+            ),
+          ],
+        ),
       ),
     );
   }
