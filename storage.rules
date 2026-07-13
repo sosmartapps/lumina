@@ -68,6 +68,17 @@ service firebase.storage {
       allow delete: if isAuthenticated();
     }
 
+    // Vehicle photos (User Profile → Vehicles tab; missing-person flyers)
+    // — uploaded by caregivers under the patient's userId, same family-trust
+    // model as user_photos.
+    match /vehicle_photos/{userId}/{allPaths=**} {
+      allow create: if isAuthenticated()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow read: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
     // Pet food photos — uploaded by caregivers under the patient's userId
     match /pet_food_photos/{userId}/{allPaths=**} {
       allow create: if isAuthenticated()

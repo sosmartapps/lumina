@@ -214,6 +214,50 @@ class UserProfileService {
   }
 
   // ============================================================================
+  // VEHICLE PHOTO MANAGEMENT
+  // ============================================================================
+
+  /// Upload a vehicle photo to Storage and return its download URL. The
+  /// caller is responsible for attaching the URL to the relevant [Vehicle]
+  /// and persisting the profile. Stored under
+  /// `vehicle_photos/{userId}/photo_{uuid}.jpg`.
+  static Future<String?> uploadVehiclePhoto(
+    String userId,
+    Uint8List imageBytes,
+  ) async {
+    try {
+      final photoId = const Uuid().v4();
+      final filename = 'photo_$photoId.jpg';
+      final ref = _storage
+          .ref()
+          .child('vehicle_photos')
+          .child(userId)
+          .child(filename);
+
+      await ref.putData(
+        imageBytes,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+
+      return await ref.getDownloadURL();
+    } catch (e) {
+      debugPrint('Error uploading vehicle photo: $e');
+      return null;
+    }
+  }
+
+  /// Delete a vehicle photo from Storage by its download URL. Failures are
+  /// swallowed (the URL may already be gone); the caller still removes it
+  /// from the profile.
+  static Future<void> deleteVehiclePhoto(String url) async {
+    try {
+      await _storage.refFromURL(url).delete();
+    } catch (e) {
+      debugPrint('Error deleting vehicle photo from storage: $e');
+    }
+  }
+
+  // ============================================================================
   // LOST PERSON REPORT GENERATION
   // ============================================================================
 
@@ -437,6 +481,49 @@ class UserProfileService {
     }
 
     buffer.writeln();
+
+    // VEHICLE(S)
+    final vehicles = profile?.allVehicles ?? const [];
+    if (vehicles.isNotEmpty) {
+      buffer.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      buffer.writeln('  VEHICLE(S)');
+      buffer.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      for (final v in vehicles) {
+        buffer.writeln('• ${v.displayName}');
+        if (v.licensePlate != null && v.licensePlate!.isNotEmpty) {
+          final plate = v.licenseState != null && v.licenseState!.isNotEmpty
+              ? '${v.licensePlate} (${v.licenseState})'
+              : v.licensePlate;
+          buffer.writeln('    Plate: $plate');
+        }
+        if (v.vin != null && v.vin!.isNotEmpty) {
+          buffer.writeln('    VIN: ${v.vin}');
+        }
+        if (v.notes != null && v.notes!.isNotEmpty) {
+          buffer.writeln('    Note: ${v.notes}');
+        }
+        if (v.photoUrls.isNotEmpty) {
+          buffer.writeln('    Photo: ${v.photoUrls.first}');
+        }
+      }
+      buffer.writeln();
+    }
+
+    // SOCIAL MEDIA
+    final socials = profile?.socialMediaLinks ?? const [];
+    if (socials.isNotEmpty) {
+      buffer.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      buffer.writeln('  SOCIAL MEDIA (for recent photos / reference)');
+      buffer.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      for (final s in socials) {
+        if (s.url.isEmpty) continue;
+        final label = s.platformEnum.label;
+        final handle =
+            s.handle != null && s.handle!.isNotEmpty ? ' ${s.handle}' : '';
+        buffer.writeln('$label:$handle ${s.url}');
+      }
+      buffer.writeln();
+    }
 
     // EMERGENCY CONTACTS
     buffer.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');

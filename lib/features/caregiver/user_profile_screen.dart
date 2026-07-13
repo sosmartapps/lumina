@@ -6,8 +6,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:printing/printing.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:uuid/uuid.dart';
 import '../../core/models/user_profile.dart';
 import '../../core/services/user_profile_service.dart';
+import '../../core/services/missing_person_flyer_service.dart';
 import '../../core/utils/units.dart';
 
 class UserProfileScreen extends StatefulWidget {
@@ -28,6 +32,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   bool _isLoading = true;
   bool _isSaving = false;
   bool _isGeneratingReport = false;
+  bool _isGeneratingFlyer = false;
 
   // Form controllers for Identity tab
   final _legalFirstNameController = TextEditingController();
@@ -129,7 +134,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         if (mounted) _wireDirtyTracking();
       });
     });
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 8, vsync: this);
     _loadProfile();
   }
 
@@ -378,6 +383,11 @@ class _UserProfileScreenState extends State<UserProfileScreen>
             : _medicalAlertInfoController.text,
         photos: _profile?.photos ?? [],
         frequentPlaces: _profile?.frequentPlaces ?? [],
+        // Preserve structured vehicles + social links across text auto-saves
+        // (this builder recreates the profile from scratch; omitting these
+        // would wipe them via the merge-set write).
+        vehicles: _profile?.vehicles ?? [],
+        socialMediaLinks: _profile?.socialMediaLinks ?? [],
         responseToName: _responseToNameController.text.isEmpty
             ? null
             : _responseToNameController.text,
@@ -831,6 +841,8 @@ class _UserProfileScreenState extends State<UserProfileScreen>
             Tab(icon: Icon(Icons.badge), text: 'Documents'),
             Tab(icon: Icon(Icons.medical_information), text: 'Medical Alert'),
             Tab(icon: Icon(Icons.photo_library), text: 'Photos'),
+            Tab(icon: Icon(Icons.directions_car), text: 'Vehicles'),
+            Tab(icon: Icon(Icons.share), text: 'Social Media'),
           ],
         ),
       ),
@@ -919,6 +931,34 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           label: const Text('Generate Lost Person Report'),
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 44,
+                        child: OutlinedButton.icon(
+                          onPressed:
+                              _isGeneratingFlyer ? null : _generateFlyer,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.red.shade700,
+                            side: BorderSide(color: Colors.red.shade700),
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                            textStyle: const TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.bold),
+                          ),
+                          icon: _isGeneratingFlyer
+                              ? SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.red.shade700,
+                                  ),
+                                )
+                              : const Icon(Icons.picture_as_pdf, size: 18),
+                          label: const Text('Missing Person Flyer (PDF)'),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -933,6 +973,8 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                       _buildDocumentsTab(),
                       _buildMedicalAlertTab(),
                       _buildPhotosTab(),
+                      _buildVehiclesTab(),
+                      _buildSocialMediaTab(),
                     ],
                   ),
                 ),
@@ -1855,6 +1897,1111 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           color: Colors.blue,
         ),
       ),
+    );
+  }
+
+  // ==========================================================================
+  // VEHICLES
+  // ==========================================================================
+
+  /// The working list of vehicles: the stored structured list if present,
+  /// otherwise the legacy single-vehicle fields folded into a list so older
+  /// profiles migrate cleanly on first edit.
+  List<Vehicle> _currentVehicles() {
+    final v = _profile?.vehicles ?? const <Vehicle>[];
+    if (v.isNotEmpty) return List<Vehicle>.from(v);
+    return List<Vehicle>.from(_profile?.allVehicles ?? const <Vehicle>[]);
+  }
+
+  Future<void> _persistVehicles(List<Vehicle> vehicles) async {
+    final updated = _profile?.copyWith(
+          vehicles: vehicles,
+          updatedAt: DateTime.now(),
+        ) ??
+        UserProfile(
+          id: '',
+          userId: widget.userId,
+          vehicles: vehicles,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+    await UserProfileService.saveUserProfile(widget.userId, updated);
+    if (mounted) setState(() => _profile = updated);
+  }
+
+  Widget _buildVehiclesTab() {
+    final vehicles = _profile?.allVehicles ?? const <Vehicle>[];
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              const Icon(Icons.directions_car, color: Colors.blue),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${vehicles.length} vehicle${vehicles.length == 1 ? '' : 's'} • Included on missing-person flyers',
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: () => _addOrEditVehicle(),
+                icon: const Icon(Icons.add),
+                label: const Text('Add'),
+              ),
+            ],
+          ),
+        ),
+        if (vehicles.isEmpty)
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.directions_car_outlined,
+                      size: 64, color: Colors.grey.shade400),
+                  const SizedBox(height: 16),
+                  Text('No vehicles yet',
+                      style: TextStyle(
+                          fontSize: 18, color: Colors.grey.shade600)),
+                  const SizedBox(height: 8),
+                  Text('Add a vehicle so it can appear on flyers',
+                      style: TextStyle(color: Colors.grey.shade500)),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: () => _addOrEditVehicle(),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add First Vehicle'),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              itemCount: vehicles.length,
+              itemBuilder: (context, index) => _buildVehicleCard(vehicles[index]),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildVehicleCard(Vehicle v) {
+    final subtitleLines = <String>[
+      if (v.licensePlate != null && v.licensePlate!.isNotEmpty)
+        'Plate: ${v.licensePlate}${v.licenseState != null && v.licenseState!.isNotEmpty ? ' (${v.licenseState})' : ''}',
+      if (v.vin != null && v.vin!.isNotEmpty) 'VIN: ${v.vin}',
+      if (v.notes != null && v.notes!.isNotEmpty) v.notes!,
+    ];
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (v.photoUrls.isNotEmpty)
+            SizedBox(
+              height: 130,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.all(8),
+                itemCount: v.photoUrls.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (_, i) => ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: CachedNetworkImage(
+                    imageUrl: v.photoUrls[i],
+                    width: 180,
+                    height: 114,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => Container(
+                      width: 180,
+                      color: Colors.grey.shade200,
+                      child: const Center(child: CircularProgressIndicator()),
+                    ),
+                    errorWidget: (_, __, ___) => Container(
+                      width: 180,
+                      color: Colors.grey.shade200,
+                      child: const Icon(Icons.error),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ListTile(
+            title: Text(v.displayName,
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: subtitleLines.isEmpty
+                ? null
+                : Text(subtitleLines.join('\n')),
+            isThreeLine: subtitleLines.length > 1,
+            trailing: PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'edit') {
+                  _addOrEditVehicle(existing: v);
+                } else if (value == 'delete') {
+                  _deleteVehicle(v);
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'edit',
+                  child: Row(children: [
+                    Icon(Icons.edit),
+                    SizedBox(width: 8),
+                    Text('Edit'),
+                  ]),
+                ),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Row(children: [
+                    Icon(Icons.delete, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Delete', style: TextStyle(color: Colors.red)),
+                  ]),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addOrEditVehicle({Vehicle? existing}) async {
+    final result = await Navigator.push<Vehicle>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _VehicleEditorScreen(
+          userId: widget.userId,
+          vehicle: existing,
+        ),
+      ),
+    );
+    if (result == null) return;
+
+    final list = _currentVehicles();
+    final idx = list.indexWhere((e) => e.id == result.id);
+    if (idx >= 0) {
+      list[idx] = result;
+    } else {
+      list.add(result);
+    }
+    await _persistVehicles(list);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vehicle saved'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteVehicle(Vehicle v) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Vehicle'),
+        content: Text('Delete "${v.displayName}" and its photos?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    for (final url in v.photoUrls) {
+      await UserProfileService.deleteVehiclePhoto(url);
+    }
+    final list = _currentVehicles()..removeWhere((e) => e.id == v.id);
+    await _persistVehicles(list);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vehicle deleted'), backgroundColor: Colors.green),
+      );
+    }
+  }
+
+  // ==========================================================================
+  // SOCIAL MEDIA
+  // ==========================================================================
+
+  Future<void> _persistSocialLinks(List<SocialMediaLink> links) async {
+    final updated = _profile?.copyWith(
+          socialMediaLinks: links,
+          updatedAt: DateTime.now(),
+        ) ??
+        UserProfile(
+          id: '',
+          userId: widget.userId,
+          socialMediaLinks: links,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+    await UserProfileService.saveUserProfile(widget.userId, updated);
+    if (mounted) setState(() => _profile = updated);
+  }
+
+  IconData _socialIcon(SocialPlatform p) {
+    switch (p) {
+      case SocialPlatform.facebook:
+        return Icons.facebook;
+      case SocialPlatform.instagram:
+        return Icons.camera_alt;
+      case SocialPlatform.twitter:
+        return Icons.alternate_email;
+      case SocialPlatform.tiktok:
+        return Icons.music_note;
+      case SocialPlatform.other:
+        return Icons.link;
+    }
+  }
+
+  Color _socialColor(SocialPlatform p) {
+    switch (p) {
+      case SocialPlatform.facebook:
+        return const Color(0xFF1877F2);
+      case SocialPlatform.instagram:
+        return const Color(0xFFE4405F);
+      case SocialPlatform.twitter:
+        return Colors.black;
+      case SocialPlatform.tiktok:
+        return Colors.black;
+      case SocialPlatform.other:
+        return Colors.blue;
+    }
+  }
+
+  Widget _buildSocialMediaTab() {
+    final links = _profile?.socialMediaLinks ?? const <SocialMediaLink>[];
+    SocialMediaLink? forPlatform(SocialPlatform p) {
+      for (final l in links) {
+        if (l.platform == p.key) return l;
+      }
+      return null;
+    }
+
+    const known = [
+      SocialPlatform.facebook,
+      SocialPlatform.instagram,
+      SocialPlatform.twitter,
+      SocialPlatform.tiktok,
+    ];
+    final others =
+        links.where((l) => l.platform == SocialPlatform.other.key).toList();
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Link social accounts so caregivers can quickly pull recent '
+                  'photos for a flyer, and the public can reference them.',
+                  style: TextStyle(color: Colors.blue.shade900, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...known.map((p) => _buildSocialTile(p, forPlatform(p))),
+        const SizedBox(height: 8),
+        const Divider(),
+        _buildSectionTitle('Other Links'),
+        if (others.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text('No other links added.',
+                style: TextStyle(color: Colors.grey.shade500)),
+          )
+        else
+          ...others.map((l) => _buildOtherSocialTile(l)),
+        const SizedBox(height: 4),
+        OutlinedButton.icon(
+          onPressed: () => _editSocialLink(platform: SocialPlatform.other),
+          icon: const Icon(Icons.add),
+          label: const Text('Add other link'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSocialTile(SocialPlatform p, SocialMediaLink? link) {
+    final linked = link != null && link.url.isNotEmpty;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: Icon(_socialIcon(p),
+            color: linked ? _socialColor(p) : Colors.grey.shade400),
+        title: Text(p.label),
+        subtitle: linked
+            ? Text(
+                link.handle != null && link.handle!.isNotEmpty
+                    ? '${link.handle} · ${link.url}'
+                    : link.url,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              )
+            : Text('Not linked',
+                style: TextStyle(color: Colors.grey.shade500)),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (linked)
+              IconButton(
+                icon: const Icon(Icons.open_in_new),
+                tooltip: 'Open',
+                onPressed: () => _openUrl(link.url),
+              ),
+            IconButton(
+              icon: Icon(linked ? Icons.edit : Icons.add),
+              tooltip: linked ? 'Edit' : 'Add',
+              onPressed: () => _editSocialLink(platform: p, existing: link),
+            ),
+          ],
+        ),
+        onTap: linked
+            ? () => _openUrl(link.url)
+            : () => _editSocialLink(platform: p),
+      ),
+    );
+  }
+
+  Widget _buildOtherSocialTile(SocialMediaLink l) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: Icon(Icons.link, color: Colors.blue.shade400),
+        title: Text(
+          l.handle != null && l.handle!.isNotEmpty ? l.handle! : l.url,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Text(l.url, maxLines: 1, overflow: TextOverflow.ellipsis),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.open_in_new),
+              tooltip: 'Open',
+              onPressed: () => _openUrl(l.url),
+            ),
+            IconButton(
+              icon: const Icon(Icons.edit),
+              tooltip: 'Edit',
+              onPressed: () =>
+                  _editSocialLink(platform: SocialPlatform.other, existing: l),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete, color: Colors.red),
+              tooltip: 'Delete',
+              onPressed: () => _deleteSocialLink(l),
+            ),
+          ],
+        ),
+        onTap: () => _openUrl(l.url),
+      ),
+    );
+  }
+
+  Future<void> _editSocialLink({
+    required SocialPlatform platform,
+    SocialMediaLink? existing,
+  }) async {
+    final urlController = TextEditingController(text: existing?.url ?? '');
+    final handleController =
+        TextEditingController(text: existing?.handle ?? '');
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${existing == null ? 'Add' : 'Edit'} ${platform.label}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: handleController,
+              decoration: InputDecoration(
+                labelText:
+                    platform == SocialPlatform.other ? 'Label' : 'Handle',
+                hintText: platform == SocialPlatform.other
+                    ? 'e.g. Snapchat'
+                    : 'e.g. @janedoe',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: urlController,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                labelText: 'Profile URL',
+                hintText: 'https://…',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (saved != true) return;
+
+    final url = urlController.text.trim();
+    final handle = handleController.text.trim();
+
+    final list = List<SocialMediaLink>.from(
+        _profile?.socialMediaLinks ?? const <SocialMediaLink>[]);
+
+    if (platform == SocialPlatform.other) {
+      if (existing != null) {
+        list.removeWhere((l) => identical(l, existing));
+      }
+    } else {
+      // At most one link per known platform.
+      list.removeWhere((l) => l.platform == platform.key);
+    }
+
+    if (url.isNotEmpty) {
+      list.add(SocialMediaLink(
+        platform: platform.key,
+        url: url,
+        handle: handle.isEmpty ? null : handle,
+      ));
+    }
+
+    await _persistSocialLinks(list);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(url.isEmpty ? 'Link removed' : 'Link saved'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteSocialLink(SocialMediaLink link) async {
+    final list = List<SocialMediaLink>.from(
+        _profile?.socialMediaLinks ?? const <SocialMediaLink>[])
+      ..removeWhere((l) => identical(l, link));
+    await _persistSocialLinks(list);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Link removed'), backgroundColor: Colors.green),
+      );
+    }
+  }
+
+  Future<void> _openUrl(String raw) async {
+    var url = raw.trim();
+    if (url.isEmpty) return;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://$url';
+    }
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid link')),
+        );
+      }
+      return;
+    }
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open $url')),
+      );
+    }
+  }
+
+  // ==========================================================================
+  // MISSING PERSON FLYER (PDF)
+  // ==========================================================================
+
+  Future<void> _generateFlyer() async {
+    final options = await showDialog<FlyerOptions>(
+      context: context,
+      builder: (_) => const _FlyerOptionsDialog(),
+    );
+    if (options == null) return; // cancelled
+
+    setState(() => _isGeneratingFlyer = true);
+    try {
+      final report =
+          await UserProfileService.generateLostPersonReport(widget.userId);
+      final bytes = await MissingPersonFlyerService.generateFlyer(
+        report,
+        options: options,
+      );
+
+      if (!mounted) return;
+      setState(() => _isGeneratingFlyer = false);
+
+      final safeName =
+          report.userName.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_');
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => Scaffold(
+            appBar: AppBar(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              title: const Text('Missing Person Flyer'),
+            ),
+            body: PdfPreview(
+              build: (_) => bytes,
+              canChangeOrientation: false,
+              canChangePageFormat: false,
+              allowPrinting: true,
+              allowSharing: true,
+              pdfFileName: 'missing_person_$safeName.pdf',
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isGeneratingFlyer = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error generating flyer: $e')),
+        );
+      }
+    }
+  }
+}
+
+// ============================================================================
+// Vehicle editor — full-screen form for adding/editing one vehicle, with
+// immediate photo upload to Firebase Storage. Returns the edited [Vehicle]
+// to the caller (which persists it onto the profile).
+// ============================================================================
+class _VehicleEditorScreen extends StatefulWidget {
+  final String userId;
+  final Vehicle? vehicle;
+
+  const _VehicleEditorScreen({required this.userId, this.vehicle});
+
+  @override
+  State<_VehicleEditorScreen> createState() => _VehicleEditorScreenState();
+}
+
+class _VehicleEditorScreenState extends State<_VehicleEditorScreen> {
+  final ImagePicker _imagePicker = ImagePicker();
+
+  late final String _id;
+  final _makeController = TextEditingController();
+  final _modelController = TextEditingController();
+  final _yearController = TextEditingController();
+  final _colorController = TextEditingController();
+  final _plateController = TextEditingController();
+  final _stateController = TextEditingController();
+  final _vinController = TextEditingController();
+  final _notesController = TextEditingController();
+
+  List<String> _photoUrls = [];
+  bool _uploading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final v = widget.vehicle;
+    _id = v?.id ?? const Uuid().v4();
+    _makeController.text = v?.make ?? '';
+    _modelController.text = v?.model ?? '';
+    _yearController.text = v?.year?.toString() ?? '';
+    _colorController.text = v?.color ?? '';
+    _plateController.text = v?.licensePlate ?? '';
+    _stateController.text = v?.licenseState ?? '';
+    _vinController.text = v?.vin ?? '';
+    _notesController.text = v?.notes ?? '';
+    _photoUrls = List<String>.from(v?.photoUrls ?? const []);
+  }
+
+  @override
+  void dispose() {
+    _makeController.dispose();
+    _modelController.dispose();
+    _yearController.dispose();
+    _colorController.dispose();
+    _plateController.dispose();
+    _stateController.dispose();
+    _vinController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _addPhoto() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Take Photo'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Choose from Gallery'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 85,
+      );
+      if (image == null) return;
+
+      setState(() => _uploading = true);
+      final bytes = await File(image.path).readAsBytes();
+      final url =
+          await UserProfileService.uploadVehiclePhoto(widget.userId, bytes);
+      if (url == null) throw Exception('Upload failed');
+
+      if (mounted) {
+        setState(() {
+          _photoUrls.add(url);
+          _uploading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _uploading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error adding photo: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _removePhoto(String url) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Photo'),
+        content: const Text('Remove this vehicle photo?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    await UserProfileService.deleteVehiclePhoto(url);
+    if (mounted) setState(() => _photoUrls.remove(url));
+  }
+
+  void _save() {
+    String? nn(TextEditingController c) =>
+        c.text.trim().isEmpty ? null : c.text.trim();
+
+    final vehicle = Vehicle(
+      id: _id,
+      make: nn(_makeController),
+      model: nn(_modelController),
+      year: int.tryParse(_yearController.text.trim()),
+      color: nn(_colorController),
+      licensePlate: nn(_plateController),
+      licenseState: nn(_stateController),
+      vin: nn(_vinController),
+      notes: nn(_notesController),
+      photoUrls: _photoUrls,
+    );
+    Navigator.pop(context, vehicle);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.vehicle == null ? 'Add Vehicle' : 'Edit Vehicle'),
+        actions: [
+          TextButton(
+            onPressed: _uploading ? null : _save,
+            child: const Text('SAVE',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // Photos
+          Row(
+            children: [
+              const Icon(Icons.photo_camera, color: Colors.blue),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('${_photoUrls.length} photo${_photoUrls.length == 1 ? '' : 's'}',
+                    style: TextStyle(color: Colors.grey.shade600)),
+              ),
+              ElevatedButton.icon(
+                onPressed: _uploading ? null : _addPhoto,
+                icon: _uploading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.add_a_photo),
+                label: const Text('Add Photo'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_photoUrls.isNotEmpty)
+            SizedBox(
+              height: 120,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _photoUrls.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (_, i) {
+                  final url = _photoUrls[i];
+                  return Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: CachedNetworkImage(
+                          imageUrl: url,
+                          width: 160,
+                          height: 120,
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) => Container(
+                            width: 160,
+                            color: Colors.grey.shade200,
+                            child: const Center(
+                                child: CircularProgressIndicator()),
+                          ),
+                          errorWidget: (_, __, ___) => Container(
+                            width: 160,
+                            color: Colors.grey.shade200,
+                            child: const Icon(Icons.error),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: GestureDetector(
+                          onTap: () => _removePhoto(url),
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.6),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.close,
+                                color: Colors.white, size: 16),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          const SizedBox(height: 20),
+          // Fields
+          TextField(
+            controller: _makeController,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+                labelText: 'Make', hintText: 'e.g. Toyota'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _modelController,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+                labelText: 'Model', hintText: 'e.g. Camry'),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _yearController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 4,
+                  decoration: const InputDecoration(
+                      labelText: 'Year', counterText: ''),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _colorController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                      labelText: 'Color', hintText: 'e.g. Silver'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  controller: _plateController,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(
+                      labelText: 'License Plate', hintText: 'e.g. ABC1234'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _stateController,
+                  textCapitalization: TextCapitalization.characters,
+                  maxLength: 2,
+                  decoration: const InputDecoration(
+                      labelText: 'State', counterText: '', hintText: 'AZ'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _vinController,
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(
+                labelText: 'VIN (optional)',
+                hintText: 'Vehicle Identification Number'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _notesController,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Notes (optional)',
+              hintText: 'e.g. Dent on rear bumper, roof rack',
+              alignLabelWithHint: true,
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// Flyer options dialog — captures per-incident details (last seen, contact)
+// that aren't stored on the profile. Returns a [FlyerOptions] on Generate,
+// or null on Cancel.
+// ============================================================================
+class _FlyerOptionsDialog extends StatefulWidget {
+  const _FlyerOptionsDialog();
+
+  @override
+  State<_FlyerOptionsDialog> createState() => _FlyerOptionsDialogState();
+}
+
+class _FlyerOptionsDialogState extends State<_FlyerOptionsDialog> {
+  final _locationController = TextEditingController();
+  final _wearingController = TextEditingController();
+  final _contactNameController = TextEditingController();
+  final _contactPhoneController = TextEditingController();
+  final _additionalController = TextEditingController();
+  DateTime? _lastSeenAt;
+
+  @override
+  void dispose() {
+    _locationController.dispose();
+    _wearingController.dispose();
+    _contactNameController.dispose();
+    _contactPhoneController.dispose();
+    _additionalController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDateTime() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _lastSeenAt ?? now,
+      firstDate: now.subtract(const Duration(days: 365)),
+      lastDate: now,
+    );
+    if (date == null) return;
+    if (!mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_lastSeenAt ?? now),
+    );
+    setState(() {
+      _lastSeenAt = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time?.hour ?? 0,
+        time?.minute ?? 0,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Flyer Details'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Optional — these appear on the flyer. Leave blank to skip.',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+              const SizedBox(height: 12),
+              InkWell(
+                onTap: _pickDateTime,
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Last seen (date & time)',
+                    suffixIcon: Icon(Icons.calendar_today),
+                  ),
+                  child: Text(
+                    _lastSeenAt == null
+                        ? 'Tap to select'
+                        : DateFormat('EEE, MMM d, yyyy · h:mm a')
+                            .format(_lastSeenAt!),
+                    style: TextStyle(
+                      color: _lastSeenAt == null ? Colors.grey : Colors.black,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _locationController,
+                decoration: const InputDecoration(
+                  labelText: 'Last seen location',
+                  hintText: 'e.g. Reid Park, Tucson',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _wearingController,
+                decoration: const InputDecoration(
+                  labelText: 'Last seen wearing',
+                  hintText: 'e.g. Blue jacket, jeans',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _contactNameController,
+                decoration: const InputDecoration(
+                  labelText: 'Contact name',
+                  hintText: 'Who to call (besides 911)',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _contactPhoneController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Contact phone',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _additionalController,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Additional information',
+                  alignLabelWithHint: true,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(backgroundColor: Colors.red),
+          onPressed: () {
+            String? nn(TextEditingController c) =>
+                c.text.trim().isEmpty ? null : c.text.trim();
+            Navigator.pop(
+              context,
+              FlyerOptions(
+                lastSeenLocation: nn(_locationController),
+                lastSeenAt: _lastSeenAt,
+                lastSeenWearing: nn(_wearingController),
+                contactName: nn(_contactNameController),
+                contactPhone: nn(_contactPhoneController),
+                additionalInfo: nn(_additionalController),
+              ),
+            );
+          },
+          icon: const Icon(Icons.picture_as_pdf),
+          label: const Text('Generate'),
+        ),
+      ],
     );
   }
 }

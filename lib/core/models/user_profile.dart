@@ -67,6 +67,16 @@ class UserProfile {
   // Frequently Visited Places (for search)
   final List<FrequentPlace> frequentPlaces;
 
+  // Vehicles (for missing-person flyers — supports multiple vehicles, each
+  // with its own photos). The legacy single-vehicle fields above are kept
+  // for backward compatibility and are surfaced as the first vehicle when
+  // no structured vehicles exist.
+  final List<Vehicle> vehicles;
+
+  // Social media accounts (caregivers can quickly pull recent photos for
+  // missing-person flyers; the public can reference the handles).
+  final List<SocialMediaLink> socialMediaLinks;
+
   // Emergency Behavior
   final String? responseToName; // Does/doesn't respond to name
   final String? responseToStrangers; // Fearful, friendly, etc.
@@ -126,6 +136,8 @@ class UserProfile {
     this.medicalAlertInfo,
     this.photos = const [],
     this.frequentPlaces = const [],
+    this.vehicles = const [],
+    this.socialMediaLinks = const [],
     this.responseToName,
     this.responseToStrangers,
     this.calmingTechniques,
@@ -183,6 +195,36 @@ class UserProfile {
     final sorted = List<UserPhoto>.from(photos)
       ..sort((a, b) => b.dateTaken.compareTo(a.dateTaken));
     return sorted.first;
+  }
+
+  /// All vehicles, folding the legacy single-vehicle fields into the list
+  /// when no structured vehicles have been added yet. Used by flyer/report
+  /// generation so older profiles still show their vehicle.
+  List<Vehicle> get allVehicles {
+    if (vehicles.isNotEmpty) return vehicles;
+    final hasLegacy = [
+      vehicleMake,
+      vehicleModel,
+      vehicleColor,
+      vehicleLicensePlate,
+      vehicleVin,
+      vehicleNotes,
+    ].any((v) => v != null && v.isNotEmpty) ||
+        vehicleYear != null;
+    if (!hasLegacy) return const [];
+    return [
+      Vehicle(
+        id: 'legacy',
+        make: vehicleMake,
+        model: vehicleModel,
+        year: vehicleYear,
+        color: vehicleColor,
+        licensePlate: vehicleLicensePlate,
+        licenseState: vehicleLicenseState,
+        vin: vehicleVin,
+        notes: vehicleNotes,
+      ),
+    ];
   }
 
   factory UserProfile.fromFirestore(DocumentSnapshot doc) {
@@ -246,6 +288,14 @@ class UserProfile {
               ?.map((p) => FrequentPlace.fromMap(p as Map<String, dynamic>))
               .toList() ??
           [],
+      vehicles: (data['vehicles'] as List<dynamic>?)
+              ?.map((v) => Vehicle.fromMap(v as Map<String, dynamic>))
+              .toList() ??
+          [],
+      socialMediaLinks: (data['socialMediaLinks'] as List<dynamic>?)
+              ?.map((s) => SocialMediaLink.fromMap(s as Map<String, dynamic>))
+              .toList() ??
+          [],
       responseToName: data['responseToName'],
       responseToStrangers: data['responseToStrangers'],
       calmingTechniques: data['calmingTechniques'],
@@ -307,6 +357,8 @@ class UserProfile {
       'medicalAlertInfo': medicalAlertInfo,
       'photos': photos.map((p) => p.toMap()).toList(),
       'frequentPlaces': frequentPlaces.map((p) => p.toMap()).toList(),
+      'vehicles': vehicles.map((v) => v.toMap()).toList(),
+      'socialMediaLinks': socialMediaLinks.map((s) => s.toMap()).toList(),
       'responseToName': responseToName,
       'responseToStrangers': responseToStrangers,
       'calmingTechniques': calmingTechniques,
@@ -365,6 +417,8 @@ class UserProfile {
     String? medicalAlertInfo,
     List<UserPhoto>? photos,
     List<FrequentPlace>? frequentPlaces,
+    List<Vehicle>? vehicles,
+    List<SocialMediaLink>? socialMediaLinks,
     String? responseToName,
     String? responseToStrangers,
     String? calmingTechniques,
@@ -422,6 +476,8 @@ class UserProfile {
       medicalAlertInfo: medicalAlertInfo ?? this.medicalAlertInfo,
       photos: photos ?? this.photos,
       frequentPlaces: frequentPlaces ?? this.frequentPlaces,
+      vehicles: vehicles ?? this.vehicles,
+      socialMediaLinks: socialMediaLinks ?? this.socialMediaLinks,
       responseToName: responseToName ?? this.responseToName,
       responseToStrangers: responseToStrangers ?? this.responseToStrangers,
       calmingTechniques: calmingTechniques ?? this.calmingTechniques,
@@ -521,5 +577,183 @@ class FrequentPlace {
       'longitude': longitude,
       'notes': notes,
     };
+  }
+}
+
+/// A vehicle associated with the user, used for identification and
+/// missing-person flyers. Supports multiple photos per vehicle.
+class Vehicle {
+  final String id;
+  final String? make; // e.g., "Toyota"
+  final String? model; // e.g., "Camry"
+  final int? year; // e.g., 2020
+  final String? color; // e.g., "Silver"
+  final String? licensePlate; // e.g., "ABC1234"
+  final String? licenseState; // e.g., "AZ"
+  final String? vin; // optional VIN number
+  final String? notes; // e.g., "Dent on rear bumper"
+  final List<String> photoUrls; // Firebase Storage download URLs
+
+  Vehicle({
+    required this.id,
+    this.make,
+    this.model,
+    this.year,
+    this.color,
+    this.licensePlate,
+    this.licenseState,
+    this.vin,
+    this.notes,
+    this.photoUrls = const [],
+  });
+
+  /// Human-readable one-line description, e.g. "2020 Silver Toyota Camry".
+  String get displayName {
+    final parts = [
+      if (year != null) year.toString(),
+      if (color != null && color!.isNotEmpty) color,
+      if (make != null && make!.isNotEmpty) make,
+      if (model != null && model!.isNotEmpty) model,
+    ];
+    final name = parts.join(' ').trim();
+    return name.isEmpty ? 'Vehicle' : name;
+  }
+
+  factory Vehicle.fromMap(Map<String, dynamic> map) {
+    return Vehicle(
+      id: map['id'] ?? '',
+      make: map['make'],
+      model: map['model'],
+      year: map['year'] is int
+          ? map['year'] as int
+          : (map['year'] != null
+              ? int.tryParse(map['year'].toString())
+              : null),
+      color: map['color'],
+      licensePlate: map['licensePlate'],
+      licenseState: map['licenseState'],
+      vin: map['vin'],
+      notes: map['notes'],
+      photoUrls: (map['photoUrls'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'make': make,
+      'model': model,
+      'year': year,
+      'color': color,
+      'licensePlate': licensePlate,
+      'licenseState': licenseState,
+      'vin': vin,
+      'notes': notes,
+      'photoUrls': photoUrls,
+    };
+  }
+
+  Vehicle copyWith({
+    String? id,
+    String? make,
+    String? model,
+    int? year,
+    String? color,
+    String? licensePlate,
+    String? licenseState,
+    String? vin,
+    String? notes,
+    List<String>? photoUrls,
+  }) {
+    return Vehicle(
+      id: id ?? this.id,
+      make: make ?? this.make,
+      model: model ?? this.model,
+      year: year ?? this.year,
+      color: color ?? this.color,
+      licensePlate: licensePlate ?? this.licensePlate,
+      licenseState: licenseState ?? this.licenseState,
+      vin: vin ?? this.vin,
+      notes: notes ?? this.notes,
+      photoUrls: photoUrls ?? this.photoUrls,
+    );
+  }
+}
+
+/// Known social-media platforms a caregiver can link for a patient.
+enum SocialPlatform { facebook, instagram, twitter, tiktok, other }
+
+extension SocialPlatformInfo on SocialPlatform {
+  /// Stable key stored in Firestore.
+  String get key => name;
+
+  /// Label shown in the UI.
+  String get label {
+    switch (this) {
+      case SocialPlatform.facebook:
+        return 'Facebook';
+      case SocialPlatform.instagram:
+        return 'Instagram';
+      case SocialPlatform.twitter:
+        return 'Twitter / X';
+      case SocialPlatform.tiktok:
+        return 'TikTok';
+      case SocialPlatform.other:
+        return 'Other';
+    }
+  }
+
+  static SocialPlatform fromKey(String? key) {
+    return SocialPlatform.values.firstWhere(
+      (p) => p.name == key,
+      orElse: () => SocialPlatform.other,
+    );
+  }
+}
+
+/// A social-media account link for the user. `url` is a full, tappable URL;
+/// `handle` is an optional display handle (e.g. "@janedoe").
+class SocialMediaLink {
+  final String platform; // one of SocialPlatform.key
+  final String url;
+  final String? handle;
+
+  SocialMediaLink({
+    required this.platform,
+    required this.url,
+    this.handle,
+  });
+
+  SocialPlatform get platformEnum => SocialPlatformInfo.fromKey(platform);
+
+  factory SocialMediaLink.fromMap(Map<String, dynamic> map) {
+    return SocialMediaLink(
+      platform: map['platform'] ?? SocialPlatform.other.key,
+      url: map['url'] ?? '',
+      handle: map['handle'],
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'platform': platform,
+      'url': url,
+      'handle': handle,
+    };
+  }
+
+  SocialMediaLink copyWith({
+    String? platform,
+    String? url,
+    String? handle,
+  }) {
+    return SocialMediaLink(
+      platform: platform ?? this.platform,
+      url: url ?? this.url,
+      handle: handle ?? this.handle,
+    );
   }
 }
