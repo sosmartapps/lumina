@@ -149,6 +149,11 @@ class _EnvironmentSettingsScreenState
         _buildNestSection(patientId, connection?.nest),
         const SizedBox(height: 24),
 
+        _sectionHeader(Icons.bluetooth, 'Bluetooth sensor (no gateway)'),
+        const SizedBox(height: 8),
+        _buildBleSection(patientId, connection?.ble),
+        const SizedBox(height: 24),
+
         if (connection != null && connection.hasAnyProvider) ...[
           _sectionHeader(Icons.notifications_active, 'Alert thresholds'),
           const SizedBox(height: 8),
@@ -582,6 +587,68 @@ class _EnvironmentSettingsScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not save connection: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  // ── Bluetooth bridge (patient phone ↔ SensorPush HT.w) ────────────────
+
+  Widget _buildBleSection(String patientId, BleLink? link) {
+    final enabled = link?.enabled ?? false;
+    final lastSeen = link?.lastSeenAt;
+
+    return Card(
+      child: Column(
+        children: [
+          SwitchListTile(
+            secondary: Icon(
+              Icons.bluetooth,
+              color: enabled ? AppTheme.primaryBlue : Colors.grey,
+            ),
+            title: const Text('Read sensor with the patient\'s phone'),
+            subtitle: Text(
+              enabled
+                  ? (lastSeen != null
+                      ? (link?.sensorName != null
+                          ? 'Connected to ${link!.sensorName}'
+                          : 'Waiting for first reading…')
+                      : 'Waiting for the patient\'s phone to find the sensor…')
+                  : 'For SensorPush sensors WITHOUT a WiFi gateway. The '
+                      'patient\'s phone reads it over Bluetooth — keep the '
+                      'sensor within Bluetooth range of where their phone '
+                      'usually is.',
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+            ),
+            value: enabled,
+            onChanged: _busy ? null : (v) => _toggleBle(patientId, v),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _toggleBle(String patientId, bool enabled) async {
+    final caregiver = ref.read(caregiverNotifierProvider).caregiver;
+    setState(() => _busy = true);
+    try {
+      if (enabled) {
+        await ref.read(environmentServiceProvider).saveBleLink(
+              patientId,
+              BleLink(enabled: true, connectedBy: caregiver?.id ?? ''),
+            );
+      } else {
+        await ref
+            .read(environmentServiceProvider)
+            .unlinkProvider(patientId, 'ble');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not update: $e')),
         );
       }
     } finally {

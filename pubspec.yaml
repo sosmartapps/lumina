@@ -69,6 +69,8 @@ dependencies:
 
   # Battery & Sensor Monitoring
   battery_plus: ^7.0.0
+  # SensorPush HT.w BLE bridge (patient phone acts as the gateway)
+  flutter_blue_plus: ^1.35.0
   sensors_plus: ^6.1.2  # pinned for shake compatibility (bug_reporter→shake 3.0)
 
   # Screenshot (for bug reporter)

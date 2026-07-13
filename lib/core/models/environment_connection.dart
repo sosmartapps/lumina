@@ -22,6 +22,7 @@ class EnvironmentConnection {
 
   final SensorPushLink? sensorPush;
   final NestLink? nest;
+  final BleLink? ble;
   final EnvironmentAlertConfig alerts;
   final EnvironmentReadingSnapshot? latest;
 
@@ -29,11 +30,13 @@ class EnvironmentConnection {
     required this.userId,
     this.sensorPush,
     this.nest,
+    this.ble,
     EnvironmentAlertConfig? alerts,
     this.latest,
   }) : alerts = alerts ?? EnvironmentAlertConfig();
 
-  bool get hasAnyProvider => sensorPush != null || nest != null;
+  bool get hasAnyProvider =>
+      sensorPush != null || nest != null || (ble?.enabled ?? false);
 
   factory EnvironmentConnection.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
@@ -45,6 +48,9 @@ class EnvironmentConnection {
           : null,
       nest: data['nest'] is Map
           ? NestLink.fromMap(Map<String, dynamic>.from(data['nest']))
+          : null,
+      ble: data['ble'] is Map
+          ? BleLink.fromMap(Map<String, dynamic>.from(data['ble']))
           : null,
       alerts: data['alerts'] is Map
           ? EnvironmentAlertConfig.fromMap(
@@ -61,6 +67,7 @@ class EnvironmentConnection {
     return {
       if (sensorPush != null) 'sensorpush': sensorPush!.toMap(),
       if (nest != null) 'nest': nest!.toMap(),
+      if (ble != null) 'ble': ble!.toMap(),
       'alerts': alerts.toMap(),
       if (latest != null) 'latest': latest!.toMap(),
     };
@@ -155,6 +162,47 @@ class NestLink {
       'connectedBy': connectedBy,
       'connectedAt': Timestamp.fromDate(connectedAt),
       'needsReauth': needsReauth,
+    };
+  }
+}
+
+/// Bluetooth bridge: the PATIENT's phone connects directly to a SensorPush
+/// 2nd-gen sensor (HT.w / HTP.xw) over BLE — no WiFi gateway needed. The
+/// caregiver enables it here; the patient app does the scanning/reading
+/// and writes results back (sensorName / lastSeenAt are patient-written).
+class BleLink {
+  final bool enabled;
+  final String? sensorName; // set by the patient app once found
+  final DateTime? lastSeenAt; // last successful BLE reading
+  final String connectedBy; // caregiver uid
+  final DateTime connectedAt;
+
+  BleLink({
+    required this.enabled,
+    this.sensorName,
+    this.lastSeenAt,
+    required this.connectedBy,
+    DateTime? connectedAt,
+  }) : connectedAt = connectedAt ?? DateTime.now();
+
+  factory BleLink.fromMap(Map<String, dynamic> data) {
+    return BleLink(
+      enabled: data['enabled'] == true,
+      sensorName: data['sensorName'],
+      lastSeenAt: (data['lastSeenAt'] as Timestamp?)?.toDate(),
+      connectedBy: data['connectedBy'] ?? '',
+      connectedAt:
+          (data['connectedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'enabled': enabled,
+      'sensorName': sensorName,
+      if (lastSeenAt != null) 'lastSeenAt': Timestamp.fromDate(lastSeenAt!),
+      'connectedBy': connectedBy,
+      'connectedAt': Timestamp.fromDate(connectedAt),
     };
   }
 }

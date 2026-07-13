@@ -252,6 +252,7 @@ class _EnvironmentStatusBodyState
     final parts = <String>[
       if (c.sensorPush != null) 'SensorPush',
       if (c.nest != null) 'Nest',
+      if (c.ble?.enabled ?? false) 'Bluetooth sensor',
     ];
     return parts.join(' + ');
   }

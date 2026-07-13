@@ -27,6 +27,7 @@ import '../services/pet_feeding_service.dart';
 import 'subscription_provider.dart';
 import '../../features/bouncie/bouncie_service.dart';
 import '../../features/environment/environment_service.dart';
+import '../services/sensorpush_ble_bridge.dart';
 
 // ChangeNotifier providers — use ref.read() to get instance,
 // ListenableBuilder to reactively rebuild on notifyListeners().
@@ -141,6 +142,15 @@ final environmentConnectionProvider =
 });
 
 final environmentServiceProvider = Provider((ref) => EnvironmentService());
+
+/// Patient-phone BLE bridge to a SensorPush HT.w (no WiFi gateway needed).
+/// Started at splash in user mode; runs only while `ble.enabled` is set
+/// on the patient's environment connection by a caregiver.
+final sensorPushBleBridgeProvider = Provider((ref) {
+  final bridge = SensorPushBleBridge();
+  ref.onDispose(() => bridge.dispose());
+  return bridge;
+});
 
 // Invite service
 final inviteServiceProvider = Provider((ref) => InviteService());

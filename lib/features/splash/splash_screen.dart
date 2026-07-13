@@ -168,6 +168,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
           () => BackgroundMonitoringService.start(),
           timeoutSeconds: 10);
 
+
       if (!mounted) return;
 
       if (appState.isCaregiverMode && appState.currentCaregiverId != null) {
@@ -202,7 +203,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
           _navigateTo(const CaregiverLoginScreen());
         }
       } else {
-        // User mode
+        // User mode — start the home-environment BLE bridge (patient
+        // phone ↔ SensorPush HT.w). PATIENT MODE ONLY: a caregiver's
+        // phone isn't in the patient's home. No-op unless a caregiver
+        // enabled it; watches Firestore and reacts to toggles live.
+        await _step('environment sensor bridge', () async {
+          ref
+              .read(sensorPushBleBridgeProvider)
+              .start(appState.currentUserId!);
+        }, timeoutSeconds: 5);
+
         _navigateTo(const UserHomeScreen());
       }
     } else {

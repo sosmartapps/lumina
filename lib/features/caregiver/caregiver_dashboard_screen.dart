@@ -26,6 +26,7 @@ import 'manage_locations_screen.dart';
 import 'manage_medications_screen.dart';
 import '../medication/manage_prescriptions_screen.dart';
 import 'manage_reminders_screen.dart';
+import 'activity_library_screen.dart';
 import 'manage_expenses_screen.dart';
 import '../pet_feeding/manage_pet_feeding_screen.dart';
 import 'manage_zones_screen.dart';
@@ -40,6 +41,7 @@ import 'manage_caregivers_screen.dart';
 import 'patients_overview_screen.dart';
 import 'redeem_invite_dialog.dart';
 import 'account_settings_screen.dart';
+import '../onboarding/caregiver_onboarding_screen.dart';
 import '../../features/subscription/subscription_status_card.dart';
 import '../../features/subscription/paywall_screen.dart';
 import '../medical_records/medical_records_screen.dart';
@@ -361,6 +363,9 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Setup Guide nudge (hidden once complete or dismissed)
+          const SetupProgressCard(),
+
           // User card
           _buildUserCard(user),
           const SizedBox(height: 20),
@@ -906,6 +911,17 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
             ),
           ),
           _buildManageItem(
+            'Daily Activities',
+            'Purposeful activities for structure and engagement',
+            Icons.spa,
+            AppTheme.primaryTeal,
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => const ActivityLibraryScreen()),
+            ),
+          ),
+          _buildManageItem(
             'Pet Feeding',
             'Feeding schedules & reminders for pets',
             Icons.pets,
@@ -934,6 +950,17 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
             () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const AppProtectionScreen()),
+            ),
+          ),
+          _buildManageItem(
+            'Setup Guide',
+            'Step-by-step checklist to get Lumina ready',
+            Icons.checklist,
+            AppTheme.primaryGreen,
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => const CaregiverOnboardingScreen()),
             ),
           ),
           _buildManageItem(

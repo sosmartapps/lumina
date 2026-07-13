@@ -2498,7 +2498,7 @@ interface EnvReading {
   tempF: number;
   humidity: number;
   observedAt: Date;
-  provider: 'sensorpush' | 'nest';
+  provider: 'sensorpush' | 'nest' | 'ble';
   sensorName: string | null;
 }
 
@@ -2628,6 +2628,105 @@ function envViolations(
 
 const ENV_ALERT_COOLDOWN_MS = 6 * 3600 * 1000; // one alert per condition / 6h
 
+/**
+ * Threshold-check one reading and push FCM to the patient's caregivers,
+ * respecting the per-condition cooldown in `alertState` on the
+ * connection doc. Shared by pollEnvironment (cloud providers) and
+ * onEnvironmentReading (BLE bridge readings from the patient phone).
+ */
+async function evaluateEnvironmentAlert(
+  patientId: string,
+  reading: EnvReading,
+): Promise<void> {
+  const db = admin.firestore();
+  const connRef = db.collection('environment_connections').doc(patientId);
+  const connDoc = await connRef.get();
+  if (!connDoc.exists) return;
+  const conn = connDoc.data()!;
+  if (conn.alerts?.enabled === false) return;
+
+  const violations = envViolations(reading, conn.alerts ?? {});
+  if (!violations.length) return;
+
+  const alertState: Record<string, any> = conn.alertState ?? {};
+  const now = Date.now();
+  const fresh = violations.filter((v) => {
+    const last = alertState[v.key] as admin.firestore.Timestamp | undefined;
+    return !last || now - last.toMillis() > ENV_ALERT_COOLDOWN_MS;
+  });
+  if (!fresh.length) return;
+
+  const userDoc = await db.collection('users').doc(patientId).get();
+  const userData = userDoc.data();
+  const patientName = userData?.name ?? 'your family member';
+  const caregiverIds: string[] = userData?.caregiverIds ?? [];
+  if (!caregiverIds.length) return;
+  const caregiverDocs = await Promise.all(
+    caregiverIds.map((id) => db.collection('caregivers').doc(id).get()),
+  );
+  const tokens: string[] = [];
+  for (const doc of caregiverDocs) {
+    const cg = doc.data();
+    if (cg?.fcmTokens?.length) tokens.push(...cg.fcmTokens);
+    else if (cg?.fcmToken) tokens.push(cg.fcmToken);
+  }
+  if (!tokens.length) return;
+
+  const body =
+    `${patientName}'s home is at ` + fresh.map((v) => v.text).join(' and ');
+  const response = await admin.messaging().sendEachForMulticast({
+    notification: { title: '🌡️ Home environment alert', body },
+    data: {
+      type: 'environment_alert',
+      userId: patientId,
+      payload: `environment:${patientId}`,
+    },
+    tokens,
+  });
+  console.log(
+    `Environment alert for ${patientId} (${fresh
+      .map((v) => v.key)
+      .join(',')}): ${response.successCount} ok, ` +
+      `${response.failureCount} failed`,
+  );
+
+  const stateUpdate: Record<string, any> = {};
+  for (const v of fresh) {
+    stateUpdate[v.key] = admin.firestore.FieldValue.serverTimestamp();
+  }
+  await connRef.set({ alertState: stateUpdate }, { merge: true });
+}
+
+/**
+ * Alerts for readings pushed by the patient-phone BLE bridge (SensorPush
+ * HT.w without a WiFi gateway). Cloud-provider readings are alerted
+ * inside pollEnvironment, so this only handles provider == 'ble'.
+ */
+export const onEnvironmentReading = functions.firestore
+  .document('users/{userId}/environment_readings/{readingId}')
+  .onCreate(async (snap, context) => {
+    const data = snap.data();
+    if (data.provider !== 'ble') return null;
+    const reading: EnvReading = {
+      tempF: Number(data.tempF),
+      humidity: Number(data.humidity ?? 0),
+      observedAt:
+        (data.timestamp as admin.firestore.Timestamp | undefined)?.toDate() ??
+        new Date(),
+      provider: 'ble',
+      sensorName: data.sensorName ?? null,
+    };
+    try {
+      await evaluateEnvironmentAlert(context.params.userId, reading);
+    } catch (e) {
+      console.error(
+        `BLE environment alert failed for ${context.params.userId}:`,
+        e,
+      );
+    }
+    return null;
+  });
+
 export const pollEnvironment = functions
   .runWith({
     // Note: no NEST_FN_PROJECT_ID needed server-side — the stored
@@ -2753,45 +2852,9 @@ export const pollEnvironment = functions
           { merge: true },
         );
 
-        // Threshold alerts (per-condition 6h cooldown in alertState).
-        if (conn.alerts?.enabled === false || !tokens.length) continue;
-        const violations = envViolations(reading, conn.alerts ?? {});
-        if (!violations.length) continue;
-
-        const alertState: Record<string, any> = conn.alertState ?? {};
-        const now = Date.now();
-        const fresh = violations.filter((v) => {
-          const last = alertState[v.key] as
-            | admin.firestore.Timestamp
-            | undefined;
-          return !last || now - last.toMillis() > ENV_ALERT_COOLDOWN_MS;
-        });
-        if (!fresh.length) continue;
-
-        const body =
-          `${patientName}'s home is at ` +
-          fresh.map((v) => v.text).join(' and ');
-        const response = await admin.messaging().sendEachForMulticast({
-          notification: { title: '🌡️ Home environment alert', body },
-          data: {
-            type: 'environment_alert',
-            userId: patientId,
-            payload: `environment:${patientId}`,
-          },
-          tokens,
-        });
-        console.log(
-          `Environment alert for ${patientId} (${fresh
-            .map((v) => v.key)
-            .join(',')}): ${response.successCount} ok, ` +
-            `${response.failureCount} failed`,
-        );
-
-        const stateUpdate: Record<string, any> = {};
-        for (const v of fresh) {
-          stateUpdate[v.key] = admin.firestore.FieldValue.serverTimestamp();
-        }
-        await connDoc.ref.set({ alertState: stateUpdate }, { merge: true });
+        // Threshold alerts — shared with the BLE reading trigger
+        // (per-condition 6h cooldown in alertState).
+        await evaluateEnvironmentAlert(patientId, reading);
       } catch (e) {
         console.error(`Environment poll failed for ${patientId}:`, e);
       }

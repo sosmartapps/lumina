@@ -270,6 +270,11 @@ class EnvironmentService {
         .set({'nest': link.toMap()}, SetOptions(merge: true));
   }
 
+  Future<void> saveBleLink(String patientId, BleLink link) {
+    return _doc(patientId)
+        .set({'ble': link.toMap()}, SetOptions(merge: true));
+  }
+
   Future<void> unlinkProvider(String patientId, String provider) async {
     await _doc(patientId).update({provider: FieldValue.delete()});
     // Remove the whole doc if nothing is linked anymore.
@@ -277,7 +282,8 @@ class EnvironmentService {
     final data = snap.data();
     if (data != null &&
         data['sensorpush'] == null &&
-        data['nest'] == null) {
+        data['nest'] == null &&
+        data['ble'] == null) {
       await _doc(patientId).delete();
     }
   }

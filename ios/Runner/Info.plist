@@ -45,6 +45,9 @@
 	<!-- Google Maps API Key (from Secrets.xcconfig) -->
 	<key>GMS_API_KEY</key>
 	<string>$(GMS_API_KEY)</string>
+	<!-- Bluetooth: reads the SensorPush temperature sensor in the home -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Lumina connects to the SensorPush sensor in your home so caregivers can see the temperature and humidity.</string>
 	<!-- Location permissions -->
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Lumina needs your location to help you navigate to saved places and find your way home.</string>

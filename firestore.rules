@@ -239,11 +239,14 @@ service cloud.firestore {
 
     // Per-family home environment (temp/humidity) provider link (doc id =
     // patient userId). Contains the family's SensorPush authorization /
-    // Nest refresh token — restricted to that patient's caregivers only
-    // (same trust model as bouncie_connections). `latest` + `alertState`
-    // are written by the pollEnvironment Cloud Function via Admin SDK.
+    // Nest refresh token — restricted to that patient's caregivers, PLUS
+    // the patient's own device (uid == userId): the BLE bridge on the
+    // patient phone reads `ble.enabled` and writes `latest`/`ble.lastSeenAt`.
+    // `latest` + `alertState` are also written by Cloud Functions (Admin
+    // SDK, bypasses rules).
     match /environment_connections/{userId} {
-      allow read, write: if isAuthenticated() && isCaregiverFor(userId);
+      allow read, write: if isAuthenticated() &&
+        (request.auth.uid == userId || isCaregiverFor(userId));
     }
 
     // QuadTrack GPS devices (rules were missing entirely — every
