@@ -2426,6 +2426,7 @@ export const deleteCaregiverAccount = functions.https.onCall(
 
     let wiped = 0;
     let unlinked = 0;
+    try {
     for (const patientId of managed) {
       const userDoc = await db.collection('users').doc(patientId).get();
       if (!userDoc.exists) continue;
@@ -2451,7 +2452,24 @@ export const deleteCaregiverAccount = functions.https.onCall(
       db.collection('invite_codes').where('createdBy', '==', uid),
     );
     await db.recursiveDelete(db.collection('caregivers').doc(uid));
-    await admin.auth().deleteUser(uid);
+    } catch (e) {
+      console.error('deleteCaregiverAccount data cleanup failed:', e);
+      throw new functions.https.HttpsError(
+        'internal', `Account data cleanup failed: ${String((e as Error).message || e)}`);
+    }
+    try {
+      await admin.auth().deleteUser(uid);
+    } catch (e) {
+      // Surface the REAL cause (e.g. missing roles/firebaseauth.admin on
+      // the appspot service account) instead of a blank INTERNAL.
+      console.error('auth deleteUser failed:', e);
+      throw new functions.https.HttpsError(
+        'internal',
+        `Data deleted, but removing the sign-in account failed: ${String(
+          (e as Error).message || e,
+        )}`,
+      );
+    }
     console.log(
       `deleteCaregiverAccount ${uid}: wiped ${wiped}, unlinked ${unlinked}`);
     return { deleted: true, patientsWiped: wiped, patientsUnlinked: unlinked };

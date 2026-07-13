@@ -25,6 +25,13 @@ class CaregiverProvider with ChangeNotifier {
   /// Load caregiver data
   Future<void> loadCaregiver(String caregiverId) async {
     _isLoading = true;
+    // Loading a DIFFERENT caregiver evicts the previous session's state —
+    // a stale _selectedUser survived account switches and rendered a
+    // deleted patient from memory (2026-07-13, "Robert Snith").
+    if (_caregiver?.id != caregiverId) {
+      _selectedUser = null;
+      _managedUsers = [];
+    }
     notifyListeners();
 
     try {
@@ -35,6 +42,12 @@ class CaregiverProvider with ChangeNotifier {
       }
     } catch (e) {
       debugPrint('Error loading caregiver: $e');
+    }
+
+    // Selected patient must be one of THIS caregiver's patients.
+    if (_selectedUser != null &&
+        !_managedUsers.any((u) => u.id == _selectedUser!.id)) {
+      _selectedUser = _managedUsers.isNotEmpty ? _managedUsers.first : null;
     }
 
     _isLoading = false;

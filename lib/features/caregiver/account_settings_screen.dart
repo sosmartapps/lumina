@@ -58,6 +58,11 @@ class _AccountSettingsScreenState
               leading: const Icon(Icons.logout, color: AppTheme.primaryBlue),
               title: const Text('Sign Out'),
               onTap: () async {
+                await ref
+                    .read(appStateNotifierProvider)
+                    .clear()
+                    .catchError((_) {});
+                ref.read(caregiverNotifierProvider).clear();
                 await ref.read(authServiceProvider).signOut();
                 if (!context.mounted) return;
                 Navigator.of(context).pushAndRemoveUntil(
@@ -138,7 +143,11 @@ class _AccountSettingsScreenState
       await FirebaseFunctions.instance
           .httpsCallable('deleteCaregiverAccount')
           .call();
-      // Auth user is deleted server-side; drop local session state.
+      // Auth user is deleted server-side; drop ALL local session state —
+      // stale SharedPreferences kept rendering the dead account's data
+      // after deletion (2026-07-13).
+      await ref.read(appStateNotifierProvider).clear().catchError((_) {});
+      ref.read(caregiverNotifierProvider).clear();
       await ref.read(authServiceProvider).signOut().catchError((_) {});
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
