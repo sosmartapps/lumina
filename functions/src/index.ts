@@ -1929,3 +1929,292 @@ export const analyzeTripsAndAlert = functions
     }
     return null;
   });
+
+// ============================================================================
+// AI PHOTO VERIFICATION OF TASK COMPLETION (2026-07-12)
+// Patient photographs the completed task (empty pill compartment, filled
+// pet bowl…); Claude vision confirms; caregivers are alerted on failed
+// verification or when a photo-required task is missed entirely.
+// ============================================================================
+
+/** Push a notification to every caregiver of a patient (fcmTokens arrays). */
+async function notifyCaregiversAboutTask(
+  userId: string,
+  title: string,
+  body: string,
+  reminderId: string,
+): Promise<void> {
+  const db = admin.firestore();
+  const userDoc = await db.collection('users').doc(userId).get();
+  const userData = userDoc.data();
+  if (!userData?.caregiverIds?.length) {
+    console.log('notifyCaregiversAboutTask: no caregivers');
+    return;
+  }
+  const caregiverDocs = await Promise.all(
+    userData.caregiverIds.map((id: string) =>
+      db.collection('caregivers').doc(id).get(),
+    ),
+  );
+  const tokens: string[] = [];
+  caregiverDocs.forEach((doc) => {
+    const c = doc.data();
+    if (c?.fcmTokens?.length) tokens.push(...c.fcmTokens);
+    else if (c?.fcmToken) tokens.push(c.fcmToken);
+  });
+  if (!tokens.length) {
+    console.log('notifyCaregiversAboutTask: no FCM tokens');
+    return;
+  }
+  const response = await admin.messaging().sendEachForMulticast({
+    notification: { title, body },
+    data: {
+      type: 'task_alert',
+      reminderId,
+      userId,
+      timestamp: new Date().toISOString(),
+    },
+    tokens,
+  });
+  console.log(
+    `task alert: ${response.successCount} sent, ${response.failureCount} failed`,
+  );
+}
+
+/**
+ * When a completion photo is attached to a reminder, ask Claude vision
+ * whether the photo actually shows the task done, and record the verdict.
+ * Failed verification alerts caregivers immediately.
+ */
+export const verifyTaskCompletionPhoto = functions
+  .runWith({ secrets: ['ANTHROPIC_API_KEY'], timeoutSeconds: 60 })
+  .firestore.document('reminders/{reminderId}')
+  .onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+    // Only when a completion photo is NEWLY attached
+    if (
+      !after.completionPhotoUrl ||
+      after.completionPhotoUrl === before.completionPhotoUrl
+    ) {
+      return null;
+    }
+    // Already verified ON DEVICE by hash match against the reference —
+    // no AI needed (cost-first design, 2026-07-12).
+    if (after.verificationStatus === 'verified') {
+      console.log('verifyTaskCompletionPhoto: matched locally, skipping AI');
+      return null;
+    }
+
+    const reminderId = context.params.reminderId;
+    const db = admin.firestore();
+    const apiKey = (process.env.ANTHROPIC_API_KEY || '').trim();
+    if (!apiKey) {
+      console.log('ANTHROPIC_API_KEY not configured; leaving unverified.');
+      return null;
+    }
+
+    try {
+      // Wire values from ReminderType (reminder.dart)
+      // Phoenix local weekday so Claude checks the right pillbox slot
+      const phxDay = new Date(Date.now() - 7 * 3600 * 1000).toLocaleDateString(
+        'en-US',
+        { weekday: 'long', timeZone: 'UTC' },
+      );
+      const expectations: Record<string, string> = {
+        medication:
+          `Today is ${phxDay}. If this is a weekly pill organizer, the ` +
+          `${phxDay} compartment should be EMPTY (pills taken) — other ` +
+          'days may still be full. For a single container, it should be ' +
+          'empty for the current dose.',
+        pet_care:
+          'The photo should show pet food and/or water present in the ' +
+          'pet bowls — meaning the pet was fed.',
+        meal_time:
+          'The photo should show evidence a meal happened (prepared food, ' +
+          'or an empty/finished plate).',
+        hydration:
+          'The photo should show evidence of drinking (a glass or bottle ' +
+          'that is empty or being used).',
+      };
+      const expectation =
+        expectations[after.type] ||
+        'The photo should show clear evidence the task was completed.';
+
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 300,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'image',
+                  source: { type: 'url', url: after.completionPhotoUrl },
+                },
+                {
+                  type: 'text',
+                  text:
+                    'You verify care-task completion photos for a ' +
+                    `dementia-care app. Task: "${after.title}" ` +
+                    `(type: ${after.type}). ${expectation}\n\n` +
+                    'Be lenient — these photos are taken by elderly ' +
+                    'users; poor framing or blur is fine as long as the ' +
+                    'evidence is visible. Does this photo show the task ' +
+                    'was completed? Respond with ONLY JSON: ' +
+                    '{"verified": true|false, "reason": "<one short ' +
+                    'sentence in plain language>"}',
+                },
+              ],
+            },
+          ],
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(`Anthropic API ${res.status}: ${await res.text()}`);
+      }
+      const out = (await res.json()) as {
+        content?: Array<{ text?: string }>;
+      };
+      const text = out?.content?.[0]?.text || '';
+      const match = text.match(/\{[\s\S]*\}/);
+      const verdict: { verified?: boolean; reason?: string } = match
+        ? JSON.parse(match[0])
+        : { verified: false, reason: 'Unreadable verification response' };
+
+      const update: Record<string, unknown> = {
+        verificationStatus: verdict.verified ? 'verified' : 'failed',
+        verificationReason: verdict.reason || null,
+        verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      // Learn the reference: this AI-verified photo's hash becomes the
+      // "known good" that future photos are matched against ON DEVICE,
+      // so subsequent days verify for free.
+      if (verdict.verified && after.completionPhotoHash) {
+        update.referencePhotoHash = after.completionPhotoHash;
+      }
+      await db.collection('reminders').doc(reminderId).update(update);
+
+      if (!verdict.verified) {
+        const userDoc = await db.collection('users').doc(after.userId).get();
+        const userName = userDoc.data()?.name || 'Your loved one';
+        await notifyCaregiversAboutTask(
+          after.userId,
+          '⚠️ Task photo needs a look',
+          `${userName} marked "${after.title}" done, but the photo ` +
+            `didn't confirm it: ${verdict.reason || 'no evidence visible'}`,
+          reminderId,
+        );
+      }
+      return null;
+    } catch (e) {
+      console.error('verifyTaskCompletionPhoto error:', e);
+      // Record the error but never block completion on AI availability
+      await db.collection('reminders').doc(reminderId).update({
+        verificationStatus: 'error',
+        verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return null;
+    }
+  });
+
+/**
+ * Every 30 min: find photo-required reminders that are past due (45 min
+ * grace) with NO completion today, and alert caregivers once per day.
+ * Phoenix is UTC-7 year-round (no DST), so local time is a fixed offset.
+ */
+export const sweepMissedPhotoTasks = functions
+  .runWith({ timeoutSeconds: 120 })
+  .pubsub.schedule('every 30 minutes')
+  .onRun(async () => {
+    const db = admin.firestore();
+    const PHX_OFFSET_MS = 7 * 3600 * 1000; // America/Phoenix, no DST
+    const GRACE_MS = 45 * 60 * 1000;
+    const now = new Date();
+    const phxNow = new Date(now.getTime() - PHX_OFFSET_MS);
+    // Phoenix midnight expressed as a real UTC instant
+    const phxMidnightUtc = new Date(
+      Date.UTC(
+        phxNow.getUTCFullYear(),
+        phxNow.getUTCMonth(),
+        phxNow.getUTCDate(),
+      ).valueOf() + PHX_OFFSET_MS,
+    );
+    const phxWeekday = ((phxNow.getUTCDay() + 6) % 7) + 1; // 1=Mon…7=Sun
+
+    // Two equality filters — no composite index required.
+    const snap = await db
+      .collection('reminders')
+      .where('requiresPhoto', '==', true)
+      .where('isActive', '==', true)
+      .get();
+
+    let alerted = 0;
+    for (const doc of snap.docs) {
+      const r = doc.data();
+      try {
+        const sched = r.scheduledTime?.toDate?.();
+        if (!sched) continue;
+        const schedPhx = new Date(sched.getTime() - PHX_OFFSET_MS);
+
+        // Is this reminder scheduled for today (Phoenix)?
+        const freq = r.repeatFrequency || 'daily';
+        if (freq === 'once') {
+          const sameDay =
+            schedPhx.getUTCFullYear() === phxNow.getUTCFullYear() &&
+            schedPhx.getUTCMonth() === phxNow.getUTCMonth() &&
+            schedPhx.getUTCDate() === phxNow.getUTCDate();
+          if (!sameDay) continue;
+        } else if (freq === 'weekly') {
+          const schedWeekday = ((schedPhx.getUTCDay() + 6) % 7) + 1;
+          if (schedWeekday !== phxWeekday) continue;
+        } else if (freq === 'custom') {
+          if (!(r.repeatDays || []).includes(phxWeekday)) continue;
+        } // daily: always scheduled
+
+        // Today's occurrence (UTC instant of today-Phoenix @ sched hh:mm)
+        const dueUtc = new Date(
+          phxMidnightUtc.getTime() +
+            schedPhx.getUTCHours() * 3600 * 1000 +
+            schedPhx.getUTCMinutes() * 60 * 1000,
+        );
+        if (now.getTime() < dueUtc.getTime() + GRACE_MS) continue; // not late yet
+
+        // Completed today? (failed verification already alerted separately)
+        const completedAt = r.completedAt?.toDate?.();
+        if (completedAt && completedAt >= phxMidnightUtc) continue;
+
+        // Only one missed-task alert per reminder per day
+        const lastAlert = r.lastMissedAlertAt?.toDate?.();
+        if (lastAlert && lastAlert >= phxMidnightUtc) continue;
+
+        const userDoc = await db.collection('users').doc(r.userId).get();
+        const userName = userDoc.data()?.name || 'Your loved one';
+        await notifyCaregiversAboutTask(
+          r.userId,
+          '⏰ Task not completed',
+          `${userName} has not completed "${r.title}" ` +
+            `(was due ${schedPhx.getUTCHours()}:` +
+            `${String(schedPhx.getUTCMinutes()).padStart(2, '0')})`,
+          doc.id,
+        );
+        await doc.ref.update({
+          lastMissedAlertAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        alerted++;
+      } catch (e) {
+        console.error(`sweepMissedPhotoTasks: reminder ${doc.id} failed:`, e);
+      }
+    }
+    console.log(
+      `sweepMissedPhotoTasks: ${snap.size} candidates, ${alerted} alert(s)`,
+    );
+    return null;
+  });

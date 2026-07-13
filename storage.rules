@@ -6,12 +6,17 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    // Medication verification photos
+    // Task/medication completion verification photos.
+    // NOTE: patients upload from ANONYMOUS-auth devices whose uid is NOT
+    // the patient doc id, so uid==userId can never pass — family trust
+    // model like expense_receipts/pill_photos (fixed 2026-07-12; the old
+    // uid==userId rule silently denied every completion photo upload).
     match /medication_photos/{userId}/{allPaths=**} {
-      // Users can upload their own medication photos
-      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow create: if isAuthenticated()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
 
-      // Caregivers can read medication photos
+      // Caregivers can read completion photos
       allow read: if isAuthenticated();
 
       // Only admin can delete

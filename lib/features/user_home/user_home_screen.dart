@@ -273,11 +273,12 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen>
             final reminderService = ref.read(reminderServiceProvider);
             reminderService.snoozeReminder(reminder.id, reminder.snoozeMinutes);
           },
-          onComplete: (photoUrl) {
+          onComplete: (photoUrl, photoHash) {
             Navigator.of(context).pop();
             _reminderPopupShowing = false;
             final reminderService = ref.read(reminderServiceProvider);
-            reminderService.completeReminder(reminder.id, photoUrl: photoUrl);
+            reminderService.completeReminder(reminder.id,
+                photoUrl: photoUrl, photoHash: photoHash);
           },
         ),
       ),

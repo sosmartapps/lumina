@@ -5,6 +5,7 @@ import '../models/reminder.dart';
 import '../models/medication.dart';
 import '../models/prescription.dart';
 import 'notification_service.dart';
+import 'photo_match_service.dart';
 
 /// Service for managing reminders and medications
 class ReminderService {
@@ -114,12 +115,42 @@ class ReminderService {
     });
   }
 
-  /// Mark reminder as completed
-  Future<void> completeReminder(String reminderId, {String? photoUrl}) async {
+  /// Mark reminder as completed.
+  ///
+  /// Match-first verification (cost design, 2026-07-12): if the photo's
+  /// on-device hash matches the reminder's reference hash, it verifies
+  /// locally for FREE and the AI Cloud Function skips it. Only photos
+  /// without a reference yet (first time) or that don't match go
+  /// 'pending' for Claude vision.
+  Future<void> completeReminder(
+    String reminderId, {
+    String? photoUrl,
+    String? photoHash,
+  }) async {
+    String? status;
+    String? reason;
+    if (photoUrl != null) {
+      status = 'pending';
+      try {
+        final doc =
+            await _firestore.collection('reminders').doc(reminderId).get();
+        final referenceHash = (doc.data()
+            as Map<String, dynamic>?)?['referencePhotoHash'] as String?;
+        if (PhotoMatchService.matches(photoHash, referenceHash)) {
+          status = 'verified';
+          reason = 'Matched previous verified photo';
+        }
+      } catch (_) {
+        // Fall through to 'pending' — the Cloud Function will handle it.
+      }
+    }
     await _firestore.collection('reminders').doc(reminderId).update({
       'completedAt': FieldValue.serverTimestamp(),
       'completionPhotoUrl': photoUrl,
+      'completionPhotoHash': photoHash,
       'currentSnoozeCount': 0,
+      'verificationStatus': status,
+      'verificationReason': reason,
     });
   }
 

@@ -157,6 +157,50 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
                 ],
               ],
             ),
+            // AI photo-verification verdict (photo-required tasks only)
+            if (reminder.verificationStatus != null) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(
+                    switch (reminder.verificationStatus) {
+                      'verified' => Icons.check_circle,
+                      'failed' => Icons.error,
+                      'pending' => Icons.hourglass_top,
+                      _ => Icons.help_outline,
+                    },
+                    size: 16,
+                    color: switch (reminder.verificationStatus) {
+                      'verified' => AppTheme.primaryGreen,
+                      'failed' => AppTheme.primaryRed,
+                      _ => Colors.grey.shade600,
+                    },
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      switch (reminder.verificationStatus) {
+                        'verified' => 'Photo verified',
+                        'failed' => 'Photo NOT verified'
+                            '${reminder.verificationReason != null ? ' — ${reminder.verificationReason}' : ''}',
+                        'pending' => 'Checking photo…',
+                        _ => 'Photo check unavailable',
+                      },
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: switch (reminder.verificationStatus) {
+                          'verified' => AppTheme.primaryGreen,
+                          'failed' => AppTheme.primaryRed,
+                          _ => Colors.grey.shade600,
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
         trailing: PopupMenuButton(

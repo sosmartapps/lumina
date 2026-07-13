@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/reminder.dart';
 import '../providers/providers.dart';
+import '../services/photo_match_service.dart';
 import '../theme/app_theme.dart';
 
 /// Full-screen reminder popup with voice and visual alerts
@@ -20,7 +21,9 @@ class ReminderPopup extends ConsumerStatefulWidget {
   final bool requiresPhoto;
   final VoidCallback onDismiss;
   final VoidCallback onSnooze;
-  final Function(String? photoUrl)? onComplete;
+  /// Called with the completion photo URL and its on-device perceptual
+  /// hash (both null for non-photo tasks).
+  final Function(String? photoUrl, String? photoHash)? onComplete;
 
   const ReminderPopup({
     super.key,
@@ -203,7 +206,7 @@ class _ReminderPopupState extends ConsumerState<ReminderPopup>
                           if (widget.requiresPhoto && widget.onComplete != null) {
                             _showPhotoCapture();
                           } else {
-                            widget.onComplete?.call(null);
+                            widget.onComplete?.call(null, null);
                           }
                         },
                         style: ElevatedButton.styleFrom(
@@ -274,16 +277,38 @@ class _ReminderPopupState extends ConsumerState<ReminderPopup>
 
   void _showPhotoCapture() {
     final userId = ref.read(appStateNotifierProvider).currentUserId;
+    final (photoTitle, photoInstructions) = switch (widget.reminderType) {
+      ReminderType.medication => (
+          'Show Empty ${widget.title}',
+          'Take a photo of the empty pill container'
+        ),
+      ReminderType.petCare => (
+          'Show the Pet Bowls',
+          'Take a photo of the food and water in the bowls'
+        ),
+      ReminderType.mealTime => (
+          'Show Your Meal',
+          'Take a photo of your food or finished plate'
+        ),
+      ReminderType.hydration => (
+          'Show Your Drink',
+          'Take a photo of your glass or bottle'
+        ),
+      _ => (
+          "Show It's Done",
+          'Take a photo showing "${widget.title}" is complete'
+        ),
+    };
     Navigator.of(context).push(
       MaterialPageRoute(
         fullscreenDialog: true,
         builder: (context) => PhotoCaptureScreen(
-          title: 'Show Empty ${widget.title}',
-          instructions: 'Take a photo of the empty pill container',
+          title: photoTitle,
+          instructions: photoInstructions,
           userId: userId,
-          onPhotoTaken: (photoUrl) {
+          onPhotoTaken: (photoUrl, photoHash) {
             Navigator.of(context).pop();
-            widget.onComplete?.call(photoUrl);
+            widget.onComplete?.call(photoUrl, photoHash);
           },
           onCancel: () {
             Navigator.of(context).pop();
@@ -328,11 +353,14 @@ class _ReminderPopupState extends ConsumerState<ReminderPopup>
   }
 }
 
-/// Photo capture screen for medication verification
+/// Photo capture screen for task/medication verification
 class PhotoCaptureScreen extends StatefulWidget {
   final String title;
   final String instructions;
-  final Function(String) onPhotoTaken;
+
+  /// Called with the uploaded photo URL and its on-device dHash (hash may
+  /// be null when hashing fails — never blocks completion).
+  final Function(String url, String? hash) onPhotoTaken;
   final VoidCallback onCancel;
   final String? userId;
 
@@ -399,7 +427,9 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
       );
 
       final downloadUrl = await ref.getDownloadURL();
-      widget.onPhotoTaken(downloadUrl);
+      // Cheap on-device perceptual hash for match-first verification
+      final photoHash = await PhotoMatchService.computeDHash(_capturedImage!);
+      widget.onPhotoTaken(downloadUrl, photoHash);
     } catch (e) {
       if (mounted) {
         setState(() => _isUploading = false);

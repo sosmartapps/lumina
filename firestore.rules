@@ -98,7 +98,12 @@ service cloud.firestore {
     match /reminders/{reminderId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
-      allow update, delete: if isAuthenticated() &&
+      // Update open to any authenticated user: patients complete/snooze
+      // reminders from ANONYMOUS-auth devices (uid is neither createdBy
+      // nor in caregiverIds) — old rule silently denied every completion
+      // (fixed 2026-07-12). Family trust model, matches users subcols.
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated() &&
         (resource.data.createdBy == request.auth.uid ||
          isCaregiverFor(resource.data.userId));
     }

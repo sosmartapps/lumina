@@ -22,6 +22,20 @@ class Reminder {
   final DateTime? lastTriggeredAt;
   final DateTime? completedAt;
   final String? completionPhotoUrl;
+
+  /// Photo verification verdict: null (no photo), 'pending', 'verified',
+  /// 'failed', 'error'. Set to 'verified' locally when the photo hash
+  /// matches [referencePhotoHash] (free), otherwise written by the
+  /// verifyTaskCompletionPhoto Cloud Function (Claude vision).
+  final String? verificationStatus;
+  final String? verificationReason;
+
+  /// dHash of the completion photo (computed on device at capture).
+  final String? completionPhotoHash;
+
+  /// dHash of the last AI-verified completion photo — the "known good"
+  /// reference future photos are matched against on device.
+  final String? referencePhotoHash;
   final bool homeOnly; // Only trigger when user is at home
   final DateTime createdAt;
   final String createdBy; // Caregiver ID
@@ -47,6 +61,10 @@ class Reminder {
     this.lastTriggeredAt,
     this.completedAt,
     this.completionPhotoUrl,
+    this.verificationStatus,
+    this.verificationReason,
+    this.completionPhotoHash,
+    this.referencePhotoHash,
     bool? homeOnly,
     DateTime? createdAt,
     required this.createdBy,
@@ -86,6 +104,10 @@ class Reminder {
       lastTriggeredAt: (data['lastTriggeredAt'] as Timestamp?)?.toDate(),
       completedAt: (data['completedAt'] as Timestamp?)?.toDate(),
       completionPhotoUrl: data['completionPhotoUrl'],
+      verificationStatus: data['verificationStatus'],
+      verificationReason: data['verificationReason'],
+      completionPhotoHash: data['completionPhotoHash'],
+      referencePhotoHash: data['referencePhotoHash'],
       homeOnly: data['homeOnly'],
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       createdBy: data['createdBy'] ?? '',
@@ -115,6 +137,10 @@ class Reminder {
       'completedAt':
           completedAt != null ? Timestamp.fromDate(completedAt!) : null,
       'completionPhotoUrl': completionPhotoUrl,
+      'verificationStatus': verificationStatus,
+      'verificationReason': verificationReason,
+      'completionPhotoHash': completionPhotoHash,
+      'referencePhotoHash': referencePhotoHash,
       'homeOnly': homeOnly,
       'createdAt': Timestamp.fromDate(createdAt),
       'createdBy': createdBy,
@@ -163,6 +189,10 @@ class Reminder {
       lastTriggeredAt: lastTriggeredAt ?? this.lastTriggeredAt,
       completedAt: completedAt ?? this.completedAt,
       completionPhotoUrl: completionPhotoUrl ?? this.completionPhotoUrl,
+      verificationStatus: verificationStatus,
+      verificationReason: verificationReason,
+      completionPhotoHash: completionPhotoHash,
+      referencePhotoHash: referencePhotoHash,
       homeOnly: homeOnly ?? this.homeOnly,
       createdAt: createdAt,
       createdBy: createdBy,
