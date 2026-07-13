@@ -204,11 +204,12 @@ class _InviteCaregiverScreenState extends ConsumerState<InviteCaregiverScreen> {
               style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 4),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
+            // Material (not Container+BoxDecoration): ListTiles paint ink
+            // on the nearest Material — a DecoratedBox hides it and spams
+            // debug assertions (2026-07-12).
+            Material(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
               child: Column(
                 children: _invitableRoles.map((role) {
                   return CheckboxListTile(
