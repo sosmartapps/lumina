@@ -154,6 +154,29 @@ class ReminderService {
     });
   }
 
+  /// Caregiver override of a photo verification verdict — the human is
+  /// always the authority over the AI. Approving also TEACHES the
+  /// reference hash, so future photos of this family's setup verify
+  /// on-device for free. Rejecting un-learns a wrongly-taught reference.
+  Future<void> overrideVerification(
+    Reminder reminder, {
+    required bool approved,
+  }) async {
+    final update = <String, dynamic>{
+      'verificationStatus': approved ? 'verified' : 'failed',
+      'verificationReason':
+          approved ? 'Approved by caregiver' : 'Rejected by caregiver',
+    };
+    if (approved && reminder.completionPhotoHash != null) {
+      update['referencePhotoHash'] = reminder.completionPhotoHash;
+    } else if (!approved &&
+        reminder.referencePhotoHash != null &&
+        reminder.referencePhotoHash == reminder.completionPhotoHash) {
+      update['referencePhotoHash'] = FieldValue.delete();
+    }
+    await _firestore.collection('reminders').doc(reminder.id).update(update);
+  }
+
   /// Snooze a reminder.
   ///
   /// Uses `lastTriggeredAt` + snooze offset to track when the snoozed

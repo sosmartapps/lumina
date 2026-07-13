@@ -220,11 +220,20 @@ class _ReminderPopupState extends ConsumerState<ReminderPopup>
                           children: [
                             const Icon(Icons.check_circle, size: 36),
                             const SizedBox(width: 12),
-                            Text(
-                              widget.requiresPhoto ? 'DONE - TAKE PHOTO' : 'DONE',
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
+                            // Flexible+FittedBox: survives large text
+                            // scale (overflowed 15px at 1.2x, 2026-07-12)
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  widget.requiresPhoto
+                                      ? 'DONE - TAKE PHOTO'
+                                      : 'DONE',
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
                             ),
                           ],

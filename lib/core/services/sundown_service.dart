@@ -89,9 +89,18 @@ class SundownService {
 
   /// Update cached user (called when user data changes).
   void updateUser(AppUser user) {
+    final homeChanged = _currentUser?.homeLocation?.latitude !=
+            user.homeLocation?.latitude ||
+        _currentUser?.homeLocation?.longitude != user.homeLocation?.longitude;
     _currentUser = user;
     _sundownAlertEnabled = user.settings.sundownAlertEnabled;
     _sundownBufferMinutes = user.settings.sundownBufferMinutes;
+    // Home moved — any visible alert is computed against the OLD home;
+    // recompute immediately instead of waiting for the next timer tick
+    // (stale "83 minutes to get home" after address edit, 2026-07-12).
+    if (homeChanged) {
+      performCheck();
+    }
   }
 
   void _startMonitoring() {

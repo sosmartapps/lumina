@@ -1030,6 +1030,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
+                  isExpanded: true,
             initialValue: _gender,
             decoration: const InputDecoration(labelText: 'Gender'),
             items: ['Male', 'Female', 'Non-binary', 'Other', 'Prefer not to say']
@@ -1159,6 +1160,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: _hairColor,
                   decoration: const InputDecoration(labelText: 'Hair Color'),
                   items: [
@@ -1177,6 +1179,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
               const SizedBox(width: 16),
               Expanded(
                 child: DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: _eyeColor,
                   decoration: const InputDecoration(labelText: 'Eye Color'),
                   items: ['Brown', 'Blue', 'Green', 'Hazel', 'Gray', 'Other']
@@ -1192,6 +1195,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: _race,
                   decoration: const InputDecoration(labelText: 'Race/Ethnicity'),
                   items: [
@@ -1204,13 +1208,18 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                     'Middle Eastern',
                     'Mixed',
                     'Other'
-                  ].map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                  ].map((r) => DropdownMenuItem(
+                        value: r,
+                        child: Text(r,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                      )).toList(),
                   onChanged: (value) => setState(() => _race = value),
                 ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: _skinTone,
                   decoration: const InputDecoration(labelText: 'Skin Tone'),
                   items: ['Very Light', 'Light', 'Medium', 'Olive', 'Brown', 'Dark']
@@ -1223,6 +1232,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
+                  isExpanded: true,
             initialValue: _buildType,
             decoration: const InputDecoration(labelText: 'Build Type'),
             items: ['Slim', 'Average', 'Athletic', 'Heavy', 'Stocky']
@@ -1251,6 +1261,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
+                  isExpanded: true,
             initialValue: _glasses,
             decoration: const InputDecoration(labelText: 'Glasses'),
             items: [

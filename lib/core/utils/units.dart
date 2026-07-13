@@ -56,4 +56,18 @@ class Units {
     if (units == UnitsSystem.metric) return '${kg.round()} kg';
     return '${kgToLb(kg).round()} lb';
   }
+
+  // ── Distance ────────────────────────────────────────────
+  static const double milesPerKm = 0.621371;
+
+  /// e.g. "1.2 mi" / "350 ft" (imperial) or "1.9 km" / "400 m" (metric).
+  static String formatDistanceKm(double km, UnitsSystem units) {
+    if (units == UnitsSystem.metric) {
+      if (km < 1) return '${(km * 1000).round()} m';
+      return '${km.toStringAsFixed(1)} km';
+    }
+    final miles = km * milesPerKm;
+    if (miles < 0.2) return '${(miles * 5280).round()} ft';
+    return '${miles.toStringAsFixed(1)} mi';
+  }
 }

@@ -2023,10 +2023,17 @@ export const verifyTaskCompletionPhoto = functions
       );
       const expectations: Record<string, string> = {
         medication:
-          `Today is ${phxDay}. If this is a weekly pill organizer, the ` +
-          `${phxDay} compartment should be EMPTY (pills taken) — other ` +
-          'days may still be full. For a single container, it should be ' +
-          'empty for the current dose.',
+          `Today is ${phxDay}. Weekly pill organizers are laid out ` +
+          'S M T W T F S, normally LEFT to RIGHT starting with Sunday. ' +
+          'There may be TWO organizers (morning and evening doses) — ' +
+          'check today\'s compartment in each. Work step by step: ' +
+          `(1) locate the compartment labeled for ${phxDay}, reading the ` +
+          'printed letters, (2) look inside ONLY that compartment. ' +
+          'The dose was TAKEN if today\'s compartment is empty — an ' +
+          'open or partially open lid with nothing inside also means ' +
+          'taken. Other days\' compartments may still be full; ignore ' +
+          'them completely. Only answer verified=false if you can ' +
+          'CLEARLY see pills remaining inside today\'s compartment.',
         pet_care:
           'The photo should show pet food and/or water present in the ' +
           'pet bowls — meaning the pet was fed.',
@@ -2041,53 +2048,68 @@ export const verifyTaskCompletionPhoto = functions
         expectations[after.type] ||
         'The photo should show clear evidence the task was completed.';
 
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 300,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'image',
-                  source: { type: 'url', url: after.completionPhotoUrl },
-                },
-                {
-                  type: 'text',
-                  text:
-                    'You verify care-task completion photos for a ' +
-                    `dementia-care app. Task: "${after.title}" ` +
-                    `(type: ${after.type}). ${expectation}\n\n` +
-                    'Be lenient — these photos are taken by elderly ' +
-                    'users; poor framing or blur is fine as long as the ' +
-                    'evidence is visible. Does this photo show the task ' +
-                    'was completed? Respond with ONLY JSON: ' +
-                    '{"verified": true|false, "reason": "<one short ' +
-                    'sentence in plain language>"}',
-                },
-              ],
-            },
-          ],
-        }),
-      });
-      if (!res.ok) {
-        throw new Error(`Anthropic API ${res.status}: ${await res.text()}`);
-      }
-      const out = (await res.json()) as {
-        content?: Array<{ text?: string }>;
+      const promptText =
+        'You verify care-task completion photos for a ' +
+        `dementia-care app. Task: "${after.title}" ` +
+        `(type: ${after.type}). ${expectation}\n\n` +
+        'Be lenient — these photos are taken by elderly ' +
+        'users; poor framing or blur is fine as long as the ' +
+        'evidence is visible. Does this photo show the task ' +
+        'was completed? Respond with ONLY JSON: ' +
+        '{"verified": true|false, "reason": "<one short ' +
+        'sentence in plain language>"}';
+
+      const askModel = async (
+        model: string,
+      ): Promise<{ verified?: boolean; reason?: string }> => {
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 300,
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  {
+                    type: 'image',
+                    source: { type: 'url', url: after.completionPhotoUrl },
+                  },
+                  { type: 'text', text: promptText },
+                ],
+              },
+            ],
+          }),
+        });
+        if (!res.ok) {
+          throw new Error(`Anthropic API ${res.status}: ${await res.text()}`);
+        }
+        const out = (await res.json()) as {
+          content?: Array<{ text?: string }>;
+        };
+        const text = out?.content?.[0]?.text || '';
+        const match = text.match(/\{[\s\S]*\}/);
+        return match
+          ? JSON.parse(match[0])
+          : { verified: false, reason: 'Unreadable verification response' };
       };
-      const text = out?.content?.[0]?.text || '';
-      const match = text.match(/\{[\s\S]*\}/);
-      const verdict: { verified?: boolean; reason?: string } = match
-        ? JSON.parse(match[0])
-        : { verified: false, reason: 'Unreadable verification response' };
+
+      // Cheap first pass; a FAILED verdict gets one second opinion from
+      // a stronger model before we alarm the caregiver — false alarms
+      // cost more trust than the ~1¢ escalation (2026-07-12: Haiku
+      // misread a pill organizer's Sunday slot as full).
+      let verdict = await askModel('claude-haiku-4-5-20251001');
+      if (!verdict.verified) {
+        console.log(
+          `Haiku said failed (${verdict.reason}); escalating to Sonnet`,
+        );
+        verdict = await askModel('claude-sonnet-5');
+      }
 
       const update: Record<string, unknown> = {
         verificationStatus: verdict.verified ? 'verified' : 'failed',

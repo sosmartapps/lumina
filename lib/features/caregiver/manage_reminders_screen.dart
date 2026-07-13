@@ -101,6 +101,92 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
     return freq.displayName;
   }
 
+  /// Review the completion photo and override the AI verdict. Approving
+  /// teaches the reference hash (future matching photos verify free);
+  /// rejecting un-learns it. Pill boxes come in every configuration —
+  /// the caregiver's judgment is what the system learns from.
+  void _showVerificationReview(Reminder reminder) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(reminder.title),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (reminder.completionPhotoUrl != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    reminder.completionPhotoUrl!,
+                    height: 260,
+                    width: double.maxFinite,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (c, child, progress) => progress == null
+                        ? child
+                        : const SizedBox(
+                            height: 260,
+                            child:
+                                Center(child: CircularProgressIndicator()),
+                          ),
+                    errorBuilder: (c, e, st) => const SizedBox(
+                      height: 80,
+                      child: Center(child: Text('Photo unavailable')),
+                    ),
+                  ),
+                )
+              else
+                const Text('No completion photo.'),
+              const SizedBox(height: 12),
+              Text(
+                'AI verdict: ${reminder.verificationStatus ?? '—'}'
+                '${reminder.verificationReason != null ? '\n${reminder.verificationReason}' : ''}',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'You know this setup best — your call overrides the AI '
+                'and teaches it for next time.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+          if (reminder.completionPhotoUrl != null) ...[
+            TextButton(
+              style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.primaryRed),
+              onPressed: () async {
+                await ref
+                    .read(reminderServiceProvider)
+                    .overrideVerification(reminder, approved: false);
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+              },
+              child: const Text('Not done'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                  backgroundColor: AppTheme.primaryGreen),
+              onPressed: () async {
+                await ref
+                    .read(reminderServiceProvider)
+                    .overrideVerification(reminder, approved: true);
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+              },
+              child: const Text('Task was done'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildReminderCard(Reminder reminder, CaregiverProvider provider) {
     final color = _getReminderColor(reminder.type);
     final icon = _getReminderIcon(reminder.type);
@@ -157,10 +243,14 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
                 ],
               ],
             ),
-            // AI photo-verification verdict (photo-required tasks only)
+            // AI photo-verification verdict (photo-required tasks only).
+            // Tap to review the actual photo and approve/reject — the
+            // caregiver is always the authority over the AI.
             if (reminder.verificationStatus != null) ...[
               const SizedBox(height: 4),
-              Row(
+              InkWell(
+                onTap: () => _showVerificationReview(reminder),
+                child: Row(
                 children: [
                   Icon(
                     switch (reminder.verificationStatus) {
@@ -199,6 +289,7 @@ class _ManageRemindersScreenState extends ConsumerState<ManageRemindersScreen> {
                     ),
                   ),
                 ],
+                ),
               ),
             ],
           ],

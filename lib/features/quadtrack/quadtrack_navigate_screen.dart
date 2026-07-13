@@ -8,6 +8,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/units.dart';
 import '../../core/providers/quadtrack_provider.dart';
 
 /// Live directions screen showing caregiver position and patient tracker location
@@ -396,7 +397,9 @@ class _QuadTrackNavigateScreenState
                                     ),
                               ),
                               Text(
-                                '${distance.toStringAsFixed(1)} km',
+                                // Follows device region: miles in the US
+                                Units.formatDistanceKm(
+                                    distance, Units.resolve(null)),
                                 style: Theme.of(context)
                                     .textTheme
                                     .titleSmall
