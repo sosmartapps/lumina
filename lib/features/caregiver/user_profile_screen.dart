@@ -6,12 +6,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/models/user_profile.dart';
 import '../../core/services/user_profile_service.dart';
-import '../../core/services/missing_person_flyer_service.dart';
 import '../../core/utils/units.dart';
 
 class UserProfileScreen extends StatefulWidget {
@@ -32,7 +30,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   bool _isLoading = true;
   bool _isSaving = false;
   bool _isGeneratingReport = false;
-  bool _isGeneratingFlyer = false;
 
   // Form controllers for Identity tab
   final _legalFirstNameController = TextEditingController();
@@ -929,34 +926,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                 )
                               : const Icon(Icons.description, size: 18),
                           label: const Text('Generate Lost Person Report'),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 44,
-                        child: OutlinedButton.icon(
-                          onPressed:
-                              _isGeneratingFlyer ? null : _generateFlyer,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.red.shade700,
-                            side: BorderSide(color: Colors.red.shade700),
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 16),
-                            textStyle: const TextStyle(
-                                fontSize: 15, fontWeight: FontWeight.bold),
-                          ),
-                          icon: _isGeneratingFlyer
-                              ? SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.red.shade700,
-                                  ),
-                                )
-                              : const Icon(Icons.picture_as_pdf, size: 18),
-                          label: const Text('Missing Person Flyer (PDF)'),
                         ),
                       ),
                     ],
@@ -2450,61 +2419,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       );
     }
   }
-
-  // ==========================================================================
-  // MISSING PERSON FLYER (PDF)
-  // ==========================================================================
-
-  Future<void> _generateFlyer() async {
-    final options = await showDialog<FlyerOptions>(
-      context: context,
-      builder: (_) => const _FlyerOptionsDialog(),
-    );
-    if (options == null) return; // cancelled
-
-    setState(() => _isGeneratingFlyer = true);
-    try {
-      final report =
-          await UserProfileService.generateLostPersonReport(widget.userId);
-      final bytes = await MissingPersonFlyerService.generateFlyer(
-        report,
-        options: options,
-      );
-
-      if (!mounted) return;
-      setState(() => _isGeneratingFlyer = false);
-
-      final safeName =
-          report.userName.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_');
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => Scaffold(
-            appBar: AppBar(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              title: const Text('Missing Person Flyer'),
-            ),
-            body: PdfPreview(
-              build: (_) => bytes,
-              canChangeOrientation: false,
-              canChangePageFormat: false,
-              allowPrinting: true,
-              allowSharing: true,
-              pdfFileName: 'missing_person_$safeName.pdf',
-            ),
-          ),
-        ),
-      );
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isGeneratingFlyer = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error generating flyer: $e')),
-        );
-      }
-    }
-  }
 }
 
 // ============================================================================
@@ -2838,170 +2752,6 @@ class _VehicleEditorScreenState extends State<_VehicleEditorScreen> {
           const SizedBox(height: 24),
         ],
       ),
-    );
-  }
-}
-
-// ============================================================================
-// Flyer options dialog — captures per-incident details (last seen, contact)
-// that aren't stored on the profile. Returns a [FlyerOptions] on Generate,
-// or null on Cancel.
-// ============================================================================
-class _FlyerOptionsDialog extends StatefulWidget {
-  const _FlyerOptionsDialog();
-
-  @override
-  State<_FlyerOptionsDialog> createState() => _FlyerOptionsDialogState();
-}
-
-class _FlyerOptionsDialogState extends State<_FlyerOptionsDialog> {
-  final _locationController = TextEditingController();
-  final _wearingController = TextEditingController();
-  final _contactNameController = TextEditingController();
-  final _contactPhoneController = TextEditingController();
-  final _additionalController = TextEditingController();
-  DateTime? _lastSeenAt;
-
-  @override
-  void dispose() {
-    _locationController.dispose();
-    _wearingController.dispose();
-    _contactNameController.dispose();
-    _contactPhoneController.dispose();
-    _additionalController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _pickDateTime() async {
-    final now = DateTime.now();
-    final date = await showDatePicker(
-      context: context,
-      initialDate: _lastSeenAt ?? now,
-      firstDate: now.subtract(const Duration(days: 365)),
-      lastDate: now,
-    );
-    if (date == null) return;
-    if (!mounted) return;
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(_lastSeenAt ?? now),
-    );
-    setState(() {
-      _lastSeenAt = DateTime(
-        date.year,
-        date.month,
-        date.day,
-        time?.hour ?? 0,
-        time?.minute ?? 0,
-      );
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Flyer Details'),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Optional — these appear on the flyer. Leave blank to skip.',
-                style: TextStyle(fontSize: 13, color: Colors.grey),
-              ),
-              const SizedBox(height: 12),
-              InkWell(
-                onTap: _pickDateTime,
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Last seen (date & time)',
-                    suffixIcon: Icon(Icons.calendar_today),
-                  ),
-                  child: Text(
-                    _lastSeenAt == null
-                        ? 'Tap to select'
-                        : DateFormat('EEE, MMM d, yyyy · h:mm a')
-                            .format(_lastSeenAt!),
-                    style: TextStyle(
-                      color: _lastSeenAt == null ? Colors.grey : Colors.black,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _locationController,
-                decoration: const InputDecoration(
-                  labelText: 'Last seen location',
-                  hintText: 'e.g. Reid Park, Tucson',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _wearingController,
-                decoration: const InputDecoration(
-                  labelText: 'Last seen wearing',
-                  hintText: 'e.g. Blue jacket, jeans',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _contactNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Contact name',
-                  hintText: 'Who to call (besides 911)',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _contactPhoneController,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Contact phone',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _additionalController,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                  labelText: 'Additional information',
-                  alignLabelWithHint: true,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton.icon(
-          style: FilledButton.styleFrom(backgroundColor: Colors.red),
-          onPressed: () {
-            String? nn(TextEditingController c) =>
-                c.text.trim().isEmpty ? null : c.text.trim();
-            Navigator.pop(
-              context,
-              FlyerOptions(
-                lastSeenLocation: nn(_locationController),
-                lastSeenAt: _lastSeenAt,
-                lastSeenWearing: nn(_wearingController),
-                contactName: nn(_contactNameController),
-                contactPhone: nn(_contactPhoneController),
-                additionalInfo: nn(_additionalController),
-              ),
-            );
-          },
-          icon: const Icon(Icons.picture_as_pdf),
-          label: const Text('Generate'),
-        ),
-      ],
     );
   }
 }

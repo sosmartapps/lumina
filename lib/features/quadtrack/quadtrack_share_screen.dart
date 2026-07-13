@@ -261,40 +261,31 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
       }
     }
 
-    // Vehicle
-    if (_userProfile != null) {
-      if (_userProfile!.vehicleMake != null ||
-          _userProfile!.vehicleModel != null ||
-          _userProfile!.vehicleYear != null ||
-          _userProfile!.vehicleColor != null ||
-          _userProfile!.vehicleLicensePlate != null) {
-        sb.writeln('VEHICLE (if known)');
-        if (_userProfile!.vehicleYear != null ||
-            _userProfile!.vehicleMake != null ||
-            _userProfile!.vehicleModel != null) {
-          sb.write('${_userProfile!.vehicleYear ?? ''} '
-              '${_userProfile!.vehicleMake ?? ''} '
-              '${_userProfile!.vehicleModel ?? ''}'.trim());
-          if (_userProfile!.vehicleColor != null) {
-            sb.write(' — ${_userProfile!.vehicleColor}');
+    // Vehicle(s) — structured list (falls back to legacy single-vehicle
+    // fields via allVehicles), including photo URLs for identification.
+    final vehicles = _userProfile?.allVehicles ?? const <Vehicle>[];
+    if (vehicles.isNotEmpty) {
+      sb.writeln(vehicles.length > 1 ? 'VEHICLES (if known)' : 'VEHICLE (if known)');
+      for (final v in vehicles) {
+        sb.writeln(v.displayName);
+        if (v.licensePlate != null && v.licensePlate!.isNotEmpty) {
+          sb.write('License Plate: ${v.licensePlate}');
+          if (v.licenseState != null && v.licenseState!.isNotEmpty) {
+            sb.write(' (${v.licenseState})');
           }
           sb.writeln();
         }
-        if (_userProfile!.vehicleLicensePlate != null) {
-          sb.write('License Plate: ${_userProfile!.vehicleLicensePlate}');
-          if (_userProfile!.vehicleLicenseState != null) {
-            sb.write(' (${_userProfile!.vehicleLicenseState})');
-          }
-          sb.writeln();
+        if (v.vin != null && v.vin!.isNotEmpty) {
+          sb.writeln('VIN: ${v.vin}');
         }
-        if (_userProfile!.vehicleVin != null && _userProfile!.vehicleVin!.isNotEmpty) {
-          sb.writeln('VIN: ${_userProfile!.vehicleVin}');
+        if (v.notes != null && v.notes!.isNotEmpty) {
+          sb.writeln('Notes: ${v.notes}');
         }
-        if (_userProfile!.vehicleNotes != null && _userProfile!.vehicleNotes!.isNotEmpty) {
-          sb.writeln('Notes: ${_userProfile!.vehicleNotes}');
+        for (final url in v.photoUrls) {
+          sb.writeln('Vehicle Photo: $url');
         }
-        sb.writeln();
       }
+      sb.writeln();
     }
 
     // Last Known Location
@@ -330,6 +321,21 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
     if (_userProfile != null && _userProfile!.mostRecentPhoto != null) {
       sb.writeln('PHOTO');
       sb.writeln(_userProfile!.mostRecentPhoto!.url);
+      sb.writeln();
+    }
+
+    // Social Media — so the public can reference recent photos / posts
+    final socials = _userProfile?.socialMediaLinks
+            .where((s) => s.url.isNotEmpty)
+            .toList() ??
+        const <SocialMediaLink>[];
+    if (socials.isNotEmpty) {
+      sb.writeln('SOCIAL MEDIA (for recent photos / public reference)');
+      for (final s in socials) {
+        final handle =
+            s.handle != null && s.handle!.isNotEmpty ? '${s.handle} ' : '';
+        sb.writeln('${s.platformEnum.label}: $handle${s.url}');
+      }
       sb.writeln();
     }
 
@@ -626,19 +632,10 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
                                     'Blood Type',
                                     _healthProfile!.bloodType!,
                                   ),
-                                // Vehicle
-                                if (_userProfile?.vehicleMake != null ||
-                                    _userProfile?.vehicleModel != null)
-                                  _buildPreviewRow(
-                                    'Vehicle',
-                                    '${_userProfile?.vehicleYear ?? ''} ${_userProfile?.vehicleMake ?? ''} ${_userProfile?.vehicleModel ?? ''}'
-                                        .trim(),
-                                  ),
-                                if (_userProfile?.vehicleLicensePlate != null)
-                                  _buildPreviewRow(
-                                    'License Plate',
-                                    _userProfile!.vehicleLicensePlate!,
-                                  ),
+                                // Vehicle(s) with photos
+                                ..._buildVehiclePreview(),
+                                // Social media handles
+                                ..._buildSocialPreview(),
                                 // Location
                                 _buildPreviewRow('Last Location', address),
                                 _buildPreviewRow(
@@ -810,6 +807,67 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
         },
       ),
     );
+  }
+
+  /// Structured vehicle rows + photo thumbnails for the preview card.
+  List<Widget> _buildVehiclePreview() {
+    final vehicles = _userProfile?.allVehicles ?? const <Vehicle>[];
+    if (vehicles.isEmpty) return const [];
+    final widgets = <Widget>[];
+    for (final v in vehicles) {
+      widgets.add(_buildPreviewRow('Vehicle', v.displayName));
+      if (v.licensePlate != null && v.licensePlate!.isNotEmpty) {
+        widgets.add(_buildPreviewRow(
+          'License Plate',
+          v.licenseState != null && v.licenseState!.isNotEmpty
+              ? '${v.licensePlate} (${v.licenseState})'
+              : v.licensePlate!,
+        ));
+      }
+      if (v.photoUrls.isNotEmpty) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: SizedBox(
+            height: 80,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: v.photoUrls.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (_, i) => ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(
+                  v.photoUrls[i],
+                  width: 110,
+                  height: 80,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    width: 110,
+                    color: Colors.grey.shade200,
+                    child: const Icon(Icons.directions_car),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ));
+      }
+    }
+    return widgets;
+  }
+
+  /// Social-media handle rows for the preview card.
+  List<Widget> _buildSocialPreview() {
+    final socials = _userProfile?.socialMediaLinks
+            .where((s) => s.url.isNotEmpty)
+            .toList() ??
+        const <SocialMediaLink>[];
+    if (socials.isEmpty) return const [];
+    return socials
+        .map((s) => _buildPreviewRow(
+              s.platformEnum.label,
+              s.handle != null && s.handle!.isNotEmpty ? s.handle! : s.url,
+            ))
+        .toList();
   }
 
   Widget _buildPreviewRow(
