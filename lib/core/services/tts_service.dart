@@ -21,6 +21,21 @@ class TTSService {
   }) async {
     if (_isInitialized) return;
 
+    // iOS: "playback" audio category sounds THROUGH the mute switch
+    // (like alarm/video apps) — reminder voice prompts must not be
+    // silenced by the ringer switch (2026-07-13). Zero volume still
+    // silences; full override needs the Critical Alerts entitlement.
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      await _tts.setSharedInstance(true);
+      await _tts.setIosAudioCategory(
+        IosTextToSpeechAudioCategory.playback,
+        [
+          IosTextToSpeechAudioCategoryOptions.duckOthers,
+          IosTextToSpeechAudioCategoryOptions.defaultToSpeaker,
+        ],
+      );
+    }
+
     await _tts.setLanguage(language);
     await _tts.setSpeechRate(speechRate);
     await _tts.setVolume(volume);

@@ -208,12 +208,18 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen>
 
     final now = DateTime.now();
     for (final reminder in _todayReminders) {
-      if (reminder.completedAt != null) continue;
+      // Same-day semantics: recurring reminders come back each day
+      if (reminder.isCompletedFor(now)) continue;
       if (_deferredReminders.any((d) => d.id == reminder.id)) continue;
 
-      final diff = now.difference(reminder.scheduledTime).inMinutes;
+      // TODAY's occurrence of the reminder — recurring reminders keep
+      // their original creation DATE in scheduledTime, so diffing against
+      // it directly meant they could only ever fire on day one.
+      final occurrence = DateTime(now.year, now.month, now.day,
+          reminder.scheduledTime.hour, reminder.scheduledTime.minute);
+      final diff = now.difference(occurrence).inMinutes;
       // Show popup if reminder is due (within 0-5 min window)
-      if (diff >= 0 && diff <= 5 && reminder.lastTriggeredAt == null) {
+      if (diff >= 0 && diff <= 5 && !reminder.wasTriggeredOn(now)) {
         if (reminder.homeOnly && !isAtHome) {
           // Defer home-only reminders until user arrives home
           _deferredReminders.add(reminder);
@@ -513,79 +519,69 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen>
             bottomRight: Radius.circular(32),
           ),
         ),
-        child: Row(
+        // Two rows (2026-07-13): name gets the FULL top row (long names
+        // were colliding with the clock), date + time share the second.
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // User avatar
-            CircleAvatar(
-              radius: 32,
-              backgroundColor: Colors.white,
-              backgroundImage:
-                  user.photoUrl != null ? NetworkImage(user.photoUrl!) : null,
-              child: user.photoUrl == null
-                  ? Text(
-                      user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
-                      style: const TextStyle(
-                        color: AppTheme.primaryBlue,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 16),
-
-            // Greeting — each line scales down to fit rather than
-            // wrapping word-per-line when the clock takes its share.
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  FittedBox(
+            Row(
+              children: [
+                // User avatar
+                CircleAvatar(
+                  radius: 28,
+                  backgroundColor: Colors.white,
+                  backgroundImage: user.photoUrl != null
+                      ? NetworkImage(user.photoUrl!)
+                      : null,
+                  child: user.photoUrl == null
+                      ? Text(
+                          user.name.isNotEmpty
+                              ? user.name[0].toUpperCase()
+                              : '?',
+                          style: const TextStyle(
+                            color: AppTheme.primaryBlue,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Hello, ${user.displayName}!',
+                      user.displayName,
                       maxLines: 1,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 28,
+                        fontSize: 32,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      _getTimeGreeting(),
-                      maxLines: 1,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.9),
-                        fontSize: 18,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-
-            // Time
-            Column(
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                Text(
+                  _formatDate(),
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontSize: 20,
+                  ),
+                ),
                 Text(
                   _formatTime(),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  _formatDate(),
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    fontSize: 14,
                   ),
                 ),
               ],
@@ -674,13 +670,6 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen>
         ),
       ),
     );
-  }
-
-  String _getTimeGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good Morning';
-    if (hour < 17) return 'Good Afternoon';
-    return 'Good Evening';
   }
 
   String _formatTime() {

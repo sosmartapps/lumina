@@ -1183,14 +1183,137 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
     );
   }
 
+  /// Completed-task history from the task_completions log, newest first,
+  /// with the AI/caregiver verification verdict and tap-to-view photo.
+  Widget _buildTaskHistoryList(AppUser user) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('task_completions')
+          .where('userId', isEqualTo: user.id)
+          .orderBy('completedAt', descending: true)
+          .limit(50)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text('Could not load: ${snapshot.error}'));
+        }
+        final docs = snapshot.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return const Center(child: Text('No completed tasks yet'));
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: docs.length,
+          itemBuilder: (context, index) {
+            final d = docs[index].data() as Map<String, dynamic>;
+            final completedAt = (d['completedAt'] as Timestamp?)?.toDate();
+            final status = d['verificationStatus'] as String?;
+            final photoUrl = d['photoUrl'] as String?;
+            final statusColor = switch (status) {
+              'verified' => AppTheme.primaryGreen,
+              'failed' => AppTheme.primaryRed,
+              'pending' => Colors.orange,
+              _ => Colors.grey,
+            };
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border(
+                    left: BorderSide(color: statusColor, width: 4)),
+              ),
+              child: ListTile(
+                leading: Icon(
+                  switch (status) {
+                    'verified' => Icons.check_circle,
+                    'failed' => Icons.error,
+                    'pending' => Icons.hourglass_top,
+                    _ => Icons.task_alt,
+                  },
+                  color: statusColor,
+                ),
+                title: Text(d['title'] ?? 'Task',
+                    style:
+                        const TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: Text(
+                  '${completedAt != null ? DateFormat('MMM d, h:mm a').format(completedAt) : '—'}'
+                  '${d['verificationReason'] != null ? '\n${d['verificationReason']}' : ''}',
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style:
+                      TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+                trailing: photoUrl != null
+                    ? const Icon(Icons.photo, color: AppTheme.primaryBlue)
+                    : null,
+                // Full detail: photo AND complete verdict text (list rows
+                // truncate; tapping used to show only the photo, 2026-07-13)
+                onTap: () => showDialog(
+                  context: context,
+                  builder: (c) => AlertDialog(
+                    title: Text(d['title'] ?? 'Task'),
+                    content: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (photoUrl != null) ...[
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.network(photoUrl,
+                                  height: 240,
+                                  width: double.maxFinite,
+                                  fit: BoxFit.cover),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          Text(
+                            'Completed: '
+                            '${completedAt != null ? DateFormat('EEE, MMM d · h:mm a').format(completedAt) : '—'}',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Verification: ${status ?? 'not required'}',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: statusColor),
+                          ),
+                          if (d['verificationReason'] != null) ...[
+                            const SizedBox(height: 4),
+                            Text(d['verificationReason'],
+                                style: const TextStyle(fontSize: 14)),
+                          ],
+                        ],
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(c),
+                        child: const Text('Close'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildHistoryTab(AppUser user, CaregiverProvider provider) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Column(
         children: [
           const TabBar(
             labelColor: AppTheme.primaryPurple,
             tabs: [
+              Tab(text: 'Tasks'),
               Tab(text: 'Medications'),
               Tab(text: 'Location'),
             ],
@@ -1198,6 +1321,8 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
           Expanded(
             child: TabBarView(
               children: [
+                // Completed-task history (photo verification trail)
+                _buildTaskHistoryList(user),
                 // Medication history
                 StreamBuilder<List<MedicationLog>>(
                   stream: provider.getMedicationLogs(user.id),

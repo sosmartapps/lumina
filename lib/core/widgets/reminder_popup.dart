@@ -390,6 +390,7 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
   final ImagePicker _picker = ImagePicker();
   File? _capturedImage;
   bool _isUploading = false;
+  bool _uploadSucceeded = false;
 
   Future<void> _takePhoto() async {
     try {
@@ -438,6 +439,16 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
       final downloadUrl = await ref.getDownloadURL();
       // Cheap on-device perceptual hash for match-first verification
       final photoHash = await PhotoMatchService.computeDHash(_capturedImage!);
+      // Clear "you did it" moment for the patient before closing
+      // (photo used to vanish with zero acknowledgement, 2026-07-13)
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+          _uploadSucceeded = true;
+        });
+        HapticFeedback.heavyImpact();
+        await Future.delayed(const Duration(milliseconds: 2200));
+      }
       widget.onPhotoTaken(downloadUrl, photoHash);
     } catch (e) {
       if (mounted) {
@@ -451,6 +462,44 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Success confirmation — big, unmissable, senior-friendly
+    if (_uploadSucceeded) {
+      return Scaffold(
+        backgroundColor: AppTheme.primaryGreen,
+        body: SafeArea(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.check_circle,
+                    size: 140, color: Colors.white),
+                const SizedBox(height: 24),
+                const Text(
+                  'ALL DONE!',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 40,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    'Great job! Your photo was sent to your care team.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      fontSize: 20,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(

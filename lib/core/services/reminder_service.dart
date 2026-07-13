@@ -41,12 +41,22 @@ class ReminderService {
     return newReminder;
   }
 
-  /// Update an existing reminder
+  /// Update an existing reminder. Editing RE-ARMS it for today: clears
+  /// completion/trigger state so a caregiver moving the time later in
+  /// the day gets a fresh fire (edited alarm silently never fired,
+  /// 2026-07-12).
   Future<void> updateReminder(Reminder reminder) async {
+    final data = reminder.toFirestore();
+    data['completedAt'] = null;
+    data['lastTriggeredAt'] = null;
+    data['completionPhotoUrl'] = null;
+    data['completionPhotoHash'] = null;
+    data['verificationStatus'] = null;
+    data['verificationReason'] = null;
     await _firestore
         .collection('reminders')
         .doc(reminder.id)
-        .update(reminder.toFirestore());
+        .update(data);
   }
 
   /// Delete a reminder
@@ -76,7 +86,6 @@ class ReminderService {
   /// client-side for recurring ones.
   Stream<List<Reminder>> getTodayReminders(String userId) {
     final now = DateTime.now();
-    final todayWeekday = now.weekday; // 1=Mon, 7=Sun
 
     return _firestore
         .collection('reminders')
@@ -88,30 +97,8 @@ class ReminderService {
       final allReminders =
           snapshot.docs.map((doc) => Reminder.fromFirestore(doc)).toList();
 
-      return allReminders.where((r) {
-        switch (r.repeatFrequency) {
-          case RepeatFrequency.once:
-            // One-time: only show if scheduled today
-            final startOfDay = DateTime(now.year, now.month, now.day);
-            final endOfDay = startOfDay.add(const Duration(days: 1));
-            return r.scheduledTime.isAfter(startOfDay) &&
-                r.scheduledTime.isBefore(endOfDay);
-          case RepeatFrequency.daily:
-            // Daily: always show
-            return true;
-          case RepeatFrequency.weekly:
-            // Weekly: use the caregiver-picked days when present,
-            // else fall back to the originally scheduled weekday
-            final weeklyDays = r.repeatDays;
-            if (weeklyDays != null && weeklyDays.isNotEmpty) {
-              return weeklyDays.contains(todayWeekday);
-            }
-            return r.scheduledTime.weekday == todayWeekday;
-          case RepeatFrequency.custom:
-            // Custom days: show if today's weekday is in repeatDays
-            return r.repeatDays?.contains(todayWeekday) ?? false;
-        }
-      }).toList();
+      // Single source of truth for repeat logic: Reminder.occursOn
+      return allReminders.where((r) => r.occursOn(now)).toList();
     });
   }
 
@@ -129,19 +116,18 @@ class ReminderService {
   }) async {
     String? status;
     String? reason;
+    Map<String, dynamic>? reminderData;
+    try {
+      final doc =
+          await _firestore.collection('reminders').doc(reminderId).get();
+      reminderData = doc.data() as Map<String, dynamic>?;
+    } catch (_) {}
     if (photoUrl != null) {
       status = 'pending';
-      try {
-        final doc =
-            await _firestore.collection('reminders').doc(reminderId).get();
-        final referenceHash = (doc.data()
-            as Map<String, dynamic>?)?['referencePhotoHash'] as String?;
-        if (PhotoMatchService.matches(photoHash, referenceHash)) {
-          status = 'verified';
-          reason = 'Matched previous verified photo';
-        }
-      } catch (_) {
-        // Fall through to 'pending' — the Cloud Function will handle it.
+      final referenceHash = reminderData?['referencePhotoHash'] as String?;
+      if (PhotoMatchService.matches(photoHash, referenceHash)) {
+        status = 'verified';
+        reason = 'Matched previous verified photo';
       }
     }
     await _firestore.collection('reminders').doc(reminderId).update({
@@ -149,6 +135,19 @@ class ReminderService {
       'completionPhotoUrl': photoUrl,
       'completionPhotoHash': photoHash,
       'currentSnoozeCount': 0,
+      'verificationStatus': status,
+      'verificationReason': reason,
+    });
+    // Permanent history trail — the reminder doc only holds the LATEST
+    // completion (recurring reminders overwrite daily). The verification
+    // Cloud Function updates this log doc's verdict when it lands.
+    await _firestore.collection('task_completions').add({
+      'userId': reminderData?['userId'],
+      'reminderId': reminderId,
+      'title': reminderData?['title'] ?? 'Task',
+      'type': reminderData?['type'] ?? 'general',
+      'completedAt': FieldValue.serverTimestamp(),
+      'photoUrl': photoUrl,
       'verificationStatus': status,
       'verificationReason': reason,
     });

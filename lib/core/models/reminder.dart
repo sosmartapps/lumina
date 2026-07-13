@@ -199,6 +199,48 @@ class Reminder {
     );
   }
 
+  /// Whether this reminder occurs on [day], honoring repeatFrequency and
+  /// repeatDays. SINGLE SOURCE OF TRUTH for "is this scheduled today" —
+  /// user_provider previously compared raw dates and showed a
+  /// Wednesday-only weekly reminder on a Sunday (2026-07-12).
+  bool occursOn(DateTime day) {
+    switch (repeatFrequency) {
+      case RepeatFrequency.once:
+        return scheduledTime.year == day.year &&
+            scheduledTime.month == day.month &&
+            scheduledTime.day == day.day;
+      case RepeatFrequency.daily:
+        return true;
+      case RepeatFrequency.weekly:
+        // Caregiver-picked days win; else the originally scheduled weekday
+        if (repeatDays != null && repeatDays!.isNotEmpty) {
+          return repeatDays!.contains(day.weekday);
+        }
+        return scheduledTime.weekday == day.weekday;
+      case RepeatFrequency.custom:
+        return repeatDays?.contains(day.weekday) ?? false;
+    }
+  }
+
+  static bool _sameDay(DateTime? t, DateTime day) =>
+      t != null &&
+      t.year == day.year &&
+      t.month == day.month &&
+      t.day == day.day;
+
+  /// Completed for [day]'s occurrence. 'once' reminders are done forever
+  /// after any completion; RECURRING reminders only count a completion
+  /// on the same day — completedAt was never cleared, so every daily
+  /// reminder silently died after its first completion (2026-07-12).
+  bool isCompletedFor(DateTime day) {
+    if (repeatFrequency == RepeatFrequency.once) return completedAt != null;
+    return _sameDay(completedAt, day);
+  }
+
+  /// Whether the popup already triggered on [day] (same-day semantics,
+  /// mirroring isCompletedFor).
+  bool wasTriggeredOn(DateTime day) => _sameDay(lastTriggeredAt, day);
+
   /// Get the spoken message, falling back to title
   String getSpokenMessage(String userName) {
     if (spokenMessage != null && spokenMessage!.isNotEmpty) {

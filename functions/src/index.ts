@@ -1937,6 +1937,31 @@ export const analyzeTripsAndAlert = functions
 // verification or when a photo-required task is missed entirely.
 // ============================================================================
 
+/** Sync the verdict onto the newest task_completions history entry. */
+async function updateCompletionLog(
+  reminderId: string,
+  status: string,
+  reason: string | null,
+): Promise<void> {
+  try {
+    const db = admin.firestore();
+    const snap = await db
+      .collection('task_completions')
+      .where('reminderId', '==', reminderId)
+      .orderBy('completedAt', 'desc')
+      .limit(1)
+      .get();
+    if (!snap.empty) {
+      await snap.docs[0].ref.update({
+        verificationStatus: status,
+        verificationReason: reason,
+      });
+    }
+  } catch (e) {
+    console.error('updateCompletionLog failed:', e);
+  }
+}
+
 /** Push a notification to every caregiver of a patient (fcmTokens arrays). */
 async function notifyCaregiversAboutTask(
   userId: string,
@@ -2003,6 +2028,20 @@ export const verifyTaskCompletionPhoto = functions
     // no AI needed (cost-first design, 2026-07-12).
     if (after.verificationStatus === 'verified') {
       console.log('verifyTaskCompletionPhoto: matched locally, skipping AI');
+      // Caregivers get GOOD news too, not just failures (2026-07-13)
+      const userDoc = await admin
+        .firestore()
+        .collection('users')
+        .doc(after.userId)
+        .get();
+      const userName = userDoc.data()?.name || 'Your loved one';
+      await notifyCaregiversAboutTask(
+        after.userId,
+        '✅ Task completed',
+        `${userName} completed "${after.title}" — photo matched previous ` +
+          'verified photo',
+        context.params.reminderId,
+      );
       return null;
     }
 
@@ -2123,15 +2162,29 @@ export const verifyTaskCompletionPhoto = functions
         update.referencePhotoHash = after.completionPhotoHash;
       }
       await db.collection('reminders').doc(reminderId).update(update);
+      await updateCompletionLog(
+        reminderId,
+        verdict.verified ? 'verified' : 'failed',
+        verdict.reason || null,
+      );
 
+      const userDoc = await db.collection('users').doc(after.userId).get();
+      const userName = userDoc.data()?.name || 'Your loved one';
       if (!verdict.verified) {
-        const userDoc = await db.collection('users').doc(after.userId).get();
-        const userName = userDoc.data()?.name || 'Your loved one';
         await notifyCaregiversAboutTask(
           after.userId,
           '⚠️ Task photo needs a look',
           `${userName} marked "${after.title}" done, but the photo ` +
             `didn't confirm it: ${verdict.reason || 'no evidence visible'}`,
+          reminderId,
+        );
+      } else {
+        // Confirmation on success too (2026-07-13)
+        await notifyCaregiversAboutTask(
+          after.userId,
+          '✅ Task completed',
+          `${userName} completed "${after.title}" — ` +
+            `${verdict.reason || 'photo verified'}`,
           reminderId,
         );
       }
@@ -2195,8 +2248,16 @@ export const sweepMissedPhotoTasks = functions
             schedPhx.getUTCDate() === phxNow.getUTCDate();
           if (!sameDay) continue;
         } else if (freq === 'weekly') {
-          const schedWeekday = ((schedPhx.getUTCDay() + 6) % 7) + 1;
-          if (schedWeekday !== phxWeekday) continue;
+          // Caregiver-picked days win; else the original scheduled weekday
+          // (was ignoring repeatDays — alerted about a Wednesday-only
+          // trash reminder on a Sunday, 2026-07-12)
+          const weeklyDays: number[] = r.repeatDays || [];
+          if (weeklyDays.length > 0) {
+            if (!weeklyDays.includes(phxWeekday)) continue;
+          } else {
+            const schedWeekday = ((schedPhx.getUTCDay() + 6) % 7) + 1;
+            if (schedWeekday !== phxWeekday) continue;
+          }
         } else if (freq === 'custom') {
           if (!(r.repeatDays || []).includes(phxWeekday)) continue;
         } // daily: always scheduled

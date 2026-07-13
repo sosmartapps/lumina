@@ -108,6 +108,15 @@ service cloud.firestore {
          isCaregiverFor(resource.data.userId));
     }
 
+    // Task completion history — written by patient devices on every
+    // completion; verification verdict synced by Cloud Function
+    // (Admin SDK). Family trust model.
+    match /task_completions/{completionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+    }
+
     // Medications collection
     match /medications/{medicationId} {
       allow read: if isAuthenticated();

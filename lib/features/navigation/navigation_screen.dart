@@ -112,7 +112,10 @@ class NavigationScreen extends ConsumerWidget {
     return GestureDetector(
       onTap: () => _navigateToLocation(ref, name, location),
       child: Container(
-        height: isLarge ? 160 : null,
+        // min-height instead of fixed height: 2-line addresses at large
+        // text scale overflowed 11px (2026-07-13)
+        constraints:
+            isLarge ? const BoxConstraints(minHeight: 160) : null,
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(24),

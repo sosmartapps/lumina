@@ -232,7 +232,9 @@ class RemindersScreen extends ConsumerWidget {
 
   Widget _buildReminderCard(WidgetRef ref, Reminder reminder) {
     final timeStr = DateFormat('h:mm a').format(reminder.scheduledTime);
-    final isPast = reminder.completedAt != null;
+    // Same-day semantics: yesterday's completion must not strike out a
+    // recurring reminder today (2026-07-12).
+    final isPast = reminder.isCompletedFor(DateTime.now());
     final color = _getReminderColor(reminder.type);
     final icon = _getReminderIcon(reminder.type);
 

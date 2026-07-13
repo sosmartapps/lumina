@@ -185,15 +185,12 @@ class UserProvider with ChangeNotifier {
     await updateUser(updatedUser);
   }
 
-  /// Get today's reminders
+  /// Get today's reminders (repeat-aware — see Reminder.occursOn)
   List<Reminder> getTodayReminders() {
     final now = DateTime.now();
-    return _reminders.where((r) {
-      final scheduledDate = r.scheduledTime;
-      return scheduledDate.year == now.year &&
-          scheduledDate.month == now.month &&
-          scheduledDate.day == now.day;
-    }).toList();
+    return _reminders
+        .where((r) => r.isActive && r.occursOn(now))
+        .toList();
   }
 
   /// Get upcoming medications
