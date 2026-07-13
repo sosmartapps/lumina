@@ -47,6 +47,7 @@ class PetFeedingService {
     if (withId.isActive) {
       await NotificationService.schedulePetFeeding(feeding: withId);
     }
+    await _syncPatientReminders(withId);
     return withId;
   }
 
@@ -64,12 +65,87 @@ class PetFeedingService {
     if (feeding.isActive) {
       await NotificationService.schedulePetFeeding(feeding: feeding);
     }
+    await _syncPatientReminders(feeding);
   }
 
-  /// Delete a feeding schedule and cancel its notifications.
+  /// Delete a feeding schedule, cancel its notifications, and remove the
+  /// linked patient reminders.
   Future<void> deleteFeeding(PetFeeding feeding) async {
     await NotificationService.cancelPetFeeding(feeding);
     await _feedings.doc(feeding.id).delete();
+    final linked = await _firestore
+        .collection('reminders')
+        .where('sourceFeedingId', isEqualTo: feeding.id)
+        .get();
+    for (final doc in linked.docs) {
+      await doc.reference.delete();
+    }
+  }
+
+  /// PET FEEDING → PATIENT REMINDERS bridge (2026-07-13).
+  ///
+  /// The PATIENT feeds the pet — feeding times must surface as patient
+  /// reminders (popup, photo of food in bowls, AI verification, history),
+  /// not as a caregiver-side button. One reminder per feeding time with a
+  /// deterministic id (petfeed_{feedingId}_{timeId}) so sync is idempotent:
+  /// removed/renamed times delete their reminder, edits update in place
+  /// (preserving today's completion state).
+  Future<void> _syncPatientReminders(PetFeeding feeding) async {
+    final reminders = _firestore.collection('reminders');
+    final existing = await reminders
+        .where('sourceFeedingId', isEqualTo: feeding.id)
+        .get();
+    final wantedIds = {
+      for (final t in feeding.feedingTimes) 'petfeed_${feeding.id}_${t.id}',
+    };
+    final batch = _firestore.batch();
+
+    for (final doc in existing.docs) {
+      if (!feeding.isActive || !wantedIds.contains(doc.id)) {
+        batch.delete(doc.reference);
+      }
+    }
+
+    if (feeding.isActive) {
+      final now = DateTime.now();
+      final existingIds = existing.docs.map((d) => d.id).toSet();
+      final hasDays =
+          feeding.repeatDays != null && feeding.repeatDays!.isNotEmpty;
+      for (final t in feeding.feedingTimes) {
+        final id = 'petfeed_${feeding.id}_${t.id}';
+        final data = <String, dynamic>{
+          'userId': feeding.userId,
+          'title':
+              'Feed ${feeding.petName}${t.label != null ? ' (${t.label})' : ''}',
+          'description': [feeding.amount, feeding.foodType]
+              .whereType<String>()
+              .join(' of '),
+          'spokenMessage':
+              '{name}, time to feed ${feeding.petName}',
+          'type': 'pet_care',
+          'scheduledTime': Timestamp.fromDate(
+              DateTime(now.year, now.month, now.day, t.hour, t.minute)),
+          'repeatDays': feeding.repeatDays,
+          'repeatFrequency': hasDays ? 'custom' : 'daily',
+          'isActive': true,
+          'requiresConfirmation': false,
+          'requiresPhoto': true,
+          'homeOnly': true,
+          'snoozeMinutes': 10,
+          'maxSnoozeCount': 3,
+          'createdBy': feeding.createdBy,
+          'sourceFeedingId': feeding.id,
+        };
+        if (existingIds.contains(id)) {
+          batch.update(reminders.doc(id), data);
+        } else {
+          data['createdAt'] = Timestamp.now();
+          data['currentSnoozeCount'] = 0;
+          batch.set(reminders.doc(id), data);
+        }
+      }
+    }
+    await batch.commit();
   }
 
   // ---------------------------------------------------------------------
@@ -184,6 +260,32 @@ class PetFeedingService {
 
     await docRef.set(log.toFirestore());
     await _feedings.doc(feeding.id).update({'lastFedAt': Timestamp.fromDate(now)});
+
+    // Complete the most-recently-due linked patient reminder for today so
+    // the patient isn't nagged for a pet the caregiver already fed.
+    try {
+      final linked = await _firestore
+          .collection('reminders')
+          .where('sourceFeedingId', isEqualTo: feeding.id)
+          .get();
+      DocumentReference? target;
+      DateTime? best;
+      for (final d in linked.docs) {
+        final st = (d.data()['scheduledTime'] as Timestamp?)?.toDate();
+        if (st == null) continue;
+        final occ = DateTime(now.year, now.month, now.day, st.hour, st.minute);
+        if (!occ.isAfter(now) && (best == null || occ.isAfter(best))) {
+          best = occ;
+          target = d.reference;
+        }
+      }
+      target ??= linked.docs.isNotEmpty ? linked.docs.first.reference : null;
+      await target?.update({
+        'completedAt': Timestamp.fromDate(now),
+        'verificationStatus': 'verified',
+        'verificationReason': 'Marked fed by ${fedByName ?? 'caregiver'}',
+      });
+    } catch (_) {}
     return log;
   }
 

@@ -203,27 +203,25 @@ service cloud.firestore {
         resource.data.submittedBy == request.auth.uid;
     }
 
-    // Pet feeding schedules
+    // Pet feeding schedules.
+    // NOTE: userId is the patient DOC id, never an auth uid — patients run
+    // ANONYMOUS auth, so uid-based checks silently denied the patient
+    // device all access (fixed 2026-07-13; same class as reminders /
+    // medication_photos). Family trust model; delete stays restricted.
     match /pet_feedings/{feedingId} {
-      allow read: if isAuthenticated() &&
-        (resource.data.userId == request.auth.uid ||
-         isCaregiverFor(resource.data.userId));
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated();
-      allow update, delete: if isAuthenticated() &&
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated() &&
         (resource.data.createdBy == request.auth.uid ||
-         resource.data.userId == request.auth.uid ||
          isCaregiverFor(resource.data.userId));
     }
 
-    // Pet feeding history logs
+    // Pet feeding history logs (same anonymous-patient note as above)
     match /feeding_logs/{logId} {
-      allow read: if isAuthenticated() &&
-        (resource.data.userId == request.auth.uid ||
-         isCaregiverFor(resource.data.userId));
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated();
-      allow update, delete: if isAuthenticated() &&
-        (resource.data.userId == request.auth.uid ||
-         isCaregiverFor(resource.data.userId));
+      allow update, delete: if isAuthenticated();
     }
 
     // Trip-alert dedupe state (written by the analyzeTripsAndAlert

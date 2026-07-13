@@ -151,6 +151,32 @@ class ReminderService {
       'verificationStatus': status,
       'verificationReason': reason,
     });
+    // Pet-feeding bridge: completing a linked reminder IS the feeding —
+    // log it so the caregiver's Pet Feeding screen shows "fed".
+    final sourceFeedingId = reminderData?['sourceFeedingId'] as String?;
+    if (sourceFeedingId != null) {
+      try {
+        await _firestore.collection('feeding_logs').add({
+          'feedingId': sourceFeedingId,
+          'userId': reminderData?['userId'],
+          'petName': (reminderData?['title'] as String? ?? '')
+              .replaceFirst('Feed ', '')
+              .replaceAll(RegExp(r' \(.*\)$'), ''),
+          'scheduledTime': reminderData?['scheduledTime'],
+          'fedAt': FieldValue.serverTimestamp(),
+          'fedByName': 'Patient',
+          'notes': photoUrl != null
+              ? 'Completed via reminder (photo)'
+              : 'Completed via reminder',
+        });
+        await _firestore
+            .collection('pet_feedings')
+            .doc(sourceFeedingId)
+            .update({'lastFedAt': FieldValue.serverTimestamp()});
+      } catch (e) {
+        debugPrint('feeding log from reminder failed: $e');
+      }
+    }
   }
 
   /// Caregiver override of a photo verification verdict — the human is

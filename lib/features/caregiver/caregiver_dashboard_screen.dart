@@ -1217,13 +1217,17 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
             };
             return Container(
               margin: const EdgeInsets.only(bottom: 8),
+              // Border-only decoration; the Material below owns the fill
+              // (ListTile needs a Material ancestor for ink/background)
               decoration: BoxDecoration(
-                color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
                 border: Border(
                     left: BorderSide(color: statusColor, width: 4)),
               ),
-              child: ListTile(
+              child: Material(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                child: ListTile(
                 leading: Icon(
                   switch (status) {
                     'verified' => Icons.check_circle,
@@ -1296,6 +1300,7 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
                       ),
                     ],
                   ),
+                ),
                 ),
               ),
             );
