@@ -87,7 +87,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   final _calmingTechniquesController = TextEditingController();
   final _triggersToAvoidController = TextEditingController();
 
-  @override
   /// True when any field changed since the last successful save —
   /// guards against silent data loss on back-navigation (2026-07-08).
   bool _dirty = false;
@@ -121,6 +120,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     }
   }
 
+  @override
   void initState() {
     super.initState();
     // Wire AFTER first frame so programmatic loads don't mark dirty.

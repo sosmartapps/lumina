@@ -120,7 +120,7 @@ class ReminderService {
     try {
       final doc =
           await _firestore.collection('reminders').doc(reminderId).get();
-      reminderData = doc.data() as Map<String, dynamic>?;
+      reminderData = doc.data();
     } catch (_) {}
     if (photoUrl != null) {
       status = 'pending';

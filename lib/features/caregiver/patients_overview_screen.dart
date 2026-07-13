@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -76,6 +77,8 @@ class PatientsOverviewScreen extends ConsumerWidget {
                     .setCurrentUserId(patients[index].id);
                 Navigator.pop(context);
               },
+              onLongPress: () =>
+                  _showPatientActions(context, ref, patients[index]),
             ),
           );
         },
@@ -84,15 +87,107 @@ class PatientsOverviewScreen extends ConsumerWidget {
   }
 }
 
+/// Long-press actions: unlink ("Remove from my care") for any caregiver,
+/// full delete for the primary caregiver (server-side recursive wipe).
+/// No remove/delete path existed at all before 2026-07-13.
+void _showPatientActions(BuildContext context, WidgetRef ref, AppUser patient) {
+  final uid = ref.read(authServiceProvider).currentUser?.uid;
+  final isPrimary =
+      patient.primaryCaregiverId == null || patient.primaryCaregiverId == uid;
+  showModalBottomSheet(
+    context: context,
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.person_remove),
+            title: Text('Remove ${patient.name} from my care'),
+            subtitle: const Text(
+                'Unlinks them from your account; their data is kept'),
+            onTap: () async {
+              Navigator.pop(sheetContext);
+              if (uid == null) return;
+              await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(patient.id)
+                  .update({
+                'caregiverIds': FieldValue.arrayRemove([uid]),
+              });
+              await FirebaseFirestore.instance
+                  .collection('caregivers')
+                  .doc(uid)
+                  .update({
+                'managedUserIds': FieldValue.arrayRemove([patient.id]),
+              });
+              await ref.read(caregiverNotifierProvider).loadCaregiver(uid);
+            },
+          ),
+          if (isPrimary)
+            ListTile(
+              leading:
+                  const Icon(Icons.delete_forever, color: AppTheme.primaryRed),
+              title: Text('Delete ${patient.name} permanently',
+                  style: const TextStyle(color: AppTheme.primaryRed)),
+              subtitle: const Text(
+                  'Erases the patient and ALL their data for everyone'),
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (c) => AlertDialog(
+                    title: Text('Delete ${patient.name}?'),
+                    content: const Text(
+                        'This permanently erases this patient and all their '
+                        'history (locations, medications, tasks, photos) for '
+                        'EVERY caregiver. This cannot be undone.'),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(c, false),
+                          child: const Text('Cancel')),
+                      TextButton(
+                        style: TextButton.styleFrom(
+                            foregroundColor: AppTheme.primaryRed),
+                        onPressed: () => Navigator.pop(c, true),
+                        child: const Text('Delete Forever'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed != true || uid == null) return;
+                try {
+                  await FirebaseFunctions.instance
+                      .httpsCallable('deletePatient')
+                      .call({'patientId': patient.id});
+                  await ref
+                      .read(caregiverNotifierProvider)
+                      .loadCaregiver(uid);
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Delete failed: $e')),
+                    );
+                  }
+                }
+              },
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
 class _PatientCard extends ConsumerWidget {
   final AppUser patient;
   final bool isSelected;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   const _PatientCard({
     required this.patient,
     required this.isSelected,
     required this.onTap,
+    this.onLongPress,
   });
 
   @override
@@ -103,6 +198,7 @@ class _PatientCard extends ConsumerWidget {
 
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),

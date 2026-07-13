@@ -17,6 +17,8 @@ import '../battery/battery_status_card.dart';
 import '../bouncie/vehicle_status_card.dart';
 import '../bouncie/trip_history_screen.dart';
 import '../bouncie/vehicle_tracking_screen.dart';
+import '../environment/environment_settings_screen.dart';
+import '../environment/environment_status_card.dart';
 import '../user_home/user_home_screen.dart';
 import 'monitoring_settings_screen.dart';
 import 'manage_contacts_screen.dart';
@@ -37,6 +39,7 @@ import 'invite_caregiver_screen.dart';
 import 'manage_caregivers_screen.dart';
 import 'patients_overview_screen.dart';
 import 'redeem_invite_dialog.dart';
+import 'account_settings_screen.dart';
 import '../../features/subscription/subscription_status_card.dart';
 import '../../features/subscription/paywall_screen.dart';
 import '../medical_records/medical_records_screen.dart';
@@ -66,7 +69,7 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
     _wireNotificationTaps();
   }
 
-  /// Route QuadTrack notification taps ('quadtrack:<deviceDocId>') to the
+  /// Route QuadTrack notification taps (`quadtrack:<deviceDocId>`) to the
   /// device detail screen; delegate anything else to the previous handler.
   void _wireNotificationTaps() {
     _previousNotificationHandler = NotificationService.onNotificationTapped;
@@ -385,6 +388,10 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
               ),
             ],
           ),
+          const SizedBox(height: 12),
+
+          // Home environment (temp/humidity)
+          const EnvironmentStatusCard(),
           const SizedBox(height: 12),
 
           // Vehicle status
@@ -930,6 +937,17 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
             ),
           ),
           _buildManageItem(
+            'Account',
+            'Sign out or delete your account',
+            Icons.manage_accounts,
+            AppTheme.primaryPurple,
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => const AccountSettingsScreen()),
+            ),
+          ),
+          _buildManageItem(
             'Sundown Alerts',
             'Return home before sunset reminders',
             Icons.wb_twilight,
@@ -937,6 +955,17 @@ class _CaregiverDashboardScreenState extends ConsumerState<CaregiverDashboardScr
             () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const SundownSettingsScreen()),
+            ),
+          ),
+          _buildManageItem(
+            'Home Environment',
+            'Temperature & humidity in the home',
+            Icons.thermostat,
+            AppTheme.primaryTeal,
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => const EnvironmentSettingsScreen()),
             ),
           ),
           _buildManageItem(

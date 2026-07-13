@@ -2301,3 +2301,482 @@ export const sweepMissedPhotoTasks = functions
     );
     return null;
   });
+
+// ============================================================================
+// ACCOUNT & PATIENT DELETION (Apple Guideline 5.1.1(v)) — 2026-07-13
+// Admin SDK does the heavy lifting: recursive deletes and auth-user
+// removal, avoiding client-side rules/recent-login traps.
+// ============================================================================
+
+/** Delete every doc a query matches, in chunks. */
+async function deleteByQuery(
+  query: FirebaseFirestore.Query,
+): Promise<number> {
+  const db = admin.firestore();
+  let total = 0;
+  // Loop in pages to stay under batch limits
+  for (;;) {
+    const snap = await query.limit(300).get();
+    if (snap.empty) break;
+    const batch = db.batch();
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    total += snap.size;
+    if (snap.size < 300) break;
+  }
+  return total;
+}
+
+/** Full wipe of one patient across all collections. */
+async function wipePatient(patientId: string): Promise<void> {
+  const db = admin.firestore();
+  const byUserId = [
+    'reminders',
+    'medications',
+    'medication_logs',
+    'geo_zones',
+    'geo_zone_events',
+    'pet_feedings',
+    'feeding_logs',
+    'expenses',
+    'task_completions',
+    'notifications',
+  ];
+  for (const coll of byUserId) {
+    const n = await deleteByQuery(
+      db.collection(coll).where('userId', '==', patientId),
+    );
+    if (n > 0) console.log(`wipePatient ${patientId}: ${coll} -${n}`);
+  }
+  await deleteByQuery(
+    db.collection('invite_codes').where('patientId', '==', patientId),
+  );
+  // Docs keyed BY the patient id
+  for (const coll of ['bouncie_connections', 'trip_alerts']) {
+    await db.collection(coll).doc(patientId).delete().catch(() => null);
+  }
+  // Remove from every caregiver's managedUserIds
+  const carers = await db
+    .collection('caregivers')
+    .where('managedUserIds', 'array-contains', patientId)
+    .get();
+  for (const c of carers.docs) {
+    await c.ref.update({
+      managedUserIds: admin.firestore.FieldValue.arrayRemove(patientId),
+      [`roleOverrides.${patientId}`]: admin.firestore.FieldValue.delete(),
+      [`multiRoleOverrides.${patientId}`]:
+        admin.firestore.FieldValue.delete(),
+    });
+  }
+  // Patient doc + ALL subcollections (location_updates, zone_states, …)
+  await db.recursiveDelete(db.collection('users').doc(patientId));
+  console.log(`wipePatient ${patientId}: user doc + subcollections deleted`);
+}
+
+/**
+ * Delete one patient. Caller must be that patient's primary caregiver.
+ */
+export const deletePatient = functions.https.onCall(
+  async (data, context) => {
+    const uid = context.auth?.uid;
+    if (!uid) {
+      throw new functions.https.HttpsError(
+        'unauthenticated', 'Sign in required.');
+    }
+    const patientId = String(data?.patientId || '');
+    if (!patientId) {
+      throw new functions.https.HttpsError(
+        'invalid-argument', 'patientId required.');
+    }
+    const db = admin.firestore();
+    const userDoc = await db.collection('users').doc(patientId).get();
+    if (!userDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Patient not found.');
+    }
+    const u = userDoc.data()!;
+    if (u.primaryCaregiverId && u.primaryCaregiverId !== uid) {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        'Only the primary caregiver can delete a patient.');
+    }
+    if (!u.primaryCaregiverId && !(u.caregiverIds || []).includes(uid)) {
+      throw new functions.https.HttpsError(
+        'permission-denied', 'Not a caregiver for this patient.');
+    }
+    await wipePatient(patientId);
+    return { deleted: true };
+  });
+
+/**
+ * Delete the CALLER's caregiver account (Apple 5.1.1(v)).
+ * Patients solely cared for by this account are fully wiped; patients
+ * with other caregivers are unlinked (primary reassigned if needed).
+ * Finally deletes the Firebase Auth user.
+ */
+export const deleteCaregiverAccount = functions.https.onCall(
+  async (_data, context) => {
+    const uid = context.auth?.uid;
+    if (!uid) {
+      throw new functions.https.HttpsError(
+        'unauthenticated', 'Sign in required.');
+    }
+    const db = admin.firestore();
+    const caregiverDoc = await db.collection('caregivers').doc(uid).get();
+    const managed: string[] = caregiverDoc.data()?.managedUserIds || [];
+
+    let wiped = 0;
+    let unlinked = 0;
+    for (const patientId of managed) {
+      const userDoc = await db.collection('users').doc(patientId).get();
+      if (!userDoc.exists) continue;
+      const u = userDoc.data()!;
+      const others = (u.caregiverIds || []).filter(
+        (id: string) => id !== uid,
+      );
+      if (others.length === 0) {
+        await wipePatient(patientId);
+        wiped++;
+      } else {
+        const update: Record<string, unknown> = {
+          caregiverIds: admin.firestore.FieldValue.arrayRemove(uid),
+        };
+        if (u.primaryCaregiverId === uid) {
+          update.primaryCaregiverId = others[0];
+        }
+        await userDoc.ref.update(update);
+        unlinked++;
+      }
+    }
+    await deleteByQuery(
+      db.collection('invite_codes').where('createdBy', '==', uid),
+    );
+    await db.recursiveDelete(db.collection('caregivers').doc(uid));
+    await admin.auth().deleteUser(uid);
+    console.log(
+      `deleteCaregiverAccount ${uid}: wiped ${wiped}, unlinked ${unlinked}`);
+    return { deleted: true, patientsWiped: wiped, patientsUnlinked: unlinked };
+  });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HOME ENVIRONMENT (temperature / humidity) MONITORING
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Polls each family's linked provider(s) in environment_connections/
+// {patientId} — SensorPush Gateway Cloud API and/or Google Nest SDM —
+// appends history to users/{id}/environment_readings, denormalizes the
+// newest reading onto the connection doc (`latest`, which the dashboard
+// card streams), and pushes FCM alerts to caregivers when readings cross
+// the family's thresholds. Mirrors the analyzeTripsAndAlert pattern.
+//
+// Secrets (set with `firebase functions:secrets:set`):
+//   NEST_FN_CLIENT_ID / NEST_FN_CLIENT_SECRET — Google OAuth client used
+//     to refresh families' Nest tokens (same client as the app's .env
+//     NEST_CLIENT_ID/SECRET).
+//   NEST_FN_PROJECT_ID — Google Device Access project id.
+// SensorPush needs no app credentials (per-family authorization token
+// stored on the connection doc).
+
+interface EnvReading {
+  tempF: number;
+  humidity: number;
+  observedAt: Date;
+  provider: 'sensorpush' | 'nest';
+  sensorName: string | null;
+}
+
+const SENSORPUSH_BASE = 'https://api.sensorpush.com/api/v1';
+
+async function fetchSensorPushReading(
+  sp: Record<string, any>,
+): Promise<EnvReading | null> {
+  // authorization → short-lived access token
+  const tokenRes = await fetch(`${SENSORPUSH_BASE}/oauth/accesstoken`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ authorization: sp.authorization }),
+  });
+  if (tokenRes.status === 401 || tokenRes.status === 403) {
+    throw new EnvAuthError('sensorpush');
+  }
+  if (!tokenRes.ok) {
+    throw new Error(`SensorPush accesstoken ${tokenRes.status}`);
+  }
+  const accesstoken = ((await tokenRes.json()) as any).accesstoken as string;
+
+  const samplesRes = await fetch(`${SENSORPUSH_BASE}/samples`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: accesstoken,
+    },
+    body: JSON.stringify({ limit: 1, sensors: [sp.sensorId] }),
+  });
+  if (!samplesRes.ok) {
+    throw new Error(`SensorPush samples ${samplesRes.status}`);
+  }
+  const body = (await samplesRes.json()) as any;
+  const samples = body?.sensors?.[sp.sensorId] ?? [];
+  if (!samples.length) return null;
+  const s = samples[0];
+  return {
+    tempF: Number(s.temperature), // SensorPush reports °F
+    humidity: Number(s.humidity),
+    observedAt: s.observed ? new Date(s.observed) : new Date(),
+    provider: 'sensorpush',
+    sensorName: sp.sensorName ?? null,
+  };
+}
+
+async function fetchNestReading(
+  nest: Record<string, any>,
+  clientId: string,
+  clientSecret: string,
+): Promise<EnvReading | null> {
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'refresh_token',
+      refresh_token: nest.refreshToken,
+    }),
+  });
+  if (tokenRes.status === 400 || tokenRes.status === 401) {
+    throw new EnvAuthError('nest');
+  }
+  if (!tokenRes.ok) {
+    throw new Error(`Nest token refresh ${tokenRes.status}`);
+  }
+  const accessToken = ((await tokenRes.json()) as any).access_token as string;
+
+  const devRes = await fetch(
+    `https://smartdevicemanagement.googleapis.com/v1/${nest.deviceName}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  if (devRes.status === 401 || devRes.status === 403) {
+    throw new EnvAuthError('nest');
+  }
+  if (!devRes.ok) {
+    throw new Error(`Nest device fetch ${devRes.status}`);
+  }
+  const device = (await devRes.json()) as any;
+  const traits = device?.traits ?? {};
+  const tempC =
+    traits['sdm.devices.traits.Temperature']?.ambientTemperatureCelsius;
+  if (typeof tempC !== 'number') return null;
+  const humidity =
+    traits['sdm.devices.traits.Humidity']?.ambientHumidityPercent ?? 0;
+  return {
+    tempF: (tempC * 9) / 5 + 32,
+    humidity: Number(humidity),
+    observedAt: new Date(),
+    provider: 'nest',
+    sensorName: nest.displayName ?? null,
+  };
+}
+
+/** Provider credentials rejected — caregiver must re-link. */
+class EnvAuthError extends Error {
+  constructor(public readonly provider: 'sensorpush' | 'nest') {
+    super(`${provider} auth failed`);
+  }
+}
+
+/** Threshold violations for a reading. Keys are stable for cooldowns. */
+function envViolations(
+  reading: EnvReading,
+  alerts: Record<string, any>,
+): { key: string; text: string }[] {
+  const minTempF = Number(alerts?.minTempF ?? 60);
+  const maxTempF = Number(alerts?.maxTempF ?? 85);
+  const minHum = Number(alerts?.minHumidity ?? 20);
+  const maxHum = Number(alerts?.maxHumidity ?? 70);
+  const t = reading.tempF.toFixed(0);
+  const h = reading.humidity.toFixed(0);
+  const out: { key: string; text: string }[] = [];
+  if (reading.tempF > maxTempF) {
+    out.push({ key: 'tempHigh', text: `${t}°F (limit ${maxTempF}°F)` });
+  } else if (reading.tempF < minTempF) {
+    out.push({ key: 'tempLow', text: `${t}°F (limit ${minTempF}°F)` });
+  }
+  if (reading.humidity > maxHum) {
+    out.push({ key: 'humHigh', text: `${h}% humidity (limit ${maxHum}%)` });
+  } else if (reading.humidity < minHum) {
+    out.push({ key: 'humLow', text: `${h}% humidity (limit ${minHum}%)` });
+  }
+  return out;
+}
+
+const ENV_ALERT_COOLDOWN_MS = 6 * 3600 * 1000; // one alert per condition / 6h
+
+export const pollEnvironment = functions
+  .runWith({
+    // Note: no NEST_FN_PROJECT_ID needed server-side — the stored
+    // deviceName already embeds the Device Access project id.
+    secrets: ['NEST_FN_CLIENT_ID', 'NEST_FN_CLIENT_SECRET'],
+    timeoutSeconds: 300,
+  })
+  .pubsub.schedule('every 30 minutes')
+  .onRun(async () => {
+    const nestClientId = (process.env.NEST_FN_CLIENT_ID || '').trim();
+    const nestClientSecret = (process.env.NEST_FN_CLIENT_SECRET || '').trim();
+
+    const db = admin.firestore();
+    const connections = await db.collection('environment_connections').get();
+    if (connections.empty) return null;
+    console.log(`Environment poll: ${connections.size} connection(s)`);
+
+    for (const connDoc of connections.docs) {
+      const patientId = connDoc.id;
+      const conn = connDoc.data();
+      try {
+        // Prefer the dedicated sensor; fall back to the thermostat.
+        let reading: EnvReading | null = null;
+        const authFailures: ('sensorpush' | 'nest')[] = [];
+
+        if (conn.sensorpush && conn.sensorpush.needsReauth !== true) {
+          try {
+            reading = await fetchSensorPushReading(conn.sensorpush);
+          } catch (e) {
+            if (e instanceof EnvAuthError) authFailures.push(e.provider);
+            else console.error(`SensorPush poll failed for ${patientId}:`, e);
+          }
+        }
+        if (
+          !reading &&
+          conn.nest &&
+          conn.nest.needsReauth !== true &&
+          nestClientId &&
+          nestClientSecret
+        ) {
+          try {
+            reading = await fetchNestReading(
+              conn.nest,
+              nestClientId,
+              nestClientSecret,
+            );
+          } catch (e) {
+            if (e instanceof EnvAuthError) authFailures.push(e.provider);
+            else console.error(`Nest poll failed for ${patientId}:`, e);
+          }
+        }
+
+        // Gather patient + caregiver tokens once (used by both alert paths).
+        const userDoc = await db.collection('users').doc(patientId).get();
+        const userData = userDoc.data();
+        const patientName = userData?.name ?? 'your family member';
+        const caregiverIds: string[] = userData?.caregiverIds ?? [];
+        const tokens: string[] = [];
+        if (caregiverIds.length) {
+          const caregiverDocs = await Promise.all(
+            caregiverIds.map((id) => db.collection('caregivers').doc(id).get()),
+          );
+          for (const doc of caregiverDocs) {
+            const cg = doc.data();
+            if (cg?.fcmTokens?.length) tokens.push(...cg.fcmTokens);
+            else if (cg?.fcmToken) tokens.push(cg.fcmToken);
+          }
+        }
+
+        // Flag dead credentials once and tell the caregivers.
+        for (const provider of authFailures) {
+          await connDoc.ref.set(
+            { [provider]: { needsReauth: true } },
+            { merge: true },
+          );
+          if (tokens.length) {
+            await admin.messaging().sendEachForMulticast({
+              notification: {
+                title: '🌡️ Home sensor disconnected',
+                body:
+                  `The ${provider === 'nest' ? 'Nest' : 'SensorPush'} link ` +
+                  `for ${patientName} stopped working — open Home ` +
+                  'Environment settings to re-connect it.',
+              },
+              data: {
+                type: 'environment_reauth',
+                userId: patientId,
+                payload: `environment:${patientId}`,
+              },
+              tokens,
+            });
+          }
+          console.log(`Environment ${provider} needsReauth set for ${patientId}`);
+        }
+
+        if (!reading) continue;
+
+        // History + denormalized latest.
+        const observedTs = admin.firestore.Timestamp.fromDate(
+          reading.observedAt,
+        );
+        await db
+          .collection('users')
+          .doc(patientId)
+          .collection('environment_readings')
+          .add({
+            provider: reading.provider,
+            sensorName: reading.sensorName,
+            tempF: reading.tempF,
+            humidity: reading.humidity,
+            timestamp: observedTs,
+          });
+        await connDoc.ref.set(
+          {
+            latest: {
+              tempF: reading.tempF,
+              humidity: reading.humidity,
+              observedAt: observedTs,
+              provider: reading.provider,
+              sensorName: reading.sensorName,
+            },
+          },
+          { merge: true },
+        );
+
+        // Threshold alerts (per-condition 6h cooldown in alertState).
+        if (conn.alerts?.enabled === false || !tokens.length) continue;
+        const violations = envViolations(reading, conn.alerts ?? {});
+        if (!violations.length) continue;
+
+        const alertState: Record<string, any> = conn.alertState ?? {};
+        const now = Date.now();
+        const fresh = violations.filter((v) => {
+          const last = alertState[v.key] as
+            | admin.firestore.Timestamp
+            | undefined;
+          return !last || now - last.toMillis() > ENV_ALERT_COOLDOWN_MS;
+        });
+        if (!fresh.length) continue;
+
+        const body =
+          `${patientName}'s home is at ` +
+          fresh.map((v) => v.text).join(' and ');
+        const response = await admin.messaging().sendEachForMulticast({
+          notification: { title: '🌡️ Home environment alert', body },
+          data: {
+            type: 'environment_alert',
+            userId: patientId,
+            payload: `environment:${patientId}`,
+          },
+          tokens,
+        });
+        console.log(
+          `Environment alert for ${patientId} (${fresh
+            .map((v) => v.key)
+            .join(',')}): ${response.successCount} ok, ` +
+            `${response.failureCount} failed`,
+        );
+
+        const stateUpdate: Record<string, any> = {};
+        for (const v of fresh) {
+          stateUpdate[v.key] = admin.firestore.FieldValue.serverTimestamp();
+        }
+        await connDoc.ref.set({ alertState: stateUpdate }, { merge: true });
+      } catch (e) {
+        console.error(`Environment poll failed for ${patientId}:`, e);
+      }
+    }
+    return null;
+  });

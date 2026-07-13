@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import '../models/bouncie_connection.dart';
+import '../models/environment_connection.dart';
 
 import 'app_state_provider.dart';
 import 'user_provider.dart';
@@ -25,6 +26,7 @@ import '../services/receipt_scan_service.dart';
 import '../services/pet_feeding_service.dart';
 import 'subscription_provider.dart';
 import '../../features/bouncie/bouncie_service.dart';
+import '../../features/environment/environment_service.dart';
 
 // ChangeNotifier providers — use ref.read() to get instance,
 // ListenableBuilder to reactively rebuild on notifyListeners().
@@ -103,6 +105,42 @@ BouncieService bouncieServiceForConnection(
     redirectUri: config.redirectUri,
   );
 }
+
+// ── Home environment (temperature / humidity) ───────────────────────────
+// App-level Google Device Access credentials for the Nest SDM link flow
+// (identify the Lumina app to Google — NOT user-specific). SensorPush
+// needs no app credentials. Per-family tokens live in Firestore
+// `environment_connections/{patientId}` (EnvironmentConnection).
+
+/// Google Device Access config. Empty strings when unconfigured —
+/// callers must handle gracefully.
+final nestAppConfigProvider = Provider<
+    ({
+      String clientId,
+      String clientSecret,
+      String projectId,
+      String redirectUri
+    })>((ref) {
+  return (
+    clientId: dotenv.env['NEST_CLIENT_ID'] ?? '',
+    clientSecret: dotenv.env['NEST_CLIENT_SECRET'] ?? '',
+    projectId: dotenv.env['NEST_PROJECT_ID'] ?? '',
+    redirectUri: dotenv.env['NEST_REDIRECT_URI'] ?? '',
+  );
+});
+
+/// Live per-patient environment connection (null = nothing linked).
+final environmentConnectionProvider =
+    StreamProvider.family<EnvironmentConnection?, String>((ref, patientId) {
+  return FirebaseFirestore.instance
+      .collection('environment_connections')
+      .doc(patientId)
+      .snapshots()
+      .map((doc) =>
+          doc.exists ? EnvironmentConnection.fromFirestore(doc) : null);
+});
+
+final environmentServiceProvider = Provider((ref) => EnvironmentService());
 
 // Invite service
 final inviteServiceProvider = Provider((ref) => InviteService());

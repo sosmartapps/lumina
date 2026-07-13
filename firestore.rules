@@ -237,6 +237,15 @@ service cloud.firestore {
       allow read, write: if isAuthenticated() && isCaregiverFor(userId);
     }
 
+    // Per-family home environment (temp/humidity) provider link (doc id =
+    // patient userId). Contains the family's SensorPush authorization /
+    // Nest refresh token — restricted to that patient's caregivers only
+    // (same trust model as bouncie_connections). `latest` + `alertState`
+    // are written by the pollEnvironment Cloud Function via Admin SDK.
+    match /environment_connections/{userId} {
+      allow read, write: if isAuthenticated() && isCaregiverFor(userId);
+    }
+
     // QuadTrack GPS devices (rules were missing entirely — every
     // dashboard query was denied; added 2026-07-07)
     match /quadtrack_devices/{deviceId} {

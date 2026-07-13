@@ -17,6 +17,7 @@
 ## Active Issues
 - **QuadTrack LIVE (2026-07-08)** — core flow device-verified end-to-end incl. push w/ deep-links (see CHANGELOG). Remaining tests: geofence breach push, phone-dead escalation, LE share screen, profile wizard, remove device, Android
 - Bouncie per-family linking DEVICE-VERIFIED 2026-07-12 (privacy ship-blocker closed; see CHANGELOG). Patient-switch state bugs fixed same day (ChangeNotifierProvider + addManagedUser dedupe) — device-verified
+- Home environment monitoring (2026-07-13) built but NOT device-tested — SensorPush cloud API + Nest SDM behind `environment_connections/{patientId}`; dashboard card, link/threshold screen, `pollEnvironment` fn. Before deploy: set `NEST_FN_CLIENT_ID/SECRET` secrets + `NEST_*` .env keys (Google Device Access reg, $5); then `firebase deploy --only firestore:rules,functions:pollEnvironment`. Provider API shapes NOT live-verified — test link flow w/ real SensorPush account first
 - Pet feeding reminders (2026-07-06) built but NOT device-tested — test add/edit/delete schedule, mark-fed, notifications fire, history; then `firebase deploy --only firestore`
 - Expense/reimbursement feature (2026-07-03) built but NOT device-tested — test add/scan/approve/reimburse flow, then deploy `firebase deploy --only firestore,storage`
 - Apple sign-in VERIFIED iPhone; Google sign-in VERIFIED Android (Pixel 10 Pro XL). Android verified 07-12: fresh install → Google → dashboard, invite redeem (incl. share-all), Bouncie card, patient list. Remaining: OCR w/ Play services, full UI walk

@@ -71,33 +71,42 @@ class LargeActionTile extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    // Title — scales down instead of wrapping/clipping
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        title,
-                        maxLines: 1,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
+                    const SizedBox(height: 8),
+                    // Title — scales down instead of wrapping/clipping.
+                    // Flexible so a very short cell shrinks the text
+                    // instead of overflowing (20/52px overflow on iPhone,
+                    // 2026-07-13).
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ),
                     ),
                     // Subtitle
                     if (subtitle != null) ...[
                       const SizedBox(height: 2),
-                      Text(
-                        subtitle!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          fontSize: 16,
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            subtitle!,
+                            maxLines: 1,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.9),
+                              fontSize: 16,
+                            ),
+                          ),
                         ),
                       ),
                     ],

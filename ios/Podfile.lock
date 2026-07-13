@@ -1217,6 +1217,10 @@ PODS:
     - Firebase/Firestore (= 12.13.0)
     - firebase_core
     - Flutter
+  - cloud_functions (6.3.1):
+    - Firebase/Functions (= 12.13.0)
+    - firebase_core
+    - Flutter
   - connectivity_plus (0.0.1):
     - Flutter
   - CwlCatchException (2.2.1):
@@ -1235,6 +1239,9 @@ PODS:
   - Firebase/Firestore (12.13.0):
     - Firebase/CoreOnly
     - FirebaseFirestore (~> 12.13.0)
+  - Firebase/Functions (12.13.0):
+    - Firebase/CoreOnly
+    - FirebaseFunctions (~> 12.13.0)
   - Firebase/Messaging (12.13.0):
     - Firebase/CoreOnly
     - FirebaseMessaging (~> 12.13.0)
@@ -1330,6 +1337,14 @@ PODS:
     - gRPC-Core (~> 1.69.0)
     - leveldb-library (~> 1.22)
     - nanopb (~> 3.30910.0)
+  - FirebaseFunctions (12.13.0):
+    - FirebaseAppCheckInterop (~> 12.13.0)
+    - FirebaseAuthInterop (~> 12.13.0)
+    - FirebaseCore (~> 12.13.0)
+    - FirebaseCoreExtension (~> 12.13.0)
+    - FirebaseMessagingInterop (~> 12.13.0)
+    - FirebaseSharedSwift (~> 12.13.0)
+    - GTMSessionFetcher/Core (< 6.0, >= 3.4)
   - FirebaseInstallations (12.13.0):
     - FirebaseCore (~> 12.13.0)
     - GoogleUtilities/Environment (~> 8.1)
@@ -1344,6 +1359,7 @@ PODS:
     - GoogleUtilities/Reachability (~> 8.1)
     - GoogleUtilities/UserDefaults (~> 8.1)
     - nanopb (~> 3.30910.0)
+  - FirebaseMessagingInterop (12.13.0)
   - FirebaseRemoteConfigInterop (12.13.0)
   - FirebaseSessions (12.13.0):
     - FirebaseCore (~> 12.13.0)
@@ -1647,6 +1663,7 @@ DEPENDENCIES:
   - audioplayers_darwin (from `.symlinks/plugins/audioplayers_darwin/darwin`)
   - battery_plus (from `.symlinks/plugins/battery_plus/ios`)
   - cloud_firestore (from `.symlinks/plugins/cloud_firestore/ios`)
+  - cloud_functions (from `.symlinks/plugins/cloud_functions/ios`)
   - connectivity_plus (from `.symlinks/plugins/connectivity_plus/ios`)
   - device_info_plus (from `.symlinks/plugins/device_info_plus/ios`)
   - firebase_analytics (from `.symlinks/plugins/firebase_analytics/ios`)
@@ -1702,8 +1719,10 @@ SPEC REPOS:
     - FirebaseCrashlytics
     - FirebaseFirestore
     - FirebaseFirestoreInternal
+    - FirebaseFunctions
     - FirebaseInstallations
     - FirebaseMessaging
+    - FirebaseMessagingInterop
     - FirebaseRemoteConfigInterop
     - FirebaseSessions
     - FirebaseSharedSwift
@@ -1743,6 +1762,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/battery_plus/ios"
   cloud_firestore:
     :path: ".symlinks/plugins/cloud_firestore/ios"
+  cloud_functions:
+    :path: ".symlinks/plugins/cloud_functions/ios"
   connectivity_plus:
     :path: ".symlinks/plugins/connectivity_plus/ios"
   device_info_plus:
@@ -1823,6 +1844,7 @@ SPEC CHECKSUMS:
   battery_plus: b42253f6d2dde71712f8c36fef456d99121c5977
   BoringSSL-GRPC: dded2a44897e45f28f08ae87a55ee4bcd19bc508
   cloud_firestore: 95c2f2d0a75b8ca7ca9f629fc903ad4dbd030c2a
+  cloud_functions: 9549563dcadc80b69e54eaf88ee64610a401e303
   connectivity_plus: cb623214f4e1f6ef8fe7403d580fdad517d2f7dd
   CwlCatchException: 7acc161b299a6de7f0a46a6ed741eae2c8b4d75a
   CwlCatchExceptionSupport: 54ccab8d8c78907b57f99717fb19d4cc3bce02dc
@@ -1844,8 +1866,10 @@ SPEC CHECKSUMS:
   FirebaseCrashlytics: 8bb2d41cb47e8f3ea34200d99361499a59995e0d
   FirebaseFirestore: e5c352f6cc5158929702a7dffc0b917324907e89
   FirebaseFirestoreInternal: f5748d57cf73bb51f01ecebce87c72321193e388
+  FirebaseFunctions: 62278244e82cbec2047c91fe80f900a6b0194719
   FirebaseInstallations: 134bde50e477628ded76070efdb12d515d53f948
   FirebaseMessaging: 30564b85d2f81a96f9d312bd23acf8186ff092ae
+  FirebaseMessagingInterop: 3e3f3243eb20335a624218fa84c3f527bcf252cb
   FirebaseRemoteConfigInterop: 4801ab93a543ef8fedfb40ae2f66d03e3fdcb864
   FirebaseSessions: 0e5f64cd99400275798fcb5e2b773dd000ca02c1
   FirebaseSharedSwift: 76bdd9de8ff1da7a601236ee058253e36206978e
