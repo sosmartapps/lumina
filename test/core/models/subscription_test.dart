@@ -64,7 +64,9 @@ void main() {
       });
 
       test('free user cannot use premium features', () {
-        expect(freeSub.canUseGeofencing, false);
+        // Geofencing is available on every tier (capped via maxGeoZones)
+        // — decided 2026-07-07.
+        expect(freeSub.canUseGeofencing, true);
         expect(freeSub.canUseVehicleTracking, false);
         expect(freeSub.canInviteCaregivers, false);
         expect(freeSub.canUseMedicationPhotos, false);
@@ -81,12 +83,14 @@ void main() {
         expect(freeSub.maxReminders, 5);
         expect(freeSub.maxMedications, 3);
         expect(freeSub.maxSavedLocations, 3);
+        expect(freeSub.maxGeoZones, 1);
       });
 
       test('premium user has unlimited counts', () {
         expect(premiumSub.maxReminders, -1);
         expect(premiumSub.maxMedications, -1);
         expect(premiumSub.maxSavedLocations, -1);
+        expect(premiumSub.maxGeoZones, -1);
       });
     });
 
