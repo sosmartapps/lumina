@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+// image_picker kept in pubspec for caregiver screens (profile, receipt, etc.)
 import 'package:uuid/uuid.dart';
 
 import '../models/reminder.dart';
@@ -367,13 +368,13 @@ class _ReminderPopupState extends ConsumerState<ReminderPopup>
   }
 }
 
-/// Photo capture screen for task/medication verification
+/// One-tap photo capture for task verification.
+/// Full-screen camera preview with a single shutter button — no system
+/// camera dialog, no preview/confirm step. Tap shutter → auto-uploads →
+/// "ALL DONE!" → dismisses.
 class PhotoCaptureScreen extends StatefulWidget {
   final String title;
   final String instructions;
-
-  /// Called with the uploaded photo URL and its on-device dHash (hash may
-  /// be null when hashing fails — never blocks completion).
   final Function(String url, String? hash) onPhotoTaken;
   final VoidCallback onCancel;
   final String? userId;
@@ -391,43 +392,82 @@ class PhotoCaptureScreen extends StatefulWidget {
   State<PhotoCaptureScreen> createState() => _PhotoCaptureScreenState();
 }
 
-class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
-  final ImagePicker _picker = ImagePicker();
-  File? _capturedImage;
+class _PhotoCaptureScreenState extends State<PhotoCaptureScreen>
+    with WidgetsBindingObserver {
+  CameraController? _controller;
   bool _isUploading = false;
   bool _uploadSucceeded = false;
+  bool _isTakingPicture = false;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _takeAndUpload());
+    WidgetsBinding.instance.addObserver(this);
+    _initCamera();
   }
 
-  Future<void> _takeAndUpload() async {
-    try {
-      final XFile? image = await _picker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 1200,
-        maxHeight: 1200,
-        imageQuality: 85,
-        preferredCameraDevice: CameraDevice.rear,
-      );
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _controller?.dispose();
+    super.dispose();
+  }
 
-      if (image == null) {
-        if (mounted) widget.onCancel();
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_controller == null || !_controller!.value.isInitialized) return;
+    if (state == AppLifecycleState.inactive) {
+      _controller?.dispose();
+      _controller = null;
+    } else if (state == AppLifecycleState.resumed) {
+      _initCamera();
+    }
+  }
+
+  Future<void> _initCamera() async {
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        setState(() => _error = 'No camera available');
         return;
       }
-
-      setState(() {
-        _capturedImage = File(image.path);
-        _isUploading = true;
-      });
-
-      await _upload(File(image.path));
+      final back = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.back,
+        orElse: () => cameras.first,
+      );
+      final controller = CameraController(
+        back,
+        ResolutionPreset.medium,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.jpeg,
+      );
+      await controller.initialize();
+      if (!mounted) {
+        controller.dispose();
+        return;
+      }
+      setState(() => _controller = controller);
     } catch (e) {
+      if (mounted) setState(() => _error = 'Camera error: $e');
+    }
+  }
+
+  Future<void> _capture() async {
+    if (_isTakingPicture || _controller == null) return;
+    _isTakingPicture = true;
+    HapticFeedback.heavyImpact();
+
+    try {
+      final xFile = await _controller!.takePicture();
+      if (!mounted) return;
+      setState(() => _isUploading = true);
+      await _upload(File(xFile.path));
+    } catch (e) {
+      _isTakingPicture = false;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open camera: $e')),
+          SnackBar(content: Text('Capture failed: $e')),
         );
       }
     }
@@ -461,6 +501,7 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
       }
       widget.onPhotoTaken(downloadUrl, photoHash);
     } catch (e) {
+      _isTakingPicture = false;
       if (mounted) {
         setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -472,7 +513,6 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Success confirmation — big, unmissable, senior-friendly
     if (_uploadSucceeded) {
       return Scaffold(
         backgroundColor: AppTheme.primaryGreen,
@@ -510,171 +550,86 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
         ),
       );
     }
+
+    if (_isUploading) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: Colors.white, strokeWidth: 4),
+              SizedBox(height: 24),
+              Text('Saving photo...',
+                  style: TextStyle(color: Colors.white70, fontSize: 22)),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: _isUploading ? null : widget.onCancel,
-                    icon: const Icon(Icons.close, color: Colors.white, size: 32),
-                  ),
-                  const Spacer(),
-                  Flexible(
-                    child: Text(
-                      widget.title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+      body: _error != null
+          ? Center(
+              child: Text(_error!,
+                  style: const TextStyle(color: Colors.white, fontSize: 20)))
+          : _controller == null || !_controller!.value.isInitialized
+              ? const Center(
+                  child: CircularProgressIndicator(color: Colors.white))
+              : Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CameraPreview(_controller!),
+                    // Instructions at top
+                    Positioned(
+                      top: MediaQuery.of(context).padding.top + 16,
+                      left: 24,
+                      right: 24,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          widget.instructions,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 20),
+                        ),
                       ),
-                      textAlign: TextAlign.center,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  const Spacer(),
-                  const SizedBox(width: 48),
-                ],
-              ),
-            ),
-
-            // Photo preview or camera prompt
-            Expanded(
-              child: Container(
-                margin: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[900],
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white30, width: 2),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(18),
-                  child: _capturedImage != null
-                      ? Image.file(
-                          _capturedImage!,
-                          fit: BoxFit.contain,
-                          width: double.infinity,
-                          height: double.infinity,
-                        )
-                      : Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.camera_alt,
-                                size: 80,
-                                color: Colors.white.withValues(alpha: 0.5),
-                              ),
-                              const SizedBox(height: 16),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 24),
-                                child: Text(
-                                  widget.instructions,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.7),
-                                    fontSize: 20,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                ),
-              ),
-            ),
-
-            // Action buttons
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: _isUploading
-                  ? const Column(
-                      children: [
-                        CircularProgressIndicator(color: Colors.white),
-                        SizedBox(height: 12),
-                        Text(
-                          'Saving photo...',
-                          style: TextStyle(color: Colors.white70, fontSize: 18),
-                        ),
-                      ],
-                    )
-                  : _capturedImage != null
-                      ? Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            // Retake button
-                            GestureDetector(
-                              onTap: () {
-                                HapticFeedback.mediumImpact();
-                                setState(() => _capturedImage = null);
-                                _takePhoto();
-                              },
-                              child: Container(
-                                width: 70,
-                                height: 70,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[800],
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.refresh,
-                                  size: 36,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                            // Confirm button
-                            GestureDetector(
-                              onTap: () {
-                                HapticFeedback.heavyImpact();
-                                _confirmAndUpload();
-                              },
-                              child: Container(
-                                width: 80,
-                                height: 80,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.primaryGreen,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white, width: 4),
-                                ),
-                                child: const Icon(
-                                  Icons.check,
-                                  size: 44,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ],
-                        )
-                      : GestureDetector(
-                          onTap: () {
-                            HapticFeedback.heavyImpact();
-                            _takePhoto();
-                          },
+                    // Shutter button at bottom
+                    Positioned(
+                      bottom: MediaQuery.of(context).padding.bottom + 40,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: GestureDetector(
+                          onTap: _capture,
                           child: Container(
-                            width: 80,
-                            height: 80,
+                            width: 90,
+                            height: 90,
                             decoration: BoxDecoration(
-                              color: Colors.white,
                               shape: BoxShape.circle,
-                              border: Border.all(color: AppTheme.primaryBlue, width: 4),
+                              border: Border.all(
+                                  color: Colors.white, width: 5),
                             ),
-                            child: const Icon(
-                              Icons.camera,
-                              size: 40,
-                              color: AppTheme.primaryBlue,
+                            child: Container(
+                              margin: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
-            ),
-          ],
-        ),
-      ),
+                      ),
+                    ),
+                  ],
+                ),
     );
   }
 }
