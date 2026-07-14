@@ -3,6 +3,13 @@
 <!-- Claude will automatically log completed work here. -->
 <!-- Format: Date - Build Number - Summary heading, then bullet points of what changed. -->
 
+## 2026-07-13 (evening) - Daily Activities DEVICE-VERIFIED + Photo flow streamlined + Call screen fix
+
+- **Daily Activities library device-verified** on iPhone + Pixel 10 Pro XL: caregiver adds from Manage → Daily Activities (16 Montessori templates across 5 categories), activity becomes a Reminder, patient popup fires with TTS, photo verification uploads and triggers Cloud Function (push notification received on caregiver device). Full pipeline confirmed end-to-end.
+- **Photo capture flow streamlined** (all task/medication verification): replaced `ImagePicker` system camera dialog with custom `camera` package implementation — full-screen live preview + one-tap shutter button. Auto-uploads immediately after capture, no preview/confirm/retake steps. Reduced from ~4 taps to 2 taps. Also fixed double-pop navigation race where ReminderPopup didn't dismiss after photo (addPostFrameCallback between sequential pops).
+- **Call screen overflow fixed**: contact cards overflowed bottom by 9px (avatar radius 40 = 80px in 80px inner height). Bumped card height 120→130.
+
+
 ## 2026-07-13 (pm) - Vehicles + Social Media wired into EXISTING missing-person generators — needs device test
 
 - **Vehicles** (User Profile → new "Vehicles" tab): multiple vehicles per patient, each with make/model/year/color/plate/state/VIN/notes + multiple photos. Photos upload to Storage `vehicle_photos/{patientId}/photo_<uuid>.jpg` (mirrors `user_photos`). New `Vehicle` value class on `UserProfile.vehicles` (embedded array, like `photos`/`frequentPlaces`); legacy single `vehicle*` fields fold in via `allVehicles` getter so older profiles migrate on first edit. Full-screen `_VehicleEditorScreen` (camera/gallery, immediate upload, delete-in-place).

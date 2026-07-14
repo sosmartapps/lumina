@@ -2350,8 +2350,20 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
     if (saved != true) return;
 
-    final url = urlController.text.trim();
+    var url = urlController.text.trim();
     final handle = handleController.text.trim();
+
+    // Auto-generate URL from handle for known platforms
+    if (url.isEmpty && handle.isNotEmpty && platform != SocialPlatform.other) {
+      final bare = handle.replaceAll(RegExp(r'^@'), '');
+      url = switch (platform) {
+        SocialPlatform.facebook => 'https://facebook.com/$bare',
+        SocialPlatform.instagram => 'https://instagram.com/$bare',
+        SocialPlatform.twitter => 'https://x.com/$bare',
+        SocialPlatform.tiktok => 'https://tiktok.com/@$bare',
+        _ => '',
+      };
+    }
 
     final list = List<SocialMediaLink>.from(
         _profile?.socialMediaLinks ?? const <SocialMediaLink>[]);
