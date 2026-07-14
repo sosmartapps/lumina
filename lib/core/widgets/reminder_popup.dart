@@ -397,7 +397,13 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
   bool _isUploading = false;
   bool _uploadSucceeded = false;
 
-  Future<void> _takePhoto() async {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _takeAndUpload());
+  }
+
+  Future<void> _takeAndUpload() async {
     try {
       final XFile? image = await _picker.pickImage(
         source: ImageSource.camera,
@@ -407,11 +413,17 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
         preferredCameraDevice: CameraDevice.rear,
       );
 
-      if (image == null) return;
+      if (image == null) {
+        if (mounted) widget.onCancel();
+        return;
+      }
 
       setState(() {
         _capturedImage = File(image.path);
+        _isUploading = true;
       });
+
+      await _upload(File(image.path));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -421,11 +433,7 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
     }
   }
 
-  Future<void> _confirmAndUpload() async {
-    if (_capturedImage == null) return;
-
-    setState(() => _isUploading = true);
-
+  Future<void> _upload(File photo) async {
     try {
       final photoId = const Uuid().v4();
       final filename = 'med_verify_$photoId.jpg';
@@ -435,17 +443,14 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
           .child(widget.userId ?? 'unknown')
           .child(filename);
 
-      final imageBytes = await _capturedImage!.readAsBytes();
+      final imageBytes = await photo.readAsBytes();
       await ref.putData(
         imageBytes,
         SettableMetadata(contentType: 'image/jpeg'),
       );
 
       final downloadUrl = await ref.getDownloadURL();
-      // Cheap on-device perceptual hash for match-first verification
-      final photoHash = await PhotoMatchService.computeDHash(_capturedImage!);
-      // Clear "you did it" moment for the patient before closing
-      // (photo used to vanish with zero acknowledgement, 2026-07-13)
+      final photoHash = await PhotoMatchService.computeDHash(photo);
       if (mounted) {
         setState(() {
           _isUploading = false;
