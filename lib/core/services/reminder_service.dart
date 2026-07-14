@@ -62,7 +62,7 @@ class ReminderService {
   /// Delete a reminder
   Future<void> deleteReminder(String reminderId) async {
     await _firestore.collection('reminders').doc(reminderId).delete();
-    await NotificationService.cancelNotification(reminderId.hashCode);
+    await NotificationService.cancelReminder(reminderId);
   }
 
   /// Get reminders for a user

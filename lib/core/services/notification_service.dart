@@ -416,16 +416,73 @@ class NotificationService {
     required String userName,
   }) async {
     final message = reminder.getSpokenMessage(userName);
+    final title = _getReminderTitle(reminder);
+    final payload = 'reminder:${reminder.id}';
+    final hour = reminder.scheduledTime.hour;
+    final minute = reminder.scheduledTime.minute;
 
-    await scheduleNotification(
-      id: reminder.id.hashCode,
-      title: _getReminderTitle(reminder),
-      body: message,
-      scheduledTime: reminder.scheduledTime,
-      payload: 'reminder:${reminder.id}',
-      channelId: _reminderChannelId,
-      repeat: reminder.repeatFrequency != RepeatFrequency.once,
-    );
+    switch (reminder.repeatFrequency) {
+      case RepeatFrequency.once:
+        await scheduleNotification(
+          id: reminder.id.hashCode,
+          title: title,
+          body: message,
+          scheduledTime: reminder.scheduledTime,
+          payload: payload,
+          channelId: _reminderChannelId,
+        );
+      case RepeatFrequency.daily:
+        await scheduleNotification(
+          id: reminder.id.hashCode,
+          title: title,
+          body: message,
+          scheduledTime: _nextDailyOccurrence(hour, minute),
+          payload: payload,
+          channelId: _reminderChannelId,
+          matchComponents: DateTimeComponents.time,
+        );
+      case RepeatFrequency.weekly:
+      case RepeatFrequency.custom:
+        final days = reminder.repeatDays;
+        if (days != null && days.isNotEmpty) {
+          for (final weekday in days) {
+            await scheduleNotification(
+              id: _reminderWeekdayId(reminder.id, weekday),
+              title: title,
+              body: message,
+              scheduledTime:
+                  _nextWeekdayOccurrence(weekday, hour, minute),
+              payload: payload,
+              channelId: _reminderChannelId,
+              matchComponents: DateTimeComponents.dayOfWeekAndTime,
+            );
+          }
+        } else {
+          await scheduleNotification(
+            id: _reminderWeekdayId(
+                reminder.id, reminder.scheduledTime.weekday),
+            title: title,
+            body: message,
+            scheduledTime: _nextWeekdayOccurrence(
+                reminder.scheduledTime.weekday, hour, minute),
+            payload: payload,
+            channelId: _reminderChannelId,
+            matchComponents: DateTimeComponents.dayOfWeekAndTime,
+          );
+        }
+    }
+  }
+
+  /// Cancel all possible notification IDs for a reminder (daily + per-weekday).
+  static Future<void> cancelReminder(String reminderId) async {
+    await cancelNotification(reminderId.hashCode);
+    for (var weekday = 1; weekday <= 7; weekday++) {
+      await cancelNotification(_reminderWeekdayId(reminderId, weekday));
+    }
+  }
+
+  static int _reminderWeekdayId(String reminderId, int weekday) {
+    return 'reminder_${reminderId}_$weekday'.hashCode;
   }
 
   /// Cancel a scheduled notification

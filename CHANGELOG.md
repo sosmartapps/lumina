@@ -3,6 +3,12 @@
 <!-- Claude will automatically log completed work here. -->
 <!-- Format: Date - Build Number - Summary heading, then bullet points of what changed. -->
 
+## 2026-07-14 - Vehicles + Social Media DEVICE-VERIFIED (Pixel + iPhone)
+
+- **Vehicles tab device-verified**: add vehicle w/ photo upload (camera + gallery), edit fields, delete vehicle — all confirmed working on Pixel. Storage rule for `vehicle_photos/` deployed (`firebase deploy --only storage`).
+- **Social Media tab device-verified**: add Facebook handle for Jack (`jack.groenier`), auto-URL generation confirmed (handle → `facebook.com/jack.groenier`), tap opens in browser. Fixed bug where entering only a handle (no URL) showed "Link removed" — added auto-URL generation for known platforms (Facebook, Instagram, X, TikTok) in `user_profile_screen.dart`.
+- **QuadTrack Share**: vehicles + social handles already verified on iPhone (07-08 session); Pixel has no QuadTrack device registered so skipped on Android.
+
 ## 2026-07-13 (evening) - Daily Activities DEVICE-VERIFIED + Photo flow streamlined + Call screen fix
 
 - **Daily Activities library device-verified** on iPhone + Pixel 10 Pro XL: caregiver adds from Manage → Daily Activities (16 Montessori templates across 5 categories), activity becomes a Reminder, patient popup fires with TTS, photo verification uploads and triggers Cloud Function (push notification received on caregiver device). Full pipeline confirmed end-to-end.
