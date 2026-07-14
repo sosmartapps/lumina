@@ -2601,32 +2601,72 @@ class EnvAuthError extends Error {
   }
 }
 
-/** Threshold violations for a reading. Keys are stable for cooldowns. */
+/**
+ * Threshold violations for a reading. Keys are stable for cooldowns.
+ * Two tiers:
+ *  - 'warning' — outside the family's configurable comfort band.
+ *  - 'danger'  — hard safety limits (heat emergency / hypothermia risk
+ *    for an elderly person). These fire even when the family has normal
+ *    alerts switched off, and on a shorter cooldown.
+ */
+const ENV_DANGER_HIGH_F = 95;
+const ENV_DANGER_LOW_F = 50;
+
 function envViolations(
   reading: EnvReading,
   alerts: Record<string, any>,
-): { key: string; text: string }[] {
+): { key: string; text: string; severity: 'warning' | 'danger' }[] {
   const minTempF = Number(alerts?.minTempF ?? 60);
   const maxTempF = Number(alerts?.maxTempF ?? 85);
   const minHum = Number(alerts?.minHumidity ?? 20);
   const maxHum = Number(alerts?.maxHumidity ?? 70);
   const t = reading.tempF.toFixed(0);
   const h = reading.humidity.toFixed(0);
-  const out: { key: string; text: string }[] = [];
-  if (reading.tempF > maxTempF) {
-    out.push({ key: 'tempHigh', text: `${t}°F (limit ${maxTempF}°F)` });
+  const out: { key: string; text: string; severity: 'warning' | 'danger' }[] =
+    [];
+  if (reading.tempF >= ENV_DANGER_HIGH_F) {
+    out.push({
+      key: 'dangerHeat',
+      text: `${t}°F — dangerously hot`,
+      severity: 'danger',
+    });
+  } else if (reading.tempF <= ENV_DANGER_LOW_F) {
+    out.push({
+      key: 'dangerCold',
+      text: `${t}°F — dangerously cold`,
+      severity: 'danger',
+    });
+  } else if (reading.tempF > maxTempF) {
+    out.push({
+      key: 'tempHigh',
+      text: `${t}°F (limit ${maxTempF}°F)`,
+      severity: 'warning',
+    });
   } else if (reading.tempF < minTempF) {
-    out.push({ key: 'tempLow', text: `${t}°F (limit ${minTempF}°F)` });
+    out.push({
+      key: 'tempLow',
+      text: `${t}°F (limit ${minTempF}°F)`,
+      severity: 'warning',
+    });
   }
   if (reading.humidity > maxHum) {
-    out.push({ key: 'humHigh', text: `${h}% humidity (limit ${maxHum}%)` });
+    out.push({
+      key: 'humHigh',
+      text: `${h}% humidity (limit ${maxHum}%)`,
+      severity: 'warning',
+    });
   } else if (reading.humidity < minHum) {
-    out.push({ key: 'humLow', text: `${h}% humidity (limit ${minHum}%)` });
+    out.push({
+      key: 'humLow',
+      text: `${h}% humidity (limit ${minHum}%)`,
+      severity: 'warning',
+    });
   }
   return out;
 }
 
-const ENV_ALERT_COOLDOWN_MS = 6 * 3600 * 1000; // one alert per condition / 6h
+const ENV_ALERT_COOLDOWN_MS = 6 * 3600 * 1000; // warning: one per condition / 6h
+const ENV_DANGER_COOLDOWN_MS = 2 * 3600 * 1000; // danger: re-alert every 2h
 
 /**
  * Threshold-check one reading and push FCM to the patient's caregivers,
@@ -2643,16 +2683,21 @@ async function evaluateEnvironmentAlert(
   const connDoc = await connRef.get();
   if (!connDoc.exists) return;
   const conn = connDoc.data()!;
-  if (conn.alerts?.enabled === false) return;
 
-  const violations = envViolations(reading, conn.alerts ?? {});
+  let violations = envViolations(reading, conn.alerts ?? {});
+  // Danger-tier violations bypass the family's alerts-off switch.
+  if (conn.alerts?.enabled === false) {
+    violations = violations.filter((v) => v.severity === 'danger');
+  }
   if (!violations.length) return;
 
   const alertState: Record<string, any> = conn.alertState ?? {};
   const now = Date.now();
   const fresh = violations.filter((v) => {
     const last = alertState[v.key] as admin.firestore.Timestamp | undefined;
-    return !last || now - last.toMillis() > ENV_ALERT_COOLDOWN_MS;
+    const cooldown =
+      v.severity === 'danger' ? ENV_DANGER_COOLDOWN_MS : ENV_ALERT_COOLDOWN_MS;
+    return !last || now - last.toMillis() > cooldown;
   });
   if (!fresh.length) return;
 
@@ -2672,10 +2717,16 @@ async function evaluateEnvironmentAlert(
   }
   if (!tokens.length) return;
 
+  const isDanger = fresh.some((v) => v.severity === 'danger');
   const body =
     `${patientName}'s home is at ` + fresh.map((v) => v.text).join(' and ');
   const response = await admin.messaging().sendEachForMulticast({
-    notification: { title: '🌡️ Home environment alert', body },
+    notification: {
+      title: isDanger
+        ? '🚨 DANGEROUS home temperature'
+        : '🌡️ Home environment alert',
+      body: isDanger ? `${body}. Check on them now.` : body,
+    },
     data: {
       type: 'environment_alert',
       userId: patientId,

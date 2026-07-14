@@ -206,10 +206,16 @@ class _CaregiverOnboardingScreenState
   @override
   void initState() {
     super.initState();
-    _refresh();
+    // Post-frame: _refresh() → loadCaregiver() → notifyListeners(), which
+    // is illegal while the first build is still in progress ("Tried to
+    // modify a provider while the widget tree was building", 2026-07-13).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _refresh();
+    });
   }
 
   Future<void> _refresh() async {
+    if (!mounted) return;
     final caregiverId = ref.read(authServiceProvider).currentUser?.uid;
     if (caregiverId == null) return;
     final provider = ref.read(caregiverNotifierProvider);
@@ -399,6 +405,10 @@ class _SetupProgressCardState extends ConsumerState<SetupProgressCard> {
   }
 
   Future<void> _load() async {
+    // Guard EVERY ref.read: _load() is re-invoked after Navigator.push
+    // returns, when this card may already be unmounted ("Using ref when a
+    // widget is about to or has been unmounted", Crashlytics 2026-07-13).
+    if (!mounted) return;
     final uid = ref.read(authServiceProvider).currentUser?.uid;
     if (uid == null) return;
     try {
@@ -413,6 +423,7 @@ class _SetupProgressCardState extends ConsumerState<SetupProgressCard> {
         return;
       }
     } catch (_) {}
+    if (!mounted) return;
     final status = await OnboardingStatus.compute(
       caregiverId: uid,
       patient: ref.read(caregiverNotifierProvider).selectedUser,
