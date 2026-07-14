@@ -317,7 +317,12 @@ class _ReminderPopupState extends ConsumerState<ReminderPopup>
           userId: userId,
           onPhotoTaken: (photoUrl, photoHash) {
             Navigator.of(context).pop();
-            widget.onComplete?.call(photoUrl, photoHash);
+            // Schedule onComplete for the next frame so the
+            // PhotoCaptureScreen pop finishes before the
+            // ReminderPopup pop starts (double-pop race fix).
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              widget.onComplete?.call(photoUrl, photoHash);
+            });
           },
           onCancel: () {
             Navigator.of(context).pop();

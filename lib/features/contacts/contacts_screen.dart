@@ -72,7 +72,7 @@ class ContactsScreen extends ConsumerWidget {
     return GestureDetector(
       onTap: () => _callContact(context, ref, contact),
       child: Container(
-        height: 120,
+        height: 130,
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(20),
