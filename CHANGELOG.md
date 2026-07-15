@@ -3,6 +3,15 @@
 <!-- Claude will automatically log completed work here. -->
 <!-- Format: Date - Build Number - Summary heading, then bullet points of what changed. -->
 
+## 2026-07-14 - Expense/Reimbursement DEVICE-VERIFIED
+
+- **Expense/reimbursement feature device-verified** on Pixel: full flow — add expense, scan receipt, approve, reimburse. Firestore rules (`expenses` collection) and storage rules already deployed.
+
+## 2026-07-14 - Pet Feeding DEVICE-VERIFIED + Reminder day-of-week bug fix
+
+- **Pet feeding reminders device-verified** on Pixel: add/edit/delete feeding schedule, mark-fed, feeding history with timestamps and feeder name. Firestore rules for `pet_feedings`/`feeding_logs` already deployed (07-13).
+- **Reminder day-of-week scheduling bug fixed** (`notification_service.dart`): weekly/custom reminders (e.g. "Take out trash — Wednesday only") were firing every day because `scheduleReminder` passed `DateTimeComponents.time` (match time only, repeat daily) for all repeating reminders. Now mirrors the pet-feeding pattern: daily → `DateTimeComponents.time`, weekly/custom with `repeatDays` → one `zonedSchedule` per weekday using `DateTimeComponents.dayOfWeekAndTime`. Added `cancelReminder()` that clears all per-weekday notification IDs. Updated `reminder_service.dart` `deleteReminder` to use new cancel method.
+
 ## 2026-07-14 - Vehicles + Social Media DEVICE-VERIFIED (Pixel + iPhone)
 
 - **Vehicles tab device-verified**: add vehicle w/ photo upload (camera + gallery), edit fields, delete vehicle — all confirmed working on Pixel. Storage rule for `vehicle_photos/` deployed (`firebase deploy --only storage`).
