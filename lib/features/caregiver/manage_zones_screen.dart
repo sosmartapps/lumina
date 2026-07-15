@@ -10,6 +10,7 @@ import '../../core/providers/caregiver_provider.dart';
 import '../../core/services/geofence_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/models/geo_zone.dart';
+import '../../core/widgets/emergency_disclaimer_banner.dart';
 import '../subscription/paywall_screen.dart';
 import 'zone_map_picker_screen.dart';
 
@@ -89,17 +90,34 @@ class _ManageZonesScreenState extends ConsumerState<ManageZonesScreen> {
               final zones = snapshot.data ?? [];
               _zoneCount = zones.length;
 
+              // Legal: point-of-use disclaimer, always visible
+              // (docs/legal/LEGAL-IMPLEMENTATION.md)
+              const banner = EmergencyDisclaimerBanner(
+                detail: 'Zone alerts require the monitored phone to be on, '
+                    'charged, and connected.',
+              );
+
               if (zones.isEmpty) {
-                return _buildEmptyState();
+                return Column(
+                  children: [banner, Expanded(child: _buildEmptyState())],
+                );
               }
 
-              return ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: zones.length,
-                itemBuilder: (context, index) {
-                  final zone = zones[index];
-                  return _buildZoneCard(zone, provider, geofenceService);
-                },
+              return Column(
+                children: [
+                  banner,
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: zones.length,
+                      itemBuilder: (context, index) {
+                        final zone = zones[index];
+                        return _buildZoneCard(
+                            zone, provider, geofenceService);
+                      },
+                    ),
+                  ),
+                ],
               );
             },
           );

@@ -8,7 +8,7 @@ import '../../core/providers/quadtrack_provider.dart';
 import '../../core/models/quadtrack_device.dart';
 import 'widgets/battery_gauge.dart';
 import 'quadtrack_navigate_screen.dart';
-import 'quadtrack_profile_setup_screen.dart';
+import 'package:lumina/features/caregiver/user_profile_screen.dart';
 import 'quadtrack_share_screen.dart';
 
 /// Detail screen for a single QuadTrack device
@@ -346,16 +346,35 @@ class _QuadTrackDetailScreenState extends ConsumerState<QuadTrackDetailScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              ref.read(quadTrackServiceProvider).removeDevice(widget.deviceId);
-              Navigator.pop(context);
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('${device.name} removed'),
-                  backgroundColor: AppTheme.primaryGreen,
-                ),
-              );
+            onPressed: () async {
+              // AWAIT the removal and only report success if it actually
+              // succeeded — previously fire-and-forget, so a rules failure
+              // left the device on the dashboard while the UI said
+              // "removed" (found device-testing 2026-07-15).
+              final dialogNav = Navigator.of(context);
+              final rootNav = Navigator.of(this.context);
+              final messenger = ScaffoldMessenger.of(this.context);
+              try {
+                await ref
+                    .read(quadTrackServiceProvider)
+                    .removeDevice(widget.deviceId);
+                dialogNav.pop();
+                rootNav.pop();
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text('${device.name} removed'),
+                    backgroundColor: AppTheme.primaryGreen,
+                  ),
+                );
+              } catch (e) {
+                dialogNav.pop();
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text('Failed to remove device: $e'),
+                    backgroundColor: AppTheme.primaryRed,
+                  ),
+                );
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primaryRed,
@@ -402,8 +421,8 @@ class _QuadTrackDetailScreenState extends ConsumerState<QuadTrackDetailScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => QuadTrackProfileSetupScreen(
-                            patientId: device.patientId,
+                          builder: (context) => UserProfileScreen(
+                            userId: device.patientId,
                           ),
                         ),
                       );

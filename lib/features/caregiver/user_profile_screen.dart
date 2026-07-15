@@ -8,8 +8,11 @@ import 'package:share_plus/share_plus.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../../core/models/bouncie_connection.dart';
 import '../../core/models/user_profile.dart';
 import '../../core/services/user_profile_service.dart';
+import '../bouncie/bouncie_service.dart';
 import '../../core/utils/units.dart';
 
 class UserProfileScreen extends StatefulWidget {
@@ -1925,7 +1928,13 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         if (vehicles.isEmpty)
           Expanded(
             child: Center(
-              child: Column(
+              // Scrollable so the empty state can't overflow when vertical
+              // space shrinks (keyboard/small screens) — 46px overflow
+              // caught on device 2026-07-15.
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Column(
+                mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.directions_car_outlined,
@@ -1944,6 +1953,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                     label: const Text('Add First Vehicle'),
                   ),
                 ],
+                ),
               ),
             ),
           )
@@ -2463,10 +2473,13 @@ class _VehicleEditorScreenState extends State<_VehicleEditorScreen> {
 
   List<String> _photoUrls = [];
   bool _uploading = false;
+  BouncieConnection? _bouncieConn;
+  bool _autofilling = false;
 
   @override
   void initState() {
     super.initState();
+    _loadBouncieConnection();
     final v = widget.vehicle;
     _id = v?.id ?? const Uuid().v4();
     _makeController.text = v?.make ?? '';
@@ -2478,6 +2491,84 @@ class _VehicleEditorScreenState extends State<_VehicleEditorScreen> {
     _vinController.text = v?.vin ?? '';
     _notesController.text = v?.notes ?? '';
     _photoUrls = List<String>.from(v?.photoUrls ?? const []);
+  }
+
+  /// Loads the patient's Bouncie link (if any) so the editor can offer
+  /// one-tap autofill of make/model/year/VIN from the Bouncie API.
+  Future<void> _loadBouncieConnection() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('bouncie_connections')
+          .doc(widget.userId)
+          .get();
+      if (doc.exists && mounted) {
+        setState(() => _bouncieConn = BouncieConnection.fromFirestore(doc));
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _autofillFromBouncie() async {
+    final conn = _bouncieConn;
+    if (conn == null) return;
+    setState(() => _autofilling = true);
+    try {
+      final service = BouncieService(
+        clientId: dotenv.env['BOUNCIE_CLIENT_ID'] ?? '',
+        clientSecret: dotenv.env['BOUNCIE_CLIENT_SECRET'] ?? '',
+        authCode: conn.authCode,
+        redirectUri: dotenv.env['BOUNCIE_REDIRECT_URI'] ?? '',
+      );
+      final data = await service.getVehicleData(conn.imei);
+      final model = data['model'] as Map<String, dynamic>?;
+      setState(() {
+        if ((model?['make'] as String?)?.isNotEmpty ?? false) {
+          _makeController.text = model!['make'];
+        }
+        if ((model?['name'] as String?)?.isNotEmpty ?? false) {
+          _modelController.text = model!['name'];
+        }
+        if (model?['year'] != null) {
+          _yearController.text = model!['year'].toString();
+        }
+        if ((data['vin'] as String?)?.isNotEmpty ?? false) {
+          _vinController.text = data['vin'];
+        }
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Vehicle details filled from Bouncie')),
+        );
+      }
+    } catch (e) {
+      // API failed — fall back to the model string stored at connect time
+      // (e.g. "2014 FORD F-150").
+      final stored = conn.model;
+      if (stored != null && stored.isNotEmpty && mounted) {
+        setState(() {
+          final parts = stored.split(' ');
+          if (parts.isNotEmpty && int.tryParse(parts.first) != null) {
+            _yearController.text = parts.first;
+            if (parts.length > 1) _makeController.text = parts[1];
+            if (parts.length > 2) {
+              _modelController.text = parts.sublist(2).join(' ');
+            }
+          } else {
+            _modelController.text = stored;
+          }
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content:
+                  Text('Bouncie API unavailable — used saved vehicle info')),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Bouncie autofill failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _autofilling = false);
+    }
   }
 
   @override
@@ -2682,6 +2773,22 @@ class _VehicleEditorScreenState extends State<_VehicleEditorScreen> {
               ),
             ),
           const SizedBox(height: 20),
+          if (_bouncieConn != null) ...[
+            OutlinedButton.icon(
+              onPressed: _autofilling ? null : _autofillFromBouncie,
+              icon: _autofilling
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.directions_car),
+              label: Text(_autofilling
+                  ? 'Fetching from Bouncie…'
+                  : 'Autofill from Bouncie'),
+            ),
+            const SizedBox(height: 12),
+          ],
           // Fields
           TextField(
             controller: _makeController,

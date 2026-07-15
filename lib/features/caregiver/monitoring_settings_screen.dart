@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/emergency_disclaimer_banner.dart';
 import '../battery/battery_monitor.dart';
 import '../fuel/fuel_monitor.dart';
 
@@ -65,6 +66,10 @@ class _MonitoringSettingsScreenState
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                // Legal: point-of-use disclaimer (docs/legal/LEGAL-IMPLEMENTATION.md)
+                const EmergencyDisclaimerBanner(
+                  margin: EdgeInsets.only(bottom: 12),
+                ),
                 // ── Battery Section ──────────────────────────────────
                 _buildSectionHeader(
                   icon: Icons.battery_alert,

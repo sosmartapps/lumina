@@ -345,6 +345,18 @@ service cloud.firestore {
         request.auth.token.admin == true;
     }
 
+    // Legal acceptances — immutable audit log of Terms of Use acceptance
+    // (who/when/version/checkboxes). Written by LegalService on the
+    // acceptance gate; NEVER updatable or deletable from clients so the
+    // record is defensible. See docs/legal/LEGAL-IMPLEMENTATION.md.
+    match /legal_acceptances/{acceptanceId} {
+      allow create: if isAuthenticated() &&
+        request.resource.data.authUid == request.auth.uid;
+      allow read: if isAuthenticated() &&
+        resource.data.authUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
     // Errors collection (error reporting)
     match /errors/{errorId} {
       // Anyone authenticated can report errors

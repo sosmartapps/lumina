@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/emergency_disclaimer_banner.dart';
 import '../../core/providers/quadtrack_provider.dart';
 import '../../core/models/quadtrack_device.dart';
 import 'widgets/device_card.dart';
@@ -234,6 +235,11 @@ class _QuadTrackDashboardScreenState
             },
             child: Column(
               children: [
+                // Legal: point-of-use disclaimer (docs/legal/LEGAL-IMPLEMENTATION.md)
+                const EmergencyDisclaimerBanner(
+                  detail:
+                      'Tracker locations depend on device battery and signal.',
+                ),
                 // Google Map at the top — placeholder until a device has
                 // reported a location ((0,0) is just empty ocean)
                 if (!devices.any((d) => d.lastLocation != null))

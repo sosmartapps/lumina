@@ -2,8 +2,10 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/legal/legal_terms.dart' show kTermsVersion;
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../legal/legal_gate_screen.dart';
 import '../setup/setup_screen.dart';
 
 /// Caregiver account management — sign out and PERMANENT account
@@ -48,6 +50,26 @@ class _AccountSettingsScreenState
                       caregiver?.email ?? authUser?.email ?? 'No email'),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Legal: read-only Terms viewer (App Store compliance + lets the
+          // caregiver re-read what they accepted; see
+          // docs/legal/LEGAL-IMPLEMENTATION.md)
+          Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            child: ListTile(
+              leading:
+                  const Icon(Icons.gavel, color: AppTheme.primaryTeal),
+              title: const Text('Terms of Use'),
+              subtitle: const Text('Version $kTermsVersion — accepted'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const LegalGateScreen(viewOnly: true),
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 24),

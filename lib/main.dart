@@ -10,6 +10,8 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_maps_flutter_android/google_maps_flutter_android.dart';
+import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platform_interface.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:bug_reporter/bug_reporter.dart';
 import 'package:screenshot/screenshot.dart' as screenshot_lib;
@@ -32,6 +34,16 @@ Future<void> get bootReady => _bootCompleter.future;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Android maps: hybrid composition instead of the legacy TextureView
+  // path. The TextureView "custom invalidator" kept every stacked map
+  // redrawing continuously (2026-07-15 Pixel: 15-20MB GC per 150ms,
+  // thousands of skipped frames, 40s main-thread stalls; matching
+  // EXC_RESOURCE memory kills on iOS route stacks with multiple maps).
+  final maps = GoogleMapsFlutterPlatform.instance;
+  if (maps is GoogleMapsFlutterAndroid) {
+    maps.useAndroidViewSurface = true;
+  }
 
   // Only the essentials before the first frame: env + Firebase (both local
   // and fast) and crash handler wiring. EVERYTHING else runs after runApp()

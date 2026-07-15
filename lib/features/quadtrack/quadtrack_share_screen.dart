@@ -117,6 +117,25 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
     }
   }
 
+  /// Memoized future for FutureBuilder — a new Future object per build
+  /// causes an infinite complete→rebuild→new-future loop (allocation storm;
+  /// root cause of the 2026-07-15 GC churn + keyboard-cancel bug, and prime
+  /// suspect for the EXC_RESOURCE memory kills on iOS).
+  Future<String>? _addressFuture;
+  double? _addressFutureLat;
+  double? _addressFutureLng;
+
+  Future<String> _addressFor(double lat, double lng) {
+    if (_addressFuture == null ||
+        lat != _addressFutureLat ||
+        lng != _addressFutureLng) {
+      _addressFutureLat = lat;
+      _addressFutureLng = lng;
+      _addressFuture = _getAddress(lat, lng);
+    }
+    return _addressFuture!;
+  }
+
   Future<String> _getAddress(double lat, double lng) async {
     if (_addressCache != null) return _addressCache!;
 
@@ -555,7 +574,7 @@ class _QuadTrackShareScreenState extends ConsumerState<QuadTrackShareScreen> {
             error: (_, _) => const Center(child: Text('Error loading pings')),
             data: (pings) {
               return FutureBuilder<String>(
-                future: _getAddress(
+                future: _addressFor(
                   device.lastLocation!.latitude,
                   device.lastLocation!.longitude,
                 ),

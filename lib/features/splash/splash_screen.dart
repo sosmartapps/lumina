@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,6 +8,8 @@ import '../../core/providers/providers.dart';
 import '../../core/services/background_service.dart';
 import '../../core/services/deep_link_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/services/legal_service.dart';
+import '../legal/legal_gate_screen.dart';
 import '../setup/setup_screen.dart';
 import '../user_home/user_home_screen.dart';
 import '../caregiver/caregiver_login_screen.dart';
@@ -221,7 +225,44 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     }
   }
 
-  void _navigateTo(Widget screen) {
+  /// LEGAL GATE (MANDATORY — see docs/legal/LEGAL-IMPLEMENTATION.md).
+  /// Every destination out of splash (first-run SetupScreen, patient
+  /// UserHomeScreen, CaregiverLoginScreen, CaregiverDashboardScreen)
+  /// passes through here, so checking acceptance at this single choke
+  /// point guarantees the app cannot be used before the Terms of Use /
+  /// indemnity is accepted — including at the very start of onboarding.
+  Future<void> _navigateTo(Widget screen) async {
+    final appState = ref.read(appStateNotifierProvider);
+    final userId = appState.currentUserId;
+    final caregiverId = appState.currentCaregiverId;
+
+    bool needsLegal = true;
+    try {
+      needsLegal = await LegalService.needsAcceptance(
+        userId: userId,
+        caregiverId: caregiverId,
+      ).timeout(const Duration(seconds: 20));
+    } catch (e) {
+      debugPrint('SPLASH: legal check failed ($e) — showing gate');
+    }
+
+    if (!mounted) return;
+
+    if (needsLegal) {
+      screen = LegalGateScreen(
+        next: screen,
+        userId: userId,
+        caregiverId: caregiverId,
+      );
+    } else {
+      // Back-fill Firestore audit log / account stamps for acceptances
+      // recorded offline or before accounts existed. Fire-and-forget.
+      unawaited(LegalService.ensureRemoteSync(
+        userId: userId,
+        caregiverId: caregiverId,
+      ));
+    }
+
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => screen,

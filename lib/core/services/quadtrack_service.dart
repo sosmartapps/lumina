@@ -218,10 +218,27 @@ class QuadTrackService {
           : null;
 
       // Delete command + serial docs FIRST — their rules read the device
-      // doc, so it must still exist when they're deleted.
-      await _firestore.collection('quadtrack_commands').doc(deviceId).delete();
+      // doc, so it must still exist when they're deleted. BEST-EFFORT:
+      // a rules failure here (e.g. pre-registry device with no serial
+      // doc) must never block the device removal itself (bug found
+      // device-testing 2026-07-15: whole removal silently aborted).
+      try {
+        await _firestore
+            .collection('quadtrack_commands')
+            .doc(deviceId)
+            .delete();
+      } catch (e) {
+        debugPrint('removeDevice: commands cleanup failed (non-fatal): $e');
+      }
       if (serial != null && serial.isNotEmpty) {
-        await _firestore.collection('quadtrack_serials').doc(serial).delete();
+        try {
+          await _firestore
+              .collection('quadtrack_serials')
+              .doc(serial)
+              .delete();
+        } catch (e) {
+          debugPrint('removeDevice: serial cleanup failed (non-fatal): $e');
+        }
       }
 
       // Then delete the device

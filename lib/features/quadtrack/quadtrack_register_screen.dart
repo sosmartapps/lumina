@@ -6,7 +6,7 @@ import '../../core/providers/providers.dart';
 import '../../core/providers/quadtrack_provider.dart';
 import '../../core/theme/app_theme.dart';
 import 'quadtrack_detail_screen.dart';
-import 'quadtrack_profile_setup_screen.dart';
+import 'package:lumina/features/caregiver/user_profile_screen.dart';
 
 /// Registration flow for adding a new QuadTrack device
 class QuadTrackRegisterScreen extends ConsumerStatefulWidget {
@@ -184,8 +184,8 @@ class _QuadTrackRegisterScreenState
         if (setUpProfile == true) {
           navigator.push(
             MaterialPageRoute(
-              builder: (context) => QuadTrackProfileSetupScreen(
-                patientId: device.patientId,
+              builder: (context) => UserProfileScreen(
+                userId: device.patientId,
               ),
             ),
           );

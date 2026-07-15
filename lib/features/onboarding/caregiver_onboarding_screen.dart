@@ -11,6 +11,7 @@ import '../caregiver/manage_contacts_screen.dart';
 import '../caregiver/manage_medications_screen.dart';
 import '../caregiver/manage_reminders_screen.dart';
 import '../caregiver/manage_zones_screen.dart';
+import '../caregiver/user_profile_screen.dart';
 import '../caregiver/sundown_settings_screen.dart';
 import '../bouncie/vehicle_tracking_screen.dart';
 import '../pet_feeding/manage_pet_feeding_screen.dart';
@@ -58,6 +59,14 @@ class OnboardingStatus {
           description: 'One-tap calling for your loved one',
           icon: Icons.contact_phone,
           screenBuilder: () => const ManageContactsScreen(),
+        ),
+        OnboardingStep(
+          key: 'profile',
+          title: 'Patient profile',
+          description: 'Photo, description & medical info — powers '
+              'emergency and law-enforcement alerts',
+          icon: Icons.person_search,
+          screenBuilder: () => const _PatientProfileStepScreen(),
         ),
         OnboardingStep(
           key: 'medications',
@@ -149,11 +158,26 @@ class OnboardingStatus {
     result['contacts'] = patient?.emergencyContacts.isNotEmpty ?? false;
     if (patient == null) {
       for (final k in [
-        'medications', 'reminders', 'safe_zones', 'invite', 'pets', 'vehicle'
+        'profile', 'medications', 'reminders', 'safe_zones', 'invite', 'pets',
+        'vehicle'
       ]) {
         result[k] = false;
       }
     } else {
+      try {
+        final profileDoc = await db
+            .collection('users')
+            .doc(patient.id)
+            .collection('user_profile')
+            .doc('profile')
+            .get();
+        final data = profileDoc.data();
+        result['profile'] = profileDoc.exists &&
+            ((data?['legalFirstName'] as String?)?.isNotEmpty ?? false) &&
+            ((data?['photos'] as List?)?.isNotEmpty ?? false);
+      } catch (_) {
+        result['profile'] = false;
+      }
       result['medications'] = await any(db
           .collection('medications')
           .where('userId', isEqualTo: patient.id));
@@ -185,6 +209,32 @@ class OnboardingStatus {
     final core = steps().where((s) => !s.optional).toList();
     final done = core.where((s) => status[s.key] == true).length;
     return (done, core.length);
+  }
+}
+
+/// Opens the selected patient's User Profile (single owner of the
+/// missing-person readiness data — wizard removed 2026-07-15).
+class _PatientProfileStepScreen extends ConsumerWidget {
+  const _PatientProfileStepScreen();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final patient = ref.read(caregiverNotifierProvider).selectedUser;
+    if (patient == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Patient Profile')),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'Add your patient first, then complete their profile.',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      );
+    }
+    return UserProfileScreen(userId: patient.id);
   }
 }
 

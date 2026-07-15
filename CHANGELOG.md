@@ -3,6 +3,60 @@
 <!-- Claude will automatically log completed work here. -->
 <!-- Format: Date - Build Number - Summary heading, then bullet points of what changed. -->
 
+## 2026-07-15 - Legal acceptance gate (ToS/indemnity) — implemented, NOT device-tested
+
+- **Blocking Terms of Use / liability waiver before ANY app use** — including first launch, ahead of onboarding. Gate at the splash `_navigateTo()` choke point covers all 4 destinations (setup, patient home, caregiver login/dashboard). Scroll-through terms, 4 mandatory checkboxes, decline = review-again-or-close-app, Android back blocked, fail-closed on errors.
+- **New files**: `docs/legal/TERMS_OF_USE.md` (canonical, DRAFT pending attorney), `docs/legal/LEGAL-IMPLEMENTATION.md` (full system map — read this first), `lib/core/legal/legal_terms.dart` (`kTermsVersion` = re-acceptance trigger), `lib/core/services/legal_service.dart`, `lib/features/legal/legal_gate_screen.dart`, `lib/core/widgets/emergency_disclaimer_banner.dart`.
+- **Acceptance storage**: local prefs (gates offline) + immutable `legal_acceptances` Firestore audit log (new rule in `firestore.rules` — NEEDS DEPLOY) + `legalAcceptance` stamp on caregiver/user docs; offline acceptances back-sync via `ensureRemoteSync()` each launch.
+- **Point-of-use "not an emergency service" banners**: manage zones, monitoring settings, QuadTrack dashboard. Settings gained a read-only "Terms of Use" viewer row.
+- **Open**: rules deploy, device tests, attorney review (checklist in TERMS_OF_USE.md), Privacy Policy still missing. Dev Planner tasks filed.
+
+## 2026-07-15 (pm) - Android pass (Pixel 10 Pro XL): legal gate + QuadTrack verified, 3 fixes, perf bug isolated
+
+- **Legal acceptance gate DEVICE-VERIFIED on Android**: decline blocks entry ✓, accept → app ✓, relaunch no-gate ✓.
+- **Geofence breach push DEVICE-VERIFIED on Android**: both zone banners in shade, tap deep-links to Device Details. Note: shade-only, no heads-up popup — task filed (needs IMPORTANCE_HIGH channel).
+- **LE share SMS DEVICE-VERIFIED on Android end-to-end**: Messages opens pre-filled dispatch text → sent → received on iPhone → NAVIGATE link opens turn-by-turn (5-min route to pin). iPhone shows link non-tappable (iOS unknown-sender anti-spam — expected; copy-resilience task filed).
+- **Fix 1 — Android package visibility**: manifest had NO `<queries>` block → `canLaunchUrl` false for sms/tel/mailto/https → SMS path silently dead. Added queries for SENDTO(sms/mailto), DIAL, VIEW(https).
+- **Fix 2 — share-screen rebuild loop**: `FutureBuilder(future: _getAddress(...))` created a new geocode future every build. Memoized (`_addressFor`).
+- **Fix 3 — invite gap unblocked for testing**: invite redemption never syncs `quadtrack_devices.caregiverIds` → Google-UID caregiver (Pixel) couldn't see the device. Patched caregiverIds manually; HIGH-priority Cloud Function sync task filed.
+- **PERF BUG isolated (open, high)**: 15–22MB GC every ~150ms, thousands of skipped frames, 40s main-thread stalls; persists after address-future fix AND hybrid-composition switch (`useAndroidViewSurface=true`, kept). LOS allocation signature suggests repeated full-res photo decodes and/or stacked live GoogleMap views. Matches iPhone EXC_RESOURCE kills. Needs DevTools profiling session — Dev Planner task has full evidence.
+
+## 2026-07-15 - Profile consolidation: QuadTrack wizard DELETED, User Profile is single owner (per Leon)
+
+- **Wizard removed** (`quadtrack_profile_setup_screen.dart` deleted): it duplicated the User Profile tabbed editor (all fields confirmed present in tabs; tabs have more — Documents, Photos, multi-Vehicles, Social Media). QuadTrack register flow + Device Details "Missing-Person Profile" now open `UserProfileScreen` directly.
+- **DATA-LOSS BUG found + fixed by the removal**: wizard saves wrote the whole profile but omitted `vehicles`/`socialMediaLinks` arrays → every save overwrote them with empty. Wiped Jack's F150 + Facebook link during testing; restored via Firestore PATCH (photo survived in Storage).
+- **Setup Guide gains core "Patient profile" step** (`caregiver_onboarding_screen.dart`): opens User Profile for the selected patient; auto-completes when profile has legal first name + ≥1 photo.
+- **Bouncie vehicle autofill** (Vehicles tab editor): "Autofill from Bouncie" button when patient has a Bouncie link — pulls make/model/year/VIN from API, falls back to stored model string. (Bouncie has no plate/color/photos — those stay manual.)
+- **Vehicles tab empty-state 46px overflow fixed** (scrollable, mainAxisSize.min) — caught on device.
+- **Remove-device bug found + fixed**: `removeDevice` pre-cleanup (commands/serials docs) could hit a rules failure that silently aborted the device deletion, AND the confirm dialog fired-and-forgot the future (always showed "removed"). Now: cleanup is best-effort per-doc, device delete rethrows, dialog awaits + shows explicit failure snackbar. **DEVICE-VERIFIED after fix**: remove → card gone → re-register → profile prompt opens tabbed User Profile → restored vehicles + social media confirmed present.
+- **2nd EXC_RESOURCE memory kill** (3376 MB, died in GC scavenger after several hot restarts; google_maps `recreating_view` on every hot restart suggests leaked platform views) — Dev Planner task updated.
+
+## 2026-07-15 - QuadTrack profile wizard DEVICE-VERIFIED (iPhone) + 4 fixes shipped same-session
+
+- **Wizard walked end-to-end + kill-test passed** (data survives app kill mid-wizard). Fixes shipped and device-verified this session (`quadtrack_profile_setup_screen.dart`):
+  1. **Imperial units**: Height (ft/in) + Weight (lbs) inputs replace cm/kg (Leon requirement); storage stays metric (no migration; generators already convert). Fields now prefill from existing profile via controllers (previously blank — TextFields had no controllers).
+  2. **Keyboard dismissal**: tap-outside (GestureDetector unfocus), scroll-to-dismiss (`keyboardDismissBehavior.onDrag` on all 5 steps), unfocus on page change. Previously multiline Medical fields left NO way to close the keyboard (covered Back/Next).
+  3. **Per-step autosave** (Leon requirement): every Next writes the profile doc (`_writeProfile` extracted from save; silent failures logged) — crash/kill loses only the current step.
+  4. **Photo upload at capture time**: was upload-only-on-final-save with silently swallowed errors (photo lost on kill; full save didn't persist it either). Now uploads immediately on capture, persists via autosave, shows red snackbar on upload failure, avatar renders stored photo URL (previously only the fresh file).
+- **Memory bug found (filed)**: Runner hit EXC_RESOURCE high watermark (3376 MB) during the session — app killed. Separate Dev Planner task.
+- **Architecture note (task updated)**: wizard + User Profile screen are two editors over the same profile doc — consolidation task FgFfdlLGmlI3przMCbh6 updated per Leon.
+
+## 2026-07-15 - QuadTrack LE share screen DEVICE-VERIFIED (iPhone) — maps-link bug fixed, new email-formatting bug
+
+- **LE share (missing-person alert) verified**: clipboard, SMS (iMessage delivered), and email send paths all work. Package content correct: identity, physical description, vehicle w/ Storage photo URL, last known location w/ address + coords, emergency contacts, social media, home address.
+- **Google Maps link bug NO LONGER REPRODUCES**: email link `https://maps.google.com/?q=32.431,-110.992` clickable and opens correct pin. Marked Dev Planner task done.
+- **New bugs found**: (1) email body loses ALL line breaks — whole alert renders as one paragraph in Gmail (SMS/clipboard keep formatting); (2) empty MEDICAL INFORMATION section renders orphan heading when profile has no medical data — should hide; (3) minor: unformatted phone (`5136015092`) vs formatted others; maps-link coords truncated to 3 decimals (~110 m) — use full precision for LE.
+
+## 2026-07-15 - QuadTrack geofence breach + phone-dead escalation DEVICE-VERIFIED (iPhone)
+
+- **Phone-dead escalation verified end-to-end**: backdated `lastSeenAt` (Firestore PATCH) + status reset to online → next `quadTrackHealthCheck` 15-min tick flipped device offline and sent "📡 Device Offline" push → banner with app backgrounded → tap deep-linked to Device Details (status Offline red, Last Seen 3h ago). Threshold confirmed: max(2× ping interval, 10 min); emergency mode interval 5 min → 10-min timeout. Earlier "missed" push at 10:17 was actually delivered as a foreground message (app was foregrounded from breach-banner tap) — same foreground-suppression behavior as geofence pushes.
+
+## 2026-07-15 - QuadTrack geofence breach push DEVICE-VERIFIED (iPhone)
+
+- **Geofence breach push verified end-to-end**: synthetic ping via `ingestQuadTrackPing` (curl, `X-Device-Key: QT-2026-TEST01`) at coords outside both active zones → `evaluateQuadTrackGeofences` fired → "⚠️ Left Safe Zone / Jacks Tracker 1 has left Test" banner on iPhone with app backgrounded → tap deep-linked to Device Details showing the synthetic ping's location + battery (85%/90%). Two zones ("Test" safe, "Home" home) both evaluated.
+- **Foreground behavior noted**: with app foregrounded, FCM messages arrive (`Received foreground message` in log) but no banner is shown — no in-app presentation of foreground geofence pushes. Consider surfacing.
+- **Missing asset found**: `assets/sounds/alert.mp3` unavailable → TTS fallback used. Needs asset added or pubspec fix.
+
 ## 2026-07-14 - Expense/Reimbursement DEVICE-VERIFIED
 
 - **Expense/reimbursement feature device-verified** on Pixel: full flow — add expense, scan receipt, approve, reimburse. Firestore rules (`expenses` collection) and storage rules already deployed.
